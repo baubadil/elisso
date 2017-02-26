@@ -1,0 +1,5 @@
+
+SUB_DEPTH = ../..
+
+elisso_SOURCES += \
+	src/elisso/main.cpp \
