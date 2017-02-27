@@ -3,3 +3,6 @@ SUB_DEPTH = ../..
 
 elisso_SOURCES += \
 	src/elisso/main.cpp \
+	src/elisso/mainwindow.cpp \
+	src/elisso/folderview.cpp \
+	src/elisso/fsmodel.cpp

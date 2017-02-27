@@ -8,36 +8,39 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the LICENSE file for more details.
  */
 
-#define DEF_STRING_IMPLEMENTATION
+#ifndef ELISSO_FOLDERVIEW_H
+#define ELISSO_FOLDERVIEW_H
 
-#include "elisso/mainwindow.h"
+#include <gtkmm.h>
 
-#include "xwp/debug.h"
-
-/***************************************************************************
- *
- *  Globals
- *
- **************************************************************************/
+class FSLock;
 
 /***************************************************************************
  *
- *  Entry point
+ *  ElissoFolderView
  *
  **************************************************************************/
 
-int main(int argc, char *argv[])
+class ElissoFolderView : public Gtk::ScrolledWindow
 {
-    g_flDebugSet = -1;
+public:
+    ElissoFolderView();
+    virtual ~ElissoFolderView();
 
-    auto app = Gtk::Application::create(argc,
-                                        argv,
-                                        "org.baubadil.elisso");
+    bool setPath(const std::string &strPath);
 
-    char szCWD[1024];
-    auto strHome = getcwd(szCWD, sizeof(szCWD));
-    ElissoApplicationWindow window(strHome);
-    // Show the window and return when it's closed.
-    return app->run(window);
-}
+    bool spawnPopulate();
 
+    void populate(FSLock &lock);
+
+private:
+    void onPopulateDone();
+
+    Gtk::TreeView   treeview;
+    std::string     _strPath;
+
+    struct Impl;
+    Impl            *_pImpl;
+};
+
+#endif // ELISSO_FOLDERVIEW_H

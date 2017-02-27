@@ -1,12 +1,15 @@
 
 TEMPLATE_EXE                     = Executable
-TEMPLATE_EXE_TOOL                = GXX64
+TEMPLATE_EXE_TOOL                = GXX
+
+GTKMM_PKGCONFIG_I   := $(shell pkg-config gtkmm-3.0 --cflags-only-I)
+GTKMM_INCLUDES      := $(patsubst -I%,%,$(GTKMM_PKGCONFIG_I))
+GTKMM_PKGCONFIG_L   := $(shell pkg-config gtkmm-3.0 --libs)
+GTKMM_LIBS          := $(patsubst -l%,%,$(GTKMM_PKGCONFIG_L))
 
 TEMPLATE_EXE_CXXFLAGS           = -Wall -std=c++11
 TEMPLATE_EXE_CXXFLAGS.debug     = -ggdb -O0
 TEMPLATE_EXE_CFLAGS             = $(TEMPLATE_EXE_CXXFLAGS)
 TEMPLATE_EXE_CFLAGS.debug       = $(TEMPLATE_EXE_CXXFLAGS.debug)
 TEMPLATE_EXE_LDFLAGS.debug      = -g
-TEMPLATE_EXE_INCS               = include
-
-
+TEMPLATE_EXE_INCS               = include $(GTKMM_INCLUDES)

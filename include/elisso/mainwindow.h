@@ -8,36 +8,28 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the LICENSE file for more details.
  */
 
-#define DEF_STRING_IMPLEMENTATION
+#ifndef ELISSO_MAINWINDOW_H
+#define ELISSO_MAINWINDOW_H
 
-#include "elisso/mainwindow.h"
+#include <gtkmm.h>
 
-#include "xwp/debug.h"
-
-/***************************************************************************
- *
- *  Globals
- *
- **************************************************************************/
+#include "elisso/folderview.h"
 
 /***************************************************************************
  *
- *  Entry point
+ *  ElissoApplicationWindow
  *
  **************************************************************************/
 
-int main(int argc, char *argv[])
+class ElissoApplicationWindow : public Gtk::ApplicationWindow
 {
-    g_flDebugSet = -1;
+public:
+    ElissoApplicationWindow(const Glib::ustring &strInitialPath);
+    virtual ~ElissoApplicationWindow();
 
-    auto app = Gtk::Application::create(argc,
-                                        argv,
-                                        "org.baubadil.elisso");
+protected:
+    ElissoFolderView _folderView;
 
-    char szCWD[1024];
-    auto strHome = getcwd(szCWD, sizeof(szCWD));
-    ElissoApplicationWindow window(strHome);
-    // Show the window and return when it's closed.
-    return app->run(window);
-}
+};
 
+#endif // ELISSO_MAINWINDOW_H

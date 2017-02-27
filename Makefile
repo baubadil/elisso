@@ -20,13 +20,10 @@ include $(KBUILD_PATH)/subheader.kmk
 #
 include $(PATH_CURRENT)/src/xwp/Makefile.kmk
 
-GTKMM_INCLUDES += $(shell pkg-config gtkmm-3.0 --cflags)
-
 PROGRAMS += elisso
 elisso_TEMPLATE = EXE
 elisso_SOURCES =
-elisso_INCS =          $(GTKMM_INCLUDES)
-elisso_LIBS = $(PATH_STAGE_LIB)/xwp.a
+elisso_LIBS = $(PATH_STAGE_LIB)/xwp.a $(GTKMM_LIBS) libpcre
 
 include $(PATH_CURRENT)/src/elisso/Makefile.kmk
 

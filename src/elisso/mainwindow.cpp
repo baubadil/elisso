@@ -1,5 +1,5 @@
 /*
- * elisso -- PHP documentation tool. (C) 2015--2016 Baubadil GmbH.
+ * elisso (C) 2016--2017 Baubadil GmbH.
  *
  * elisso is free software; you can redistribute it and/or modify it under the terms of the GNU
  * General Public License as published by the Free Software Foundation, in version 2 as it comes
@@ -8,14 +8,20 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the LICENSE file for more details.
  */
 
-#ifndef ELISSO_H
-#define ELISSO_H
+#include "elisso/mainwindow.h"
 
-#include "xwp/basetypes.h"
-#include "xwp/stringhelp.h"
-#include "xwp/debug.h"
-#include "xwp/regex.h"
+ElissoApplicationWindow::ElissoApplicationWindow(const Glib::ustring &strInitialPath)
+    : _folderView()
+{
+    this->set_border_width(10);
+    this->set_default_size(1000, 600);
+    this->add(_folderView);
+    _folderView.show();
 
-using namespace XWP;
+    _folderView.setPath(strInitialPath);
+}
 
-#endif // ELISSO_H
+/* virtual */
+ElissoApplicationWindow::~ElissoApplicationWindow()
+{
+}
