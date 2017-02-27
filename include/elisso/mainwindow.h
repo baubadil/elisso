@@ -28,7 +28,9 @@ public:
     virtual ~ElissoApplicationWindow();
 
 protected:
-    ElissoFolderView _folderView;
+    Gtk::Paned          _vPaned;
+    ElissoTreeView      _treeView;
+    ElissoFolderView    _folderView;
 
 };
 

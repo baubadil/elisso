@@ -11,12 +11,18 @@
 #include "elisso/mainwindow.h"
 
 ElissoApplicationWindow::ElissoApplicationWindow(const Glib::ustring &strInitialPath)
-    : _folderView()
+    : _vPaned(),
+      _treeView(),
+      _folderView()
 {
     this->set_border_width(10);
     this->set_default_size(1000, 600);
-    this->add(_folderView);
-    _folderView.show();
+
+    _vPaned.add1(_treeView);
+    _vPaned.add2(_folderView);
+
+    this->add(_vPaned);
+    this->show_all_children();
 
     _folderView.setPath(strInitialPath);
 }

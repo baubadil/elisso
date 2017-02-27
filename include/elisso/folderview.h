@@ -15,6 +15,18 @@
 
 class FSLock;
 
+class ElissoTreeView : public Gtk::ScrolledWindow
+{
+public:
+    ElissoTreeView() : Gtk::ScrolledWindow()
+    {
+    };
+
+    virtual ~ElissoTreeView()
+    {
+    }
+};
+
 /***************************************************************************
  *
  *  ElissoFolderView
