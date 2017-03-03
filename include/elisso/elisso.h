@@ -18,4 +18,15 @@
 
 using namespace XWP;
 
+DEF_STRING(ACTION_FILE_QUIT, "file-quit");
+DEF_STRING(ACTION_VIEW_ICONS, "view-icons");
+DEF_STRING(ACTION_VIEW_LIST, "view-list");
+DEF_STRING(ACTION_VIEW_COMPACT, "view-compact");
+DEF_STRING(ACTION_GO_PARENT, "go-parent");
+DEF_STRING(ACTION_GO_BACK, "go-back");
+DEF_STRING(ACTION_GO_FORWARD, "go-forward");
+DEF_STRING(ACTION_GO_HOME, "go-home");
+DEF_STRING(ACTION_ABOUT, "about");
+
+
 #endif // ELISSO_H

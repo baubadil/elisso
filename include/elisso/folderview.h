@@ -13,7 +13,9 @@
 
 #include <gtkmm.h>
 
-class FSLock;
+#include "elisso/fsmodel.h"
+
+// class FSLock;
 
 class ElissoTreeView : public Gtk::ScrolledWindow
 {
@@ -33,23 +35,75 @@ public:
  *
  **************************************************************************/
 
+enum class FolderViewMode
+{
+    UNDEFINED,
+    ICONS,
+    LIST,
+    COMPACT
+};
+
+enum class ViewState
+{
+    UNDEFINED,
+    POPULATING,
+    POPULATED
+};
+
+class ElissoApplicationWindow;
+
+class ElissoFolderView;
+typedef Glib::RefPtr<ElissoFolderView> PElissoFolderView;
+
+/**
+ *  The folder view is the right half of a folder window and derives from
+ *  ScrolledWindow. It contains either a  TreeView or IconView child, depending
+ *  on which view is selected.
+ */
 class ElissoFolderView : public Gtk::ScrolledWindow
 {
 public:
-    ElissoFolderView();
+    ElissoFolderView(ElissoApplicationWindow &mainWindow);
     virtual ~ElissoFolderView();
 
-    bool setPath(const std::string &strPath);
+    PFSDirectory getDirectory()
+    {
+        return _pDir;
+    }
+
+    bool setDirectory(PFSDirectory pDir,
+                      bool fPushToHistory = true);
+
+    bool canGoBack();
+    bool goBack();
+    bool canGoForward();
+    bool goForward();
+
+    void setState(ViewState s);
+    void setViewMode(FolderViewMode m);
+
+    void onFileActivated(PFSModelBase pFS);
 
     bool spawnPopulate();
 
-    void populate(FSLock &lock);
+    void populate();
 
 private:
+    void dumpStack();
     void onPopulateDone();
+    void connectModel(bool fConnect);
 
-    Gtk::TreeView   treeview;
-    std::string     _strPath;
+    ElissoApplicationWindow     &_mainWindow;
+
+    ViewState                   _state = ViewState::UNDEFINED;
+    FolderViewMode              _mode = FolderViewMode::UNDEFINED;
+    Gtk::IconView               _iconView;
+    Gtk::TreeView               _treeView;
+    Gtk::FlowBox                _compactView;
+
+    PFSDirectory                _pDir;
+    std::vector<std::string>    _aPathHistory;
+    uint32_t                    _uPreviousOffset = 0;
 
     struct Impl;
     Impl            *_pImpl;

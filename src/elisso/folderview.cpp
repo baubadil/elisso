@@ -8,10 +8,12 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the LICENSE file for more details.
  */
 
+#include "elisso/elisso.h"
 #include "elisso/folderview.h"
 #include "elisso/fsmodel.h"
+#include "elisso/mainwindow.h"
 
-#include "xwp/debug.h"
+#include "xwp/except.h"
 
 #include <thread>
 #include <iostream>
@@ -28,18 +30,20 @@ class FolderModelColumns : public Gtk::TreeModelColumnRecord
 public:
     FolderModelColumns()
     {
-        add(m_col_filename);
-        add(m_col_size);
-        add(m_col_icon);
-        add(m_col_typeResolved);
-        add(m_col_typeString);
+        add(_colFilename);
+        add(_colSize);
+        add(_colIconSmall);
+        add(_colIconBig);
+        add(_colTypeResolved);
+        add(_colTypeString);
     }
 
-    Gtk::TreeModelColumn<Glib::ustring>     m_col_filename;
-    Gtk::TreeModelColumn<u_int64_t>         m_col_size;
-    Gtk::TreeModelColumn<Glib::ustring>     m_col_icon;
-    Gtk::TreeModelColumn<FSTypeResolved>    m_col_typeResolved;
-    Gtk::TreeModelColumn<Glib::ustring>     m_col_typeString;
+    Gtk::TreeModelColumn<Glib::ustring>             _colFilename;
+    Gtk::TreeModelColumn<u_int64_t>                 _colSize;
+    Gtk::TreeModelColumn<Glib::RefPtr<Gdk::Pixbuf>> _colIconSmall;
+    Gtk::TreeModelColumn<Glib::RefPtr<Gdk::Pixbuf>> _colIconBig;
+    Gtk::TreeModelColumn<FSTypeResolved>            _colTypeResolved;
+    Gtk::TreeModelColumn<Glib::ustring>             _colTypeString;
 
     static FolderModelColumns& Get()
     {
@@ -63,15 +67,29 @@ FolderModelColumns* FolderModelColumns::s_p = nullptr;
 
 struct ElissoFolderView::Impl
 {
-    PFSDirectory                    pDir;
-    bool                            fPopulating;
     Glib::Dispatcher                dispatcherPopulateDone;
     Glib::RefPtr<Gtk::ListStore>    pListStore;
     FSList                          llFolderContents;
+    Glib::RefPtr<Gtk::IconTheme>    pIconTheme;
 
     Impl()
-        : fPopulating(false)
+        : pIconTheme(Gtk::IconTheme::get_default())
     {
+    }
+
+    void onTreeModelPathActivated(ElissoFolderView &view,
+                                  const Gtk::TreeModel::Path &path)
+    {
+        Gtk::TreeModel::iterator iter = pListStore->get_iter(path);
+        if (iter)
+        {
+            Gtk::TreeModel::Row row = *iter;
+            FolderModelColumns &cols = FolderModelColumns::Get();
+            std::string strBasename = Glib::filename_from_utf8(row[cols._colFilename]);
+            PFSModelBase pFS = view._pDir->find(strBasename);
+            if (pFS)
+                view.onFileActivated(pFS);
+        }
     }
 };
 
@@ -81,9 +99,12 @@ struct ElissoFolderView::Impl
  *
  **************************************************************************/
 
-ElissoFolderView::ElissoFolderView()
+ElissoFolderView::ElissoFolderView(ElissoApplicationWindow &mainWindow)
     : Gtk::ScrolledWindow(),
-      treeview(),
+      _mainWindow(mainWindow),
+      _iconView(),
+      _treeView(),
+      _compactView(),
       _pImpl(new ElissoFolderView::Impl())
 {
     _pImpl->dispatcherPopulateDone.connect([this]()
@@ -91,48 +112,46 @@ ElissoFolderView::ElissoFolderView()
         this->onPopulateDone();
     });
 
-    this->add(treeview);
-
     FolderModelColumns &cols = FolderModelColumns::Get();
     _pImpl->pListStore = Gtk::ListStore::create(cols);
-    treeview.set_model(_pImpl->pListStore);
 
+    /* Set up the icon view */
+    _iconView.set_pixbuf_column(cols._colIconBig);
+    _iconView.set_text_column(cols._colFilename);
+
+    _iconView.signal_item_activated().connect([this](const Gtk::TreeModel::Path &path)
+    {
+        _pImpl->onTreeModelPathActivated(*this, path);
+    });
+
+    /* Set up the list view */
     int i;
     Gtk::TreeView::Column* pColumn;
 
-    i = treeview.append_column("Icon", cols.m_col_icon);
+    i = _treeView.append_column("Icon", cols._colIconSmall);
 
-    i = treeview.append_column("Name", cols.m_col_filename);
-    if ((pColumn = treeview.get_column(i - 1)))
-        pColumn->set_sort_column(cols.m_col_filename);
+    i = _treeView.append_column("Name", cols._colFilename);
+    if ((pColumn = _treeView.get_column(i - 1)))
+        pColumn->set_sort_column(cols._colFilename);
 
-    i = treeview.append_column("Type", cols.m_col_typeString);
-    if ((pColumn = treeview.get_column(i - 1)))
-        pColumn->set_sort_column(cols.m_col_typeString);
+    i = _treeView.append_column("Type", cols._colTypeString);
+    if ((pColumn = _treeView.get_column(i - 1)))
+        pColumn->set_sort_column(cols._colTypeString);
 
-    i = treeview.append_column("Size", cols.m_col_size);
-    if ((pColumn = treeview.get_column(i - 1)))
-        pColumn->set_sort_column(cols.m_col_size);
+    i = _treeView.append_column("Size", cols._colSize);
+    if ((pColumn = _treeView.get_column(i - 1)))
+        pColumn->set_sort_column(cols._colSize);
 
-    treeview.signal_row_activated().connect([this](const Gtk::TreeModel::Path &path,
-                                                   Gtk::TreeViewColumn *pColumn)
+    _treeView.signal_row_activated().connect([this](const Gtk::TreeModel::Path &path,
+                                                    Gtk::TreeViewColumn *pColumn)
     {
-        Gtk::TreeModel::iterator iter = _pImpl->pListStore->get_iter(path);
-        if (iter)
-        {
-            Gtk::TreeModel::Row row = *iter;
-            FolderModelColumns &cols = FolderModelColumns::Get();
-            if (row[cols.m_col_typeResolved] == FSTypeResolved::DIRECTORY)
-            {
-                std::string strBasename = Glib::filename_from_utf8(row[cols.m_col_filename]);
-                std::string strPathNew = this->_strPath + "/" + strBasename;
-                Debug::Log(DEBUG_ALWAYS, "Folder activated: " + strPathNew);
-                this->setPath(strPathNew);
-            }
-        }
+        _pImpl->onTreeModelPathActivated(*this, path);
     });
 
-    treeview.show();
+    /* Set up the compact view */
+//     _compactView.
+
+    setViewMode(FolderViewMode::LIST);
 }
 
 /* virtual */
@@ -144,16 +163,279 @@ ElissoFolderView::~ElissoFolderView()
 /**
  *  Returns true if a populate thread was started, or false if the folder had already been populated.
  */
-bool ElissoFolderView::setPath(const std::string &strPath)
+bool ElissoFolderView::setDirectory(PFSDirectory pDir,
+                                    bool fPushToHistory /* = true */)
 {
-    _strPath = strPath;
-    Debug::Log(DEBUG_ALWAYS, "setPath(\"" + strPath + ")\"");
+    // If we have a directory already, push the path into the history.
+    if (fPushToHistory)
+        if (_pDir)
+        {
+            auto strFull = _pDir->getRelativePath();
+            // Do not push if this is the same as the last item on the stack.
+            if (    (!_aPathHistory.size())
+                 || (_aPathHistory.back() != strFull)
+               )
+                _aPathHistory.push_back(strFull);
 
-    FSLock lock;
-    if (_pImpl->pDir = FSModelBase::FindDirectory(strPath, lock))
-        return this->spawnPopulate();
+            _uPreviousOffset = 0;
+        }
+
+    _pDir = pDir;
+    // Remove all old data, if any.
+    _pImpl->pListStore->clear();
+    _pImpl->llFolderContents.clear();
+    bool rc = this->spawnPopulate();
+
+    dumpStack();
+
+    _mainWindow._pActionGoBack->set_enabled(this->canGoBack());
+    _mainWindow._pActionGoForward->set_enabled(this->canGoForward());
+
+    return rc;
+}
+
+void ElissoFolderView::dumpStack()
+{
+    uint i = 0;
+    for (auto &s : _aPathHistory)
+        Debug::Log(DEBUG_ALWAYS, "stack item " + to_string(i++) + ": " + s);
+    Debug::Log(DEBUG_ALWAYS, "offset: " + to_string(_uPreviousOffset));
+}
+
+bool ElissoFolderView::canGoBack()
+{
+    return (_uPreviousOffset < _aPathHistory.size());
+}
+
+bool ElissoFolderView::goBack()
+{
+    if (this->canGoBack())
+    {
+        ++_uPreviousOffset;
+        std::string strPrevious = _aPathHistory[_aPathHistory.size() - _uPreviousOffset];
+        PFSDirectory pDirOld = _pDir;
+        PFSDirectory pDir;
+        if ((pDir = FSModelBase::FindDirectory(strPrevious)))
+            if (this->setDirectory(pDir,
+                                   false))      // do not push on history stack
+            {
+                std::vector<std::string>::iterator it = _aPathHistory.begin() + _uPreviousOffset;
+                _aPathHistory.insert(it, pDirOld->getRelativePath());
+                return true;
+            }
+
+    }
 
     return false;
+}
+
+bool ElissoFolderView::canGoForward()
+{
+    return (_uPreviousOffset > _aPathHistory.size());
+}
+
+bool ElissoFolderView::goForward()
+{
+    if (this->canGoForward())
+    {
+        std::string strPrevious = _aPathHistory[_aPathHistory.size() - --_uPreviousOffset];
+        PFSDirectory pDir;
+        if ((pDir = FSModelBase::FindDirectory(strPrevious)))
+            if (this->setDirectory(pDir,
+                                   false))      // do not push on history stack
+            {
+                return true;
+            }
+    }
+
+    return false;
+}
+
+void ElissoFolderView::setState(ViewState s)
+{
+    if (s != _state)
+    {
+        switch (s)
+        {
+            case ViewState::POPULATING:
+            {
+                this->connectModel(false);
+                _mainWindow.set_title("Loading " + _pDir->getBasename() + "...");
+                Gtk::Spinner *pSpinner = new Gtk::Spinner();
+                _mainWindow.getNotebook().set_tab_label(*this, *pSpinner);
+                pSpinner->show();
+                pSpinner->start();
+            }
+            break;
+
+            case ViewState::POPULATED:
+            {
+                this->connectModel(true);
+                Glib::ustring strTitle("Error");
+                if (_pDir)
+                {
+                    std::string str = _pDir->getRelativePath();
+                    strTitle = str;
+                    _mainWindow.getNotebook().set_tab_label_text(*this,
+                                                                 _pDir->getBasename());
+                }
+                _mainWindow.set_title(strTitle);
+
+            }
+            break;
+
+            default:
+            break;
+        }
+
+        _state = s;
+    }
+}
+
+void ElissoFolderView::setViewMode(FolderViewMode m)
+{
+    if (m != _mode)
+    {
+        switch (_mode)
+        {
+            case FolderViewMode::ICONS:
+                _iconView.hide();
+                this->remove();
+            break;
+
+            case FolderViewMode::LIST:
+                _treeView.hide();
+                this->remove();
+            break;
+
+            case FolderViewMode::COMPACT:
+                _compactView.hide();
+                this->remove();
+            break;
+
+            default:
+            break;
+        }
+
+        switch (m)
+        {
+            case FolderViewMode::ICONS:
+                this->add(_iconView);
+                _iconView.show();
+            break;
+
+            case FolderViewMode::LIST:
+                this->add(_treeView);
+                _treeView.show();
+            break;
+
+            case FolderViewMode::COMPACT:
+                this->add(_compactView);
+                _compactView.show();
+            break;
+
+            default:
+            break;
+        }
+
+        _mode = m;
+
+        this->connectModel(_state == ViewState::POPULATED);
+    }
+}
+
+void ElissoFolderView::onFileActivated(PFSModelBase pFS)
+{
+    FSTypeResolved t = pFS->getResolvedType();
+
+    switch (t)
+    {
+        case FSTypeResolved::DIRECTORY:
+        case FSTypeResolved::SYMLINK_TO_DIRECTORY:
+        {
+            PFSDirectory pDir;
+            if ((pDir = pFS->resolveDirectory()))
+                this->setDirectory(pDir);
+        }
+        break;
+
+        case FSTypeResolved::FILE:
+        case FSTypeResolved::SYMLINK_TO_FILE:
+        {
+            std::string strPath = pFS->getRelativePath();
+            char *pContentType = g_content_type_guess(strPath.c_str(),
+                                                      nullptr,
+                                                      0,
+                                                      NULL);            // image/jpeg
+            if (pContentType)
+            {
+                GAppInfo *pAppInfo_c = g_app_info_get_default_for_type(pContentType, FALSE);
+                Glib::RefPtr<Gio::AppInfo> pAppInfo = Glib::wrap(pAppInfo_c);
+                if (pAppInfo)
+                    pAppInfo->launch(pFS->getGioFile());
+                else
+                    _mainWindow.errorBox("Cannot determine default application for file \"" + pFS->getRelativePath() + "\"");
+
+//                 Gtk::MessageDialog dialog(_mainWindow,
+//                                         "File clicked",
+//                                         false /* use_markup */,
+//                                         Gtk::MESSAGE_QUESTION,
+//                                         Gtk::BUTTONS_OK_CANCEL);
+//                 dialog.set_secondary_text("Launch \"" + pAppInfo->get_commandline() + "\"?");
+//                 if (dialog.run() == Gtk::RESPONSE_OK)
+
+                g_free(pContentType);
+            }
+        }
+        break;
+
+        default:
+        break;
+    }
+}
+
+void ElissoFolderView::connectModel(bool fConnect)
+{
+    switch (_mode)
+    {
+        case FolderViewMode::ICONS:
+            if (fConnect)
+                _iconView.set_model(_pImpl->pListStore);
+            else
+                _iconView.unset_model();
+        break;
+
+        case FolderViewMode::LIST:
+            if (fConnect)
+                _treeView.set_model(_pImpl->pListStore);
+            else
+                _treeView.unset_model();
+        break;
+
+        case FolderViewMode::COMPACT:
+            if (fConnect)
+            {
+                for (auto &pFS : _pImpl->llFolderContents)
+                    if (!pFS->isHidden())
+                    {
+                        Glib::ustring strLabel = pFS->getBasename();
+                        auto p = Gtk::manage(new Gtk::Label(strLabel));
+                        _compactView.insert(*p, -1);
+                    }
+                _compactView.show_all();
+            }
+            else
+            {
+                auto childList = _compactView.get_children();
+                for (auto &p : childList)
+                    _compactView.remove(*p);
+            }
+
+        break;
+
+        default:
+        break;
+    }
 }
 
 /**
@@ -162,19 +444,17 @@ bool ElissoFolderView::setPath(const std::string &strPath)
 bool ElissoFolderView::spawnPopulate()
 {
     bool rc = false;
-    if (!_pImpl->fPopulating)
+    if (_state != ViewState::POPULATING)
     {
-        // Remove all old data, if any.
-        _pImpl->pListStore->clear();
-
-        _pImpl->fPopulating = true;
+        this->setState(ViewState::POPULATING);
 
         new std::thread([this]()
                 {
-                    FSLock lock;
-                    this->populate(lock);
+                    Debug::Log(FILE_MID, "Populate thread started");
+                    this->populate();
                     // Trigger the dispatcher, which will call "populate done".
                     this->_pImpl->dispatcherPopulateDone.emit();
+                    Debug::Log(FILE_MID, "Populate thread done");
                 });
 
         rc = true;
@@ -186,10 +466,27 @@ bool ElissoFolderView::spawnPopulate()
 /**
  *  Normally called on a worker thread.
  */
-void ElissoFolderView::populate(FSLock &lock)
+void ElissoFolderView::populate()
 {
-    this->_pImpl->pDir->getContents(_pImpl->llFolderContents,
-                                    false);
+    this->_pDir->getContents(_pImpl->llFolderContents,
+                             false);
+}
+
+void ForEachSubstring(const Glib::ustring &str,
+                      const Glib::ustring &strDelimiter,
+                      std::function<void (const Glib::ustring&)> fnParticle)
+{
+    size_t p1 = 0;
+    size_t p2;
+    while ((p2 = str.find(strDelimiter, p1)) != string::npos)
+    {
+        int len = p2 - p1;
+        if (len > 0)
+            fnParticle(str.substr(p1, len));
+        p1 = p2 + 1;
+    }
+
+    fnParticle(str.substr(p1));
 }
 
 void ElissoFolderView::onPopulateDone()
@@ -197,28 +494,45 @@ void ElissoFolderView::onPopulateDone()
     const FolderModelColumns &cols = FolderModelColumns::Get();
 
     for (auto &pFS : _pImpl->llFolderContents)
-    {
-        auto row = *(_pImpl->pListStore->append());
-        row[cols.m_col_icon] = pFS->getIcon();
-        row[cols.m_col_filename] = pFS->getBasename();
-        row[cols.m_col_size] = pFS->getFileSize();
-
-        auto t = pFS->getResolvedType();
-        row[cols.m_col_typeResolved] = t;
-
-        const char *p = "Special";
-        switch (t)
+        if (!pFS->isHidden())
         {
-            case FSTypeResolved::FILE: p = "File"; break;
-            case FSTypeResolved::DIRECTORY: p = "Folder"; break;
-            case FSTypeResolved::SYMLINK_TO_FILE: p = "Link to file"; break;
-            case FSTypeResolved::SYMLINK_TO_DIRECTORY: p = "Link to folder"; break;
-            case FSTypeResolved::BROKEN_SYMLINK: p = "Broken link"; break;
-            default: break;
+            auto row = *(_pImpl->pListStore->append());
+
+            Glib::ustring strIcons = pFS->getIcon();
+            std::vector<Glib::ustring> sv;
+            ForEachSubstring(   strIcons,
+                                " ",
+                                [&sv](const Glib::ustring &strParticle)
+                                {
+                                    if (!strParticle.empty())
+                                        sv.push_back(strParticle);
+                                });
+
+            Glib::RefPtr<Gdk::Pixbuf> pb1 = _pImpl->pIconTheme->choose_icon(sv, 16).load_icon();
+            row[cols._colIconSmall] = pb1;
+            Glib::RefPtr<Gdk::Pixbuf> pb2 = _pImpl->pIconTheme->choose_icon(sv, 50).load_icon();
+            row[cols._colIconBig] = pb2;
+
+            row[cols._colFilename] = pFS->getBasename();
+            row[cols._colSize] = pFS->getFileSize();
+
+            auto t = pFS->getResolvedType();
+            row[cols._colTypeResolved] = t;
+
+            const char *p = "Special";
+            switch (t)
+            {
+                case FSTypeResolved::FILE: p = "File"; break;
+                case FSTypeResolved::DIRECTORY: p = "Folder"; break;
+                case FSTypeResolved::SYMLINK_TO_FILE: p = "Link to file"; break;
+                case FSTypeResolved::SYMLINK_TO_DIRECTORY: p = "Link to folder"; break;
+                case FSTypeResolved::BROKEN_SYMLINK: p = "Broken link"; break;
+                default: break;
+            }
+
+            row[cols._colTypeString] = Glib::ustring(p);
         }
 
-        row[cols.m_col_typeString] = Glib::ustring(p);
-    }
-
-    _pImpl->fPopulating = false;
+    this->setState(ViewState::POPULATED);
 }
+

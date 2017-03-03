@@ -15,6 +15,10 @@
 
 #include "elisso/folderview.h"
 
+class ElissoAction;
+typedef Glib::RefPtr<Gio::SimpleAction> PSimpleAction;
+
+
 /***************************************************************************
  *
  *  ElissoApplicationWindow
@@ -24,14 +28,40 @@
 class ElissoApplicationWindow : public Gtk::ApplicationWindow
 {
 public:
-    ElissoApplicationWindow(const Glib::ustring &strInitialPath);
+    ElissoApplicationWindow(Gtk::Application &app,
+                            const std::string &strInitialPath);
     virtual ~ElissoApplicationWindow();
 
-protected:
-    Gtk::Paned          _vPaned;
-    ElissoTreeView      _treeView;
-    ElissoFolderView    _folderView;
+    int errorBox(Glib::ustring strMessage);
 
+protected:
+    friend class ElissoFolderView;
+
+    Gtk::Application    &_app;
+    Gtk::Box            _mainVBox;
+    Gtk::Paned          _vPaned;
+    ElissoTreeView      _treeViewLeft;
+    Gtk::Notebook       _notebook;
+
+    PSimpleAction       _pActionGoBack;
+    Gtk::ToolButton     *_pButtonGoBack;
+    PSimpleAction       _pActionGoForward;
+    Gtk::ToolButton     *_pButtonGoForward;
+    PSimpleAction       _pActionGoParent;
+    Gtk::ToolButton     *_pButtonGoParent;
+
+    void addTab(PFSDirectory pDir);
+    PElissoFolderView getActiveFolderView() const;
+
+    Gtk::Notebook& getNotebook()
+    {
+        return _notebook;
+    }
+
+    Gtk::ToolButton* makeToolButton(const Glib::ustring &strIconName,
+                                    PSimpleAction pAction);
+
+    std::vector<PElissoFolderView> _aFolderViews;
 };
 
 #endif // ELISSO_MAINWINDOW_H
