@@ -23,7 +23,7 @@ include $(PATH_CURRENT)/src/xwp/Makefile.kmk
 PROGRAMS += elisso
 elisso_TEMPLATE = EXE
 elisso_SOURCES =
-elisso_LIBS = $(PATH_STAGE_LIB)/xwp.a $(GTKMM_LIBS) libpcre
+elisso_LIBS = $(PATH_STAGE_LIB)/xwp.a $(GTKMM_LIBS) libpcre libpthread
 
 include $(PATH_CURRENT)/src/elisso/Makefile.kmk
 

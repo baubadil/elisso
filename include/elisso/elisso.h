@@ -16,6 +16,19 @@
 #include "xwp/debug.h"
 #include "xwp/regex.h"
 
+// const DebugFlag DEBUG_ALWAYS          = 0;
+
+    // low-level
+// const DebugFlag XWPTAGS         = (1 <<  1);
+// const DebugFlag FILE_LOW        = (1 <<  3);
+
+    // mid-level
+// const DebugFlag FILE_MID        = (1 << 15);
+
+    // high-level
+// const DebugFlag CMD_TOP         = (1 << 20);
+const DebugFlag FOLDER_POPULATE = (1 << 21);
+
 using namespace XWP;
 
 DEF_STRING(ACTION_FILE_QUIT, "file-quit");

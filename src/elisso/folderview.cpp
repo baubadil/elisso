@@ -21,14 +21,14 @@
 
 /***************************************************************************
  *
- *  FolderModelColumns (private)
+ *  FolderContentsModelColumns (private)
  *
  **************************************************************************/
 
-class FolderModelColumns : public Gtk::TreeModelColumnRecord
+class FolderContentsModelColumns : public Gtk::TreeModelColumnRecord
 {
 public:
-    FolderModelColumns()
+    FolderContentsModelColumns()
     {
         add(_colFilename);
         add(_colSize);
@@ -45,29 +45,31 @@ public:
     Gtk::TreeModelColumn<FSTypeResolved>            _colTypeResolved;
     Gtk::TreeModelColumn<Glib::ustring>             _colTypeString;
 
-    static FolderModelColumns& Get()
+    static FolderContentsModelColumns& Get()
     {
         if (!s_p)
-            s_p = new FolderModelColumns;
+            s_p = new FolderContentsModelColumns;
         return *s_p;
     }
 
 private:
-    static FolderModelColumns *s_p;
+    static FolderContentsModelColumns *s_p;
 };
 
-FolderModelColumns* FolderModelColumns::s_p = nullptr;
+FolderContentsModelColumns* FolderContentsModelColumns::s_p = nullptr;
 
 
 /***************************************************************************
  *
- *  FolderViewImpl (private)
+ *  ElissoFolderView::Impl (private)
  *
  **************************************************************************/
 
 struct ElissoFolderView::Impl
 {
+    // GUI thread dispatcher for when a folder populate is done.
     Glib::Dispatcher                dispatcherPopulateDone;
+
     Glib::RefPtr<Gtk::ListStore>    pListStore;
     FSList                          llFolderContents;
     Glib::RefPtr<Gtk::IconTheme>    pIconTheme;
@@ -84,7 +86,7 @@ struct ElissoFolderView::Impl
         if (iter)
         {
             Gtk::TreeModel::Row row = *iter;
-            FolderModelColumns &cols = FolderModelColumns::Get();
+            FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
             std::string strBasename = Glib::filename_from_utf8(row[cols._colFilename]);
             PFSModelBase pFS = view._pDir->find(strBasename);
             if (pFS)
@@ -92,6 +94,7 @@ struct ElissoFolderView::Impl
         }
     }
 };
+
 
 /***************************************************************************
  *
@@ -107,12 +110,13 @@ ElissoFolderView::ElissoFolderView(ElissoApplicationWindow &mainWindow)
       _compactView(),
       _pImpl(new ElissoFolderView::Impl())
 {
+    // Connect the GUI thread dispatcher for when a folder populate is done.
     _pImpl->dispatcherPopulateDone.connect([this]()
     {
         this->onPopulateDone();
     });
 
-    FolderModelColumns &cols = FolderModelColumns::Get();
+    FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
     _pImpl->pListStore = Gtk::ListStore::create(cols);
 
     /* Set up the icon view */
@@ -151,7 +155,7 @@ ElissoFolderView::ElissoFolderView(ElissoApplicationWindow &mainWindow)
     /* Set up the compact view */
 //     _compactView.
 
-    setViewMode(FolderViewMode::LIST);
+    this->setViewMode(FolderViewMode::LIST);
 }
 
 /* virtual */
@@ -448,13 +452,13 @@ bool ElissoFolderView::spawnPopulate()
     {
         this->setState(ViewState::POPULATING);
 
+        Debug::Log(FOLDER_POPULATE, "ElissoFolderView::spawnPopulate(\"" + _pDir->getRelativePath() + "\")");
+
         new std::thread([this]()
                 {
-                    Debug::Log(FILE_MID, "Populate thread started");
                     this->populate();
                     // Trigger the dispatcher, which will call "populate done".
                     this->_pImpl->dispatcherPopulateDone.emit();
-                    Debug::Log(FILE_MID, "Populate thread done");
                 });
 
         rc = true;
@@ -491,7 +495,9 @@ void ForEachSubstring(const Glib::ustring &str,
 
 void ElissoFolderView::onPopulateDone()
 {
-    const FolderModelColumns &cols = FolderModelColumns::Get();
+    const FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
+
+    Debug::Log(FOLDER_POPULATE, "ElissoFolderView::onPopulateDone(\"" + _pDir->getRelativePath() + "\")");
 
     for (auto &pFS : _pImpl->llFolderContents)
         if (!pFS->isHidden())

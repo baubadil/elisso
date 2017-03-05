@@ -112,36 +112,6 @@ R"i____(
       </section>
     </submenu>
   </menu>
-  <object class='GtkToolbar' id='toolbar'>
-    <property name='visible'>True</property>
-    <property name='can_focus'>False</property>
-    <child>
-      <object class='GtkToolButton' id='toolbutton_new'>
-        <property name='visible'>True</property>
-        <property name='can_focus'>False</property>
-        <property name='tooltip_text' translatable='yes'>New Standard</property>
-        <property name='action_name'>app.newstandard</property>
-        <property name='icon_name'>document-new</property>
-      </object>
-      <packing>
-        <property name='expand'>False</property>
-        <property name='homogeneous'>True</property>
-      </packing>
-    </child>
-    <child>
-      <object class='GtkToolButton' id='toolbutton_quit'>
-        <property name='visible'>True</property>
-        <property name='can_focus'>False</property>
-        <property name='tooltip_text' translatable='yes'>Quit</property>
-        <property name='action_name'>win.file-quit</property>
-        <property name='icon_name'>application-exit</property>
-      </object>
-      <packing>
-        <property name='expand'>False</property>
-        <property name='homogeneous'>True</property>
-      </packing>
-    </child>
-  </object>
 </interface>)i____";
 
 
@@ -156,7 +126,9 @@ class ElissoApplication : public Gtk::Application
 protected:
     ElissoApplication(int argc,
                       char *argv[])
-        : Gtk::Application(argc, argv, "org.baubadil.elisso")
+        : Gtk::Application(argc,
+                           argv,
+                           "org.baubadil.elisso")
     { }
 
     void on_startup()
@@ -180,9 +152,7 @@ protected:
 
     void on_activate()
     {
-        char szCWD[1024];
-        auto strHome = getcwd(szCWD, sizeof(szCWD));
-        auto p = new ElissoApplicationWindow(*this, strHome);
+        auto p = new ElissoApplicationWindow(*this, nullptr);
         this->add_window(*p);
         p->show();
     }
@@ -205,7 +175,7 @@ public:
 
 int main(int argc, char *argv[])
 {
-    g_flDebugSet = 0; // -1;
+    g_flDebugSet = FOLDER_POPULATE;
 
     auto app = ElissoApplication::create(argc,
                                          argv);

@@ -57,6 +57,7 @@ class FSMountable;
 typedef std::shared_ptr<FSMountable> PFSMountable;
 
 typedef std::list<PFSModelBase> FSList;
+typedef std::shared_ptr<FSList> PFSList;
 
 class FSLock;
 
@@ -196,6 +197,7 @@ public:
     PFSModelBase isAwake(const std::string &strParticle, FSLock &lock);
 
     static PFSDirectory GetHome();
+    static PFSDirectory GetRoot();
 
 protected:
     struct Impl;
@@ -216,13 +218,15 @@ typedef std::shared_ptr<RootDirectory> PRootDirectory;
 
 class RootDirectory : public FSDirectory
 {
+    friend class FSModelBase;
+    friend class FSDirectory;
+
 private:
     RootDirectory();
 
     static PRootDirectory s_theRoot;
 
-public:
-    static PRootDirectory Get(FSLock &lock);
+    static PRootDirectory GetImpl(FSLock &lock);
 };
 
 class CurrentDirectory;
@@ -230,12 +234,14 @@ typedef std::shared_ptr<CurrentDirectory> PCurrentDirectory;
 
 class CurrentDirectory : public FSDirectory
 {
+    friend class FSModelBase;
+
+private:
     CurrentDirectory();
 
     static PCurrentDirectory s_theCWD;
 
-public:
-    static PCurrentDirectory Get(FSLock &lock);
+    static PCurrentDirectory GetImpl(FSLock &lock);
 };
 
 

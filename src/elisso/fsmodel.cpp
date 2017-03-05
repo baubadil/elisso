@@ -39,16 +39,6 @@ PCurrentDirectory CurrentDirectory::s_theCWD = NULL;
 
 std::mutex g_mutexFiles;
 
-class FSLock
-{
-public:
-    FSLock();
-    virtual ~FSLock();
-
-private:
-    std::lock_guard<std::mutex> *pGuard;
-};
-
 /**
  *  A word about thread safety.
  *
@@ -62,16 +52,16 @@ private:
  *  not require that the caller hold the lock. In other words, the locking
  *  is transparent to the caller, but calling into the system might block.
  */
-FSLock::FSLock()
-    : pGuard(new std::lock_guard<std::mutex>(g_mutexFiles))
+class FSLock
 {
-}
+public:
+    FSLock()
+        : g(g_mutexFiles)
+    { }
 
-/* virtual */
-FSLock::~FSLock()
-{
-    delete pGuard;
-}
+private:
+    std::lock_guard<std::mutex> g;
+};
 
 
 /***************************************************************************
@@ -155,7 +145,7 @@ PFSModelBase FSModelBase::FindPathImpl(const std::string &strPath, FSLock &lock)
             if (aParticles.size() > 1)
                 Debug::Log(FILE_LOW, "Ignoring particle . in list");
             else
-                return CurrentDirectory::Get(lock);
+                return CurrentDirectory::GetImpl(lock);
         }
         else
         {
@@ -165,11 +155,11 @@ PFSModelBase FSModelBase::FindPathImpl(const std::string &strPath, FSLock &lock)
             {
                 if (fAbsolute)
                     // First item on an absolute path must be a child of the root directory.
-                    pDir = RootDirectory::Get(lock);
+                    pDir = RootDirectory::GetImpl(lock);
                 else
                 {
                     // First item on a relative path must be a child of the curdir.
-                    pDir = CurrentDirectory::Get(lock);
+                    pDir = CurrentDirectory::GetImpl(lock);
                     strForStat = ".";
                 }
             }
@@ -666,6 +656,12 @@ PFSDirectory FSDirectory::GetHome()
     return nullptr;
 }
 
+PFSDirectory FSDirectory::GetRoot()
+{
+    FSLock lock;
+    return RootDirectory::GetImpl(lock);
+}
+
 RootDirectory::RootDirectory()
     : FSDirectory(Gio::File::create_for_path("/"))
 {
@@ -673,7 +669,7 @@ RootDirectory::RootDirectory()
 }
 
 /*static */
-PRootDirectory RootDirectory::Get(FSLock &lock)
+PRootDirectory RootDirectory::GetImpl(FSLock &lock)
 {
     if (!s_theRoot)
     {
@@ -695,7 +691,7 @@ CurrentDirectory::CurrentDirectory()
 }
 
 /*static */
-PCurrentDirectory CurrentDirectory::Get(FSLock &lock)
+PCurrentDirectory CurrentDirectory::GetImpl(FSLock &lock)
 {
     if (!s_theCWD)
     {

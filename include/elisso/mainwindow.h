@@ -14,6 +14,7 @@
 #include <gtkmm.h>
 
 #include "elisso/folderview.h"
+#include "elisso/foldertree.h"
 
 class ElissoAction;
 typedef Glib::RefPtr<Gio::SimpleAction> PSimpleAction;
@@ -25,11 +26,40 @@ typedef Glib::RefPtr<Gio::SimpleAction> PSimpleAction;
  *
  **************************************************************************/
 
+/**
+ *  Window hierarchy:
+ *
+ *  ElissoApplicationWindow
+ *   |
+ *   +- GtkMenuBar
+ *   |
+ *   +- GtkBox
+ *       |
+ *       +- GtkToolbar
+ *       |
+ *       +- GtkPaned: to split between tree (left) and notebook (right)
+ *           |
+ *           +- ElissoTreeView (subclass of GtkScrolledWindow)
+ *           |
+ *           +- GtkNotebook
+ *               |
+ *               +- ElissoFolderView (subclass of GtkScrolledWindow)
+ *               |   |
+ *               |   +- GtkTreeView (list view)
+ *               |
+ *               +- ElissoFolderView (subclass of GtkScrolledWindow)
+ *                   |
+ *                   +- GtkTreeView (list view)
+ *
+ *
+ *
+ *
+ */
 class ElissoApplicationWindow : public Gtk::ApplicationWindow
 {
 public:
     ElissoApplicationWindow(Gtk::Application &app,
-                            const std::string &strInitialPath);
+                            PFSDirectory pdirInitial);
     virtual ~ElissoApplicationWindow();
 
     int errorBox(Glib::ustring strMessage);
@@ -50,7 +80,7 @@ protected:
     PSimpleAction       _pActionGoParent;
     Gtk::ToolButton     *_pButtonGoParent;
 
-    void addTab(PFSDirectory pDir);
+    void addFolderTab(PFSDirectory pDir);
     PElissoFolderView getActiveFolderView() const;
 
     Gtk::Notebook& getNotebook()

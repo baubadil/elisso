@@ -12,13 +12,12 @@
 #include "elisso/mainwindow.h"
 
 ElissoApplicationWindow::ElissoApplicationWindow(Gtk::Application &app,
-                                                 const std::string &strInitialPath)
+                                                 PFSDirectory pdirInitial)      //!< in: initial directory or nullptr for "home"
     : _app(app),
       _mainVBox(Gtk::ORIENTATION_VERTICAL),
       _vPaned(),
-      _treeViewLeft(),
+      _treeViewLeft(*this),
       _notebook()
-//       _folderView(*this)
 {
     this->add_action(ACTION_FILE_QUIT, [this](){
         get_application()->quit();
@@ -84,9 +83,11 @@ ElissoApplicationWindow::ElissoApplicationWindow(Gtk::Application &app,
         w.run();
     });
 
-    this->set_border_width(10);
+//     this->set_border_width(10);
     this->set_default_size(1000, 600);
 
+    _vPaned.set_position(200);
+    _vPaned.set_wide_handle(true);
     _vPaned.add1(_treeViewLeft);
     _vPaned.add2(_notebook);
 
@@ -124,8 +125,7 @@ ElissoApplicationWindow::ElissoApplicationWindow(Gtk::Application &app,
 
     this->show_all_children();
 
-    auto pDir = FSModelBase::FindDirectory(strInitialPath);
-    this->addTab(pDir);
+    this->addFolderTab(pdirInitial);
     _notebook.show_all();
 }
 
@@ -148,12 +148,21 @@ Gtk::ToolButton* ElissoApplicationWindow::makeToolButton(const Glib::ustring &st
     return pButton;
 }
 
-void ElissoApplicationWindow::addTab(PFSDirectory pDir)
+/**
+ *  Adds a new tab to the GTK notebook in the right pane with an ElissoFolderView
+ *  for the given directory inside.
+ *
+ *  If pDir is nullptr, we retrieve the user's home directory from the FS backend.
+ */
+void ElissoApplicationWindow::addFolderTab(PFSDirectory pDir)       //!< in: directory to open, or nullptr for "home"
 {
     ElissoFolderView *pFolderView = new ElissoFolderView(*this);
     _aFolderViews.push_back(PElissoFolderView(pFolderView));
-    _notebook.append_page(*pFolderView, pDir->getBasename());
 
+    if (!pDir)
+        pDir = FSDirectory::GetHome();
+
+    _notebook.append_page(*pFolderView, pDir->getBasename());
     pFolderView->setDirectory(pDir);
 }
 

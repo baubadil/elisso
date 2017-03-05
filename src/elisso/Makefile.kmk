@@ -5,4 +5,5 @@ elisso_SOURCES += \
 	src/elisso/main.cpp \
 	src/elisso/mainwindow.cpp \
 	src/elisso/folderview.cpp \
+	src/elisso/foldertree.cpp \
 	src/elisso/fsmodel.cpp
