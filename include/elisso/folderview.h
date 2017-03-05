@@ -53,12 +53,12 @@ public:
     ElissoFolderView(ElissoApplicationWindow &mainWindow);
     virtual ~ElissoFolderView();
 
-    PFSDirectory getDirectory()
+    PFSModelBase getDirectory()
     {
         return _pDir;
     }
 
-    bool setDirectory(PFSDirectory pDir,
+    bool setDirectory(PFSModelBase pDirOrSymlinkToDir,
                       bool fPushToHistory = true);
 
     bool canGoBack();
@@ -73,8 +73,6 @@ public:
 
     bool spawnPopulate();
 
-    void populate();
-
 private:
     void dumpStack();
     void onPopulateDone();
@@ -88,7 +86,7 @@ private:
     Gtk::TreeView               _treeView;
     Gtk::FlowBox                _compactView;
 
-    PFSDirectory                _pDir;
+    PFSModelBase                _pDir;
     std::vector<std::string>    _aPathHistory;
     uint32_t                    _uPreviousOffset = 0;
 

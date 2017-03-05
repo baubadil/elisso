@@ -38,6 +38,8 @@ private:
     bool spawnPopulate(Gtk::TreeModel::iterator &it);
     void onPopulateDone();
 
+    void onSelectionChanged();
+
     ElissoApplicationWindow     &_mainWindow;
     Gtk::TreeView               _treeView;
 

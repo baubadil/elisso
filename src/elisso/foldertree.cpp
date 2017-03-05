@@ -107,22 +107,9 @@ public:
         JobsLock lock;
         s_mapJobs[p->_id] = p;
 
-        Debug::Log(FOLDER_POPULATE, "ElissoTreeView::spawnPopulate(\"" + pDir->getRelativePath() + "\")");
+        Debug::Log(FOLDER_POPULATE, "TreeJob::Create(\"" + pDir->getRelativePath() + "\")");
 
-        new std::thread([p, pDir]()
-        {
-            // Create an FSList on the thread's stack and have it filled by the back-end.
-            PFSList pllContents = std::make_shared<FSList>();
-            pDir->getContents(*pllContents,
-                              true);     // folders only
-
-            // Hand the list over to the instance.
-            JobsLock lock;
-            p->_pllContents = pllContents;
-
-            // Trigger the dispatcher, which will call "populate done".
-            p->_dispatcherPopulateDone.emit();
-        });
+        p->spawnPopulate(pDir);
 
         return p;
     }
@@ -141,7 +128,49 @@ protected:
         {
             this->onPopulateDone();
         });
+        // Connect the GUI thread dispatcher for when a folder populate is done.
+        _dispatcherAddFirst.connect([this]()
+        {
+            this->onAddAnotherFirst();
+        });
     }
+
+    ~TreeJob()
+    {
+        Debug::Log(FOLDER_POPULATE, __func__);
+    }
+
+    void spawnPopulate(PFSDirectory pDir)
+    {
+        new std::thread([this, pDir]()
+        {
+            // Create an FSList on the thread's stack and have it filled by the back-end.
+            PFSList pllContents = std::make_shared<FSList>();
+            pDir->getContents(*pllContents,
+                              FSDirectory::Get::FOLDERS_ONLY);
+
+            // Hand the list over to the instance.
+            JobsLock lock;
+            this->_pllContents = pllContents;
+
+            // Trigger the dispatcher, which will call "populate done".
+            this->_dispatcherPopulateDone.emit();
+        });
+    }
+
+    struct AddOneFirst
+    {
+        PFSModelBase    _pDirOrSymlink;
+        bool            _fProcessed = false;
+        PFSModelBase    _pFirstChild;
+
+        AddOneFirst(PFSModelBase pDirOrSymlink)
+            : _pDirOrSymlink(pDirOrSymlink)
+        { }
+    };
+    typedef std::shared_ptr<AddOneFirst> PAddOneFirst;
+    typedef std::list<PAddOneFirst> AddOneFirstsList;
+    typedef std::shared_ptr<AddOneFirstsList> PAddOneFirstsList;
 
     void onPopulateDone()
     {
@@ -149,6 +178,7 @@ protected:
 
         FolderTreeModelColumns &cols = FolderTreeModelColumns::Get();
 
+        _pllToAddFirst = std::make_shared<AddOneFirstsList>();
         JobsLock lock;
         for (auto &p : *_pllContents)
             if (!p->isHidden())
@@ -157,7 +187,70 @@ protected:
                 itChild = _pTreeStore->append(_it->children());
                 (*itChild)[cols._colIconAndName] = p->getBasename();
                 (*itChild)[cols._colPDir] = p;
+
+                _pllToAddFirst->push_back(std::make_shared<AddOneFirst>(p));
             }
+
+        if (_pllToAddFirst->size())
+            spawnAddFirstFolders();
+        else
+            cleanUp();
+    }
+
+    void spawnAddFirstFolders()
+    {
+        Debug::Log(FOLDER_POPULATE, "TreeJob::spawnAddFirstFolders(" + to_string(_pllToAddFirst->size()) + ")");
+
+        new std::thread([this]()
+        {
+            for (PAddOneFirst pAddOneFirst : *_pllToAddFirst)
+            {
+//                 Debug::Log(FOLDER_POPULATE, "popped " + pAddOneFirst->_pDirOrSymlink->getBasename());
+                PFSDirectory pDir = pAddOneFirst->_pDirOrSymlink->resolveDirectory();
+                FSList llFiles;
+                pDir->getContents(llFiles, FSDirectory::Get::FIRST_FOLDER_ONLY);
+
+                {
+                    JobsLock lock;
+                    pAddOneFirst->_fProcessed = true;
+                }
+
+                _dispatcherAddFirst.emit();
+            }
+
+            // Trigger the dispatcher, which will call "addAnotherFirst".
+            _dispatcherAddFirst.emit();
+        });
+    }
+
+    void onAddAnotherFirst()
+    {
+        JobsLock lock;
+        bool fAnythingLeft = false;
+        for (PAddOneFirst pAddOneFirst : *_pllToAddFirst)
+        {
+            if (pAddOneFirst->_fProcessed)
+                ;
+            else
+            {
+                fAnythingLeft = true;
+                break;
+            }
+        }
+
+        if (!fAnythingLeft)
+            cleanUp();
+    }
+
+    /**
+     *  Removes this from the list of running jobs, which causes the refcount to drop to 0,
+     *  and this will be deleted.
+     */
+    void cleanUp()
+    {
+        auto it = s_mapJobs.find(_id);
+        if (it != s_mapJobs.end())
+            s_mapJobs.erase(it);
     }
 
     TreeJobID                       _id;
@@ -166,8 +259,12 @@ protected:
     Gtk::TreeModel::iterator        _it;        // DO NOT TOUCH UNLESS FROM GUI THREAD
     PFSList                         _pllContents;
 
+    PAddOneFirstsList               _pllToAddFirst;
+
     // GUI thread dispatcher for when a folder populate is done.
     Glib::Dispatcher                _dispatcherPopulateDone;
+    // GUI thread dispatcher for when the "add first" thread has finished some work.
+    Glib::Dispatcher                _dispatcherAddFirst;
 
     static JobsMap      s_mapJobs;
 };
@@ -202,6 +299,11 @@ ElissoTreeView::ElissoTreeView(ElissoApplicationWindow &mainWindow)
       _treeView(),
       _pImpl(new Impl)
 {
+    auto pTreeSelection = _treeView.get_selection();
+    pTreeSelection->signal_changed().connect([this](){
+        this->onSelectionChanged();
+    });
+
     FolderTreeModelColumns &cols = FolderTreeModelColumns::Get();
     _pImpl->pTreeStore = Gtk::TreeStore::create(cols);
 
@@ -258,4 +360,22 @@ bool ElissoTreeView::spawnPopulate(Gtk::TreeModel::iterator &it)
 void ElissoTreeView::onPopulateDone()
 {
 //     Debug::Log(FOLDER_POPULATE, "ElissoTreeView::onPopulateDone(\"" + pDir->getRelativePath() + "\")");
+}
+
+void ElissoTreeView::onSelectionChanged()
+{
+    auto pTreeSelection = _treeView.get_selection();
+    Gtk::TreeModel::iterator it;
+    if ((it = pTreeSelection->get_selected()))
+    {
+        const FolderTreeModelColumns &cols = FolderTreeModelColumns::Get();
+        PFSModelBase pDir = (*it)[cols._colPDir];
+        Debug::Log(FOLDER_POPULATE, "Selected: " + pDir->getRelativePath());
+        if (pDir)
+        {
+            auto pActiveFolderView = _mainWindow.getActiveFolderView();
+            if (pActiveFolderView)
+                pActiveFolderView->setDirectory(pDir);
+        }
+    }
 }

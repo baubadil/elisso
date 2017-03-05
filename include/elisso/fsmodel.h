@@ -178,7 +178,14 @@ class FSDirectory : public FSModelBase
     friend class FSModelBase;
 
 public:
-    void getContents(FSList &llFiles, bool fDirsOnly);
+    enum class Get
+    {
+        ALL,
+        FOLDERS_ONLY,
+        FIRST_FOLDER_ONLY
+    };
+
+    void getContents(FSList &llFiles, Get getContents);
 
     bool isPopulatedWithDirectories()
     {

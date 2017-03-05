@@ -88,9 +88,13 @@ struct ElissoFolderView::Impl
             Gtk::TreeModel::Row row = *iter;
             FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
             std::string strBasename = Glib::filename_from_utf8(row[cols._colFilename]);
-            PFSModelBase pFS = view._pDir->find(strBasename);
-            if (pFS)
-                view.onFileActivated(pFS);
+            PFSDirectory pDir = view._pDir->resolveDirectory();
+            if (pDir)
+            {
+                PFSModelBase pFS = pDir->find(strBasename);
+                if (pFS)
+                    view.onFileActivated(pFS);
+            }
         }
     }
 };
@@ -110,6 +114,12 @@ ElissoFolderView::ElissoFolderView(ElissoApplicationWindow &mainWindow)
       _compactView(),
       _pImpl(new ElissoFolderView::Impl())
 {
+    // Allow multiple selections.
+    auto pTreeSel = _treeView.get_selection();
+    pTreeSel->set_mode(Gtk::SELECTION_MULTIPLE);
+//     auto pIconSel = _iconView.get_selection();
+//     pIconSel->set_mode(Gtk::SELECTION_MULTIPLE);
+
     // Connect the GUI thread dispatcher for when a folder populate is done.
     _pImpl->dispatcherPopulateDone.connect([this]()
     {
@@ -165,35 +175,56 @@ ElissoFolderView::~ElissoFolderView()
 }
 
 /**
+ *  This gets called whenever the notebook tab on the right needs to be populated with the contents
+ *  of another folder, in particular:
+ *
+ *   -- on startup, when the main window is constructed for the first time;
+ *
+ *   -- if the user double-clicks on another folder in the folder contents (via onFileActivated());
+ *
+ *   -- if the user single-clicks on a folder in the tree on the left.
+ *
  *  Returns true if a populate thread was started, or false if the folder had already been populated.
  */
-bool ElissoFolderView::setDirectory(PFSDirectory pDir,
+bool ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
                                     bool fPushToHistory /* = true */)
 {
-    // If we have a directory already, push the path into the history.
-    if (fPushToHistory)
-        if (_pDir)
+    bool rc = false;
+    auto t = pDirOrSymlinkToDir->getResolvedType();
+    switch (t)
+    {
+        case FSTypeResolved::DIRECTORY:
+        case FSTypeResolved::SYMLINK_TO_DIRECTORY:
         {
-            auto strFull = _pDir->getRelativePath();
-            // Do not push if this is the same as the last item on the stack.
-            if (    (!_aPathHistory.size())
-                 || (_aPathHistory.back() != strFull)
-               )
-                _aPathHistory.push_back(strFull);
+            // If we have a directory already, push the path into the history.
+            if (fPushToHistory)
+                if (_pDir)
+                {
+                    auto strFull = _pDir->getRelativePath();
+                    // Do not push if this is the same as the last item on the stack.
+                    if (    (!_aPathHistory.size())
+                        || (_aPathHistory.back() != strFull)
+                    )
+                        _aPathHistory.push_back(strFull);
 
-            _uPreviousOffset = 0;
+                    _uPreviousOffset = 0;
+                }
+
+            _pDir = pDirOrSymlinkToDir;
+            // Remove all old data, if any.
+            _pImpl->pListStore->clear();
+            _pImpl->llFolderContents.clear();
+            rc = this->spawnPopulate();
+
+            dumpStack();
         }
+        break;
 
-    _pDir = pDir;
-    // Remove all old data, if any.
-    _pImpl->pListStore->clear();
-    _pImpl->llFolderContents.clear();
-    bool rc = this->spawnPopulate();
+        default:
+        break;
+    }
 
-    dumpStack();
-
-    _mainWindow._pActionGoBack->set_enabled(this->canGoBack());
-    _mainWindow._pActionGoForward->set_enabled(this->canGoForward());
+    _mainWindow.enableActions();
 
     return rc;
 }
@@ -217,9 +248,9 @@ bool ElissoFolderView::goBack()
     {
         ++_uPreviousOffset;
         std::string strPrevious = _aPathHistory[_aPathHistory.size() - _uPreviousOffset];
-        PFSDirectory pDirOld = _pDir;
-        PFSDirectory pDir;
-        if ((pDir = FSModelBase::FindDirectory(strPrevious)))
+        PFSModelBase pDirOld = _pDir;
+        PFSModelBase pDir;
+        if ((pDir = FSModelBase::FindPath(strPrevious)))
             if (this->setDirectory(pDir,
                                    false))      // do not push on history stack
             {
@@ -455,25 +486,20 @@ bool ElissoFolderView::spawnPopulate()
         Debug::Log(FOLDER_POPULATE, "ElissoFolderView::spawnPopulate(\"" + _pDir->getRelativePath() + "\")");
 
         new std::thread([this]()
-                {
-                    this->populate();
-                    // Trigger the dispatcher, which will call "populate done".
-                    this->_pImpl->dispatcherPopulateDone.emit();
-                });
+        {
+            PFSDirectory pDir = this->_pDir->resolveDirectory();
+            if (pDir)
+                pDir->getContents(_pImpl->llFolderContents,
+                                  FSDirectory::Get::ALL);
+
+            // Trigger the dispatcher, which will call "populate done".
+            this->_pImpl->dispatcherPopulateDone.emit();
+        });
 
         rc = true;
     }
 
     return rc;
-}
-
-/**
- *  Normally called on a worker thread.
- */
-void ElissoFolderView::populate()
-{
-    this->_pDir->getContents(_pImpl->llFolderContents,
-                             false);
 }
 
 void ForEachSubstring(const Glib::ustring &str,

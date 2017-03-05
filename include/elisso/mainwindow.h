@@ -64,9 +64,16 @@ public:
 
     int errorBox(Glib::ustring strMessage);
 
-protected:
-    friend class ElissoFolderView;
+    Gtk::Notebook& getNotebook()
+    {
+        return _notebook;
+    }
 
+    PElissoFolderView getActiveFolderView() const;
+
+    void enableActions();
+
+protected:
     Gtk::Application    &_app;
     Gtk::Box            _mainVBox;
     Gtk::Paned          _vPaned;
@@ -81,12 +88,6 @@ protected:
     Gtk::ToolButton     *_pButtonGoParent;
 
     void addFolderTab(PFSDirectory pDir);
-    PElissoFolderView getActiveFolderView() const;
-
-    Gtk::Notebook& getNotebook()
-    {
-        return _notebook;
-    }
 
     Gtk::ToolButton* makeToolButton(const Glib::ustring &strIconName,
                                     PSimpleAction pAction);

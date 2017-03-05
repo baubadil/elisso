@@ -57,7 +57,7 @@ ElissoApplicationWindow::ElissoApplicationWindow(Gtk::Application &app,
         auto pFolderView = this->getActiveFolderView();
         if (pFolderView)
         {
-            PFSDirectory pDir;
+            PFSModelBase pDir;
             if ((pDir = pFolderView->getDirectory()))
                 if ((pDir = pDir->getParent()))
                     pFolderView->setDirectory(pDir);
@@ -189,3 +189,14 @@ PElissoFolderView ElissoApplicationWindow::getActiveFolderView() const
         return _aFolderViews[i];
     return PElissoFolderView(NULL);
 }
+
+void ElissoApplicationWindow::enableActions()
+{
+    PElissoFolderView pActive;
+    if ((pActive = getActiveFolderView()))
+    {
+        _pActionGoBack->set_enabled(pActive->canGoBack());
+        _pActionGoForward->set_enabled(pActive->canGoForward());
+    }
+}
+

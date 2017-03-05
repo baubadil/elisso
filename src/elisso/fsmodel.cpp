@@ -517,12 +517,12 @@ PFSModelBase FSDirectory::isAwake(const string &strParticle,
 }
 
 void FSDirectory::getContents(FSList &llFiles,
-                              bool fDirsOnly)
+                              Get getContents)
 {
     FSLock lock;
     Debug::Enter(FILE_LOW, "Directory::getContents(\"" + getBasename() + "\")");
-    if (    (fDirsOnly && !isPopulatedWithDirectories())
-         || (!fDirsOnly && !isCompletelyPopulated())
+    if (    ((getContents != Get::ALL) && !isPopulatedWithDirectories())
+         || ((getContents == Get::ALL) && !isCompletelyPopulated())
        )
     {
         PFSDirectory pSharedThis = static_pointer_cast<FSDirectory>(shared_from_this());
@@ -566,7 +566,7 @@ void FSDirectory::getContents(FSList &llFiles,
 
                         default:
                             // Ordinary file:
-                            if (!fDirsOnly)
+                            if (getContents == Get::ALL)
                             {
                                 Debug::Enter(FILE_LOW, "Waking up plain file " + strThis);
                                 pKeep = pTemp;
@@ -580,9 +580,9 @@ void FSDirectory::getContents(FSList &llFiles,
                 }
             }
 
-            if (fDirsOnly)
+            if (getContents == Get::FOLDERS_ONLY)
                 _flFile |= FL_POPULATED_WITH_DIRECTORIES;
-            else
+            else if (getContents == Get::ALL)
                 _flFile |= (FL_POPULATED_WITH_DIRECTORIES | FL_POPULATED_WITH_ALL);
         }
     }
@@ -593,7 +593,7 @@ void FSDirectory::getContents(FSList &llFiles,
         // Leave out ".." in the list.
         if (p != _pParent)
         {
-            if (    (!fDirsOnly)
+            if (    (getContents == Get::FOLDERS_ONLY)
                  || (p->getType() == FSType::DIRECTORY)
                  || (p->getResolvedTypeImpl(lock) == FSTypeResolved::SYMLINK_TO_DIRECTORY)
                 )
