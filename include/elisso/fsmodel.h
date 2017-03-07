@@ -69,6 +69,8 @@ class FSLock;
  **************************************************************************/
 
 /**
+ *  Base class for all file-system objects (files, directories, symlinks, specials).
+ *
  *  There are several main entry points to get objects for files and directories:
  *
  *   -- Most obviously, FSModelBase::FindPath() and FSModelBase::FindDirectory().
