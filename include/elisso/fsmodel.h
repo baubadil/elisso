@@ -102,7 +102,7 @@ public:
 
     PFSDirectory resolveDirectory();
 
-    bool isHidden() const;
+    virtual bool isHidden();
 
     std::string getRelativePath();
     std::string getAbsolutePath(bool fThrow = false);
@@ -185,7 +185,7 @@ public:
         FIRST_FOLDER_ONLY
     };
 
-    void getContents(FSList &llFiles, Get getContents);
+    size_t getContents(FSList &llFiles, Get getContents);
 
     bool isPopulatedWithDirectories()
     {
@@ -218,6 +218,8 @@ protected:
     {
         return FSTypeResolved::DIRECTORY;
     }
+
+    size_t getContentsImpl(FSLock &lock, FSList &llFiles, Get getContents);
 };
 
 class RootDirectory;
@@ -273,6 +275,8 @@ protected:
         follow(lock);
         return _pTarget;
     }
+
+    virtual bool isHidden() override;
 
     enum class State
     {

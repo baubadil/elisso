@@ -233,8 +233,8 @@ void ElissoFolderView::dumpStack()
 {
     uint i = 0;
     for (auto &s : _aPathHistory)
-        Debug::Log(DEBUG_ALWAYS, "stack item " + to_string(i++) + ": " + s);
-    Debug::Log(DEBUG_ALWAYS, "offset: " + to_string(_uPreviousOffset));
+        Debug::Log(FOLDER_STACK, "stack item " + to_string(i++) + ": " + s);
+    Debug::Log(FOLDER_STACK, "offset: " + to_string(_uPreviousOffset));
 }
 
 bool ElissoFolderView::canGoBack()

@@ -35,10 +35,12 @@ public:
                      PFSDirectory pDir);
 
 private:
-    bool spawnPopulate(Gtk::TreeModel::iterator &it);
+    bool spawnPopulate(const Gtk::TreeModel::iterator &it);
     void onPopulateDone();
 
-    void onSelectionChanged();
+    void onNodeSelected();
+    void onNodeExpanded(const Gtk::TreeModel::iterator &it,
+                        const Gtk::TreeModel::Path &path);
 
     ElissoApplicationWindow     &_mainWindow;
     Gtk::TreeView               _treeView;

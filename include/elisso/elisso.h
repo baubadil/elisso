@@ -27,7 +27,8 @@
 
     // high-level
 // const DebugFlag CMD_TOP         = (1 << 20);
-const DebugFlag FOLDER_POPULATE = (1 << 21);
+const DebugFlag FOLDER_POPULATE     = (1 << 21);
+const DebugFlag FOLDER_STACK        = (1 << 22);
 
 using namespace XWP;
 

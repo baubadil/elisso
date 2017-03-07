@@ -31,6 +31,14 @@ std::atomic<std::uint64_t>  g_uJobID(1);
  *
  **************************************************************************/
 
+enum class TreeNodeState
+{
+    UNKNOWN,
+    POPULATING,
+    POPULATED_WITH_FIRST,
+    POPULATED_WITH_FOLDERS
+};
+
 class FolderTreeModelColumns : public Gtk::TreeModelColumnRecord
 {
 public:
@@ -38,10 +46,12 @@ public:
     {
         add(_colIconAndName);
         add(_colPDir);
+        add(_colState);
     }
 
     Gtk::TreeModelColumn<Glib::ustring>             _colIconAndName;
     Gtk::TreeModelColumn<PFSModelBase>              _colPDir;
+    Gtk::TreeModelColumn<TreeNodeState>             _colState;
 
     static FolderTreeModelColumns& Get()
     {
@@ -89,11 +99,25 @@ class TreeJob;
 typedef std::shared_ptr<TreeJob>        PTreeJob;
 typedef std::map<TreeJobID, PTreeJob>   JobsMap;
 
+/**
+ *  A tree job gets called when a folder node in the tree needs to be filled with
+ *  subfolders, especially when the folder node was just expanded (the "+"
+ *  sign was clicked on).
+ *
+ *  It does two things:
+ *
+ *   1) First it populates the node itself with folders and inserts all
+ *      subfolders under the node that was expanded.
+ *
+ *   2) It then does a "populate with first subfolder" for every sub-node
+ *      to be able to add a "+" sign next to the sub-nodes that have
+ *      subfolders.
+ */
 class TreeJob : public std::enable_shared_from_this<TreeJob>
 {
 public:
     static PTreeJob Create(Glib::RefPtr<Gtk::TreeStore> &pTreeStore,
-                           PFSDirectory pDir,
+                           PFSDirectory pDir,                       //!< in: actual directory (resolved if from symlink)
                            Gtk::TreeModel::iterator it)
     {
         /* This nasty trickery is necessary to make std::make_shared work with a protected constructor. */
@@ -123,6 +147,9 @@ protected:
           _pDir(pDir),
           _it(it)
     {
+        FolderTreeModelColumns &cols = FolderTreeModelColumns::Get();
+        (*_it)[cols._colState] = TreeNodeState::POPULATING;
+
         // Connect the GUI thread dispatcher for when a folder populate is done.
         _dispatcherPopulateDone.connect([this]()
         {
@@ -160,17 +187,25 @@ protected:
 
     struct AddOneFirst
     {
-        PFSModelBase    _pDirOrSymlink;
-        bool            _fProcessed = false;
-        PFSModelBase    _pFirstChild;
+        PFSModelBase                _pDirOrSymlink;
+        PFSModelBase                _pFirstSubfolder;
+        Gtk::TreeModel::iterator    _gtkit;
 
-        AddOneFirst(PFSModelBase pDirOrSymlink)
-            : _pDirOrSymlink(pDirOrSymlink)
+        AddOneFirst(PFSModelBase pDirOrSymlink,
+                    Gtk::TreeModel::iterator gtkit)
+            : _pDirOrSymlink(pDirOrSymlink),
+              _gtkit(gtkit)
         { }
     };
     typedef std::shared_ptr<AddOneFirst> PAddOneFirst;
     typedef std::list<PAddOneFirst> AddOneFirstsList;
     typedef std::shared_ptr<AddOneFirstsList> PAddOneFirstsList;
+
+    /* This queue is used to communicate between the "add first" thread and the GUI thread.
+     * For every item that's pushed to the back of the queue, _dispatcherAddFirst must be fired once.
+     * To signal that the thread is done, it pushes a nullptr and fires _dispatcherAddFirst one last time.
+     */
+    std::deque<PAddOneFirst>    _dequeAddFirst;
 
     void onPopulateDone()
     {
@@ -178,68 +213,111 @@ protected:
 
         FolderTreeModelColumns &cols = FolderTreeModelColumns::Get();
 
-        _pllToAddFirst = std::make_shared<AddOneFirstsList>();
-        JobsLock lock;
+        std::map<Glib::ustring, Gtk::TreeModel::iterator> mapChildren;
+        const Gtk::TreeNodeChildren children = _it->children();
+        for (Gtk::TreeModel::iterator it = children.begin();
+             it != children.end();
+             ++it)
+        {
+            auto row = *it;
+            mapChildren[row[cols._colIconAndName]] = it;
+        }
+
+        PAddOneFirstsList pllToAddFirst = std::make_shared<AddOneFirstsList>();
         for (auto &p : *_pllContents)
             if (!p->isHidden())
             {
-                Gtk::TreeModel::iterator itChild;
-                itChild = _pTreeStore->append(_it->children());
-                (*itChild)[cols._colIconAndName] = p->getBasename();
-                (*itChild)[cols._colPDir] = p;
-
-                _pllToAddFirst->push_back(std::make_shared<AddOneFirst>(p));
+                Gtk::TreeModel::iterator itChild = children.end();
+                Glib::ustring strName = p->getBasename();
+                auto itMap = mapChildren.find(strName);
+                if (itMap != mapChildren.end())
+                    itChild = itMap->second;
+                else
+                {
+                    itChild = _pTreeStore->append(children);
+                    (*itChild)[cols._colIconAndName] = strName;
+                    (*itChild)[cols._colPDir] = p;
+                    (*itChild)[cols._colState] = TreeNodeState::UNKNOWN;
+                }
+                pllToAddFirst->push_back(std::make_shared<AddOneFirst>(p, itChild));
             }
 
-        if (_pllToAddFirst->size())
-            spawnAddFirstFolders();
+        if (pllToAddFirst->size())
+            spawnAddFirstFolders(pllToAddFirst);
         else
             cleanUp();
     }
 
-    void spawnAddFirstFolders()
+    void spawnAddFirstFolders(PAddOneFirstsList pllToAddFirst)
     {
-        Debug::Log(FOLDER_POPULATE, "TreeJob::spawnAddFirstFolders(" + to_string(_pllToAddFirst->size()) + ")");
+        Debug::Log(FOLDER_POPULATE, "TreeJob::spawnAddFirstFolders(" + to_string(pllToAddFirst->size()) + " items)");
 
-        new std::thread([this]()
+        new std::thread([this, pllToAddFirst]()
         {
-            for (PAddOneFirst pAddOneFirst : *_pllToAddFirst)
+            for (PAddOneFirst pAddOneFirst : *pllToAddFirst)
             {
-//                 Debug::Log(FOLDER_POPULATE, "popped " + pAddOneFirst->_pDirOrSymlink->getBasename());
                 PFSDirectory pDir = pAddOneFirst->_pDirOrSymlink->resolveDirectory();
-                FSList llFiles;
-                pDir->getContents(llFiles, FSDirectory::Get::FIRST_FOLDER_ONLY);
-
+                if (pDir)
                 {
-                    JobsLock lock;
-                    pAddOneFirst->_fProcessed = true;
+                    FSList llFiles;
+                    pDir->getContents(llFiles, FSDirectory::Get::FIRST_FOLDER_ONLY);
+                    for (auto &pFS : llFiles)
+//                         if (!pFS->isHidden())
+                        {
+                            JobsLock lock;
+//                             Debug::Log(FOLDER_POPULATE, " thread(\"" + pDir->getBasename() + "\": " + to_string(llFiles.size()) + " items)");
+                            pAddOneFirst->_pFirstSubfolder = pFS;
+                            this->_dequeAddFirst.push_back(pAddOneFirst);
+                            this->_dispatcherAddFirst.emit();
+                            break;
+                        }
                 }
-
-                _dispatcherAddFirst.emit();
             }
 
             // Trigger the dispatcher, which will call "addAnotherFirst".
-            _dispatcherAddFirst.emit();
+            // Say "Done" by pushing a nullptr.
+            JobsLock lock;
+            this->_dequeAddFirst.push_back(nullptr);
+            this->_dispatcherAddFirst.emit();
         });
     }
 
+    /**
+     *  Called when this->_dispatcherAddFirst was signalled, which means the add-first
+     *  thread has pushed a new item onto the queue.
+     */
     void onAddAnotherFirst()
     {
+        bool fCleanup = false;
         JobsLock lock;
-        bool fAnythingLeft = false;
-        for (PAddOneFirst pAddOneFirst : *_pllToAddFirst)
+        if (this->_dequeAddFirst.size())
         {
-            if (pAddOneFirst->_fProcessed)
-                ;
-            else
+            FolderTreeModelColumns &cols = FolderTreeModelColumns::Get();
+            PAddOneFirst p = this->_dequeAddFirst.at(0);
+            if (p)
             {
-                fAnythingLeft = true;
-                break;
+                PFSModelBase pFSChild = p->_pDirOrSymlink;
+                PFSModelBase pFSGrandchild = p->_pFirstSubfolder;
+                Debug::Log(FOLDER_POPULATE, "TreeJob::onAddAnotherFirst(): popped \"" + pFSChild->getBasename() + "\"");
+                if (pFSGrandchild)
+                {
+                    Gtk::TreeModel::iterator itGrandChild = _pTreeStore->append(p->_gtkit->children());
+                    (*itGrandChild)[cols._colIconAndName] = pFSGrandchild->getBasename();
+                    (*itGrandChild)[cols._colPDir] = pFSGrandchild;
+                    (*itGrandChild)[cols._colState] = TreeNodeState::UNKNOWN;
+                }
+                (*p->_gtkit)[cols._colState] = TreeNodeState::POPULATED_WITH_FIRST;
             }
+            else
+                fCleanup = true;
+
+            this->_dequeAddFirst.pop_front();
         }
 
-        if (!fAnythingLeft)
-            cleanUp();
+        Debug::Log(FOLDER_POPULATE, "TreeJob::onAddAnotherFirst(): leaving");
+
+        if (fCleanup)
+            this->cleanUp();
     }
 
     /**
@@ -248,6 +326,10 @@ protected:
      */
     void cleanUp()
     {
+        // First mark the tree model node as "populated with folders".
+        FolderTreeModelColumns &cols = FolderTreeModelColumns::Get();
+        (*_it)[cols._colState] = TreeNodeState::POPULATED_WITH_FOLDERS;
+        Debug::Log(FOLDER_POPULATE, "TreeJob::cleanUp(\"" + _pDir->getRelativePath() + "\")");
         auto it = s_mapJobs.find(_id);
         if (it != s_mapJobs.end())
             s_mapJobs.erase(it);
@@ -258,8 +340,6 @@ protected:
     PFSDirectory                    _pDir;
     Gtk::TreeModel::iterator        _it;        // DO NOT TOUCH UNLESS FROM GUI THREAD
     PFSList                         _pllContents;
-
-    PAddOneFirstsList               _pllToAddFirst;
 
     // GUI thread dispatcher for when a folder populate is done.
     Glib::Dispatcher                _dispatcherPopulateDone;
@@ -301,11 +381,25 @@ ElissoTreeView::ElissoTreeView(ElissoApplicationWindow &mainWindow)
 {
     auto pTreeSelection = _treeView.get_selection();
     pTreeSelection->signal_changed().connect([this](){
-        this->onSelectionChanged();
+        this->onNodeSelected();
+    });
+
+    _treeView.signal_row_activated().connect([](const Gtk::TreeModel::Path&,
+                                                Gtk::TreeViewColumn*)
+    {
+        Debug::Log(FOLDER_POPULATE, "tree item activated");
+    });
+
+    _treeView.signal_row_expanded().connect([this](const Gtk::TreeModel::iterator &it,
+                                                   const Gtk::TreeModel::Path &path)
+    {
+        this->onNodeExpanded(it, path);
     });
 
     FolderTreeModelColumns &cols = FolderTreeModelColumns::Get();
     _pImpl->pTreeStore = Gtk::TreeStore::create(cols);
+
+    _treeView.set_enable_tree_lines(true);
 
     _treeView.set_model(_pImpl->pTreeStore);
 
@@ -317,7 +411,7 @@ ElissoTreeView::ElissoTreeView(ElissoApplicationWindow &mainWindow)
     this->show_all_children();
 
     this->addTreeRoot("Home", FSDirectory::GetHome());
-    this->addTreeRoot("File system", FSDirectory::GetRoot());
+//     this->addTreeRoot("File system", FSDirectory::GetRoot());
 }
 
 /* virtual */
@@ -335,6 +429,7 @@ void ElissoTreeView::addTreeRoot(const Glib::ustring &strName,
     itRoot = _pImpl->pTreeStore->append();
     (*itRoot)[cols._colIconAndName] = strName;
     (*itRoot)[cols._colPDir] = pDir;
+    (*itRoot)[cols._colState] = TreeNodeState::UNKNOWN;
 
     this->spawnPopulate(itRoot);
 
@@ -343,16 +438,22 @@ void ElissoTreeView::addTreeRoot(const Glib::ustring &strName,
     _pImpl->llTreeRoots.push_back(pDir);
 }
 
-bool ElissoTreeView::spawnPopulate(Gtk::TreeModel::iterator &it)
+bool ElissoTreeView::spawnPopulate(const Gtk::TreeModel::iterator &it)
 {
     bool rc = false;
 
     const FolderTreeModelColumns &cols = FolderTreeModelColumns::Get();
-    PFSModelBase pDir = (*it)[cols._colPDir];
-
-    PFSDirectory pDir2;
-    if ((pDir2 = pDir->resolveDirectory()))
-        auto pJob = TreeJob::Create(_pImpl->pTreeStore, pDir2, it);
+    if ((*it)[cols._colState] != TreeNodeState::POPULATED_WITH_FOLDERS)
+    {
+        PFSModelBase pDir = (*it)[cols._colPDir];
+        PFSDirectory pDir2 = pDir->resolveDirectory();
+        Debug::Log(FOLDER_POPULATE, "ElissoTreeView::spawnPopulate(\"" + ((pDir2) ? pDir2->getRelativePath() : "NULL") + "\")");
+        if (pDir2)
+        {
+            auto pJob = TreeJob::Create(_pImpl->pTreeStore, pDir2, it);
+            rc = true;
+        }
+    }
 
     return rc;
 }
@@ -362,7 +463,7 @@ void ElissoTreeView::onPopulateDone()
 //     Debug::Log(FOLDER_POPULATE, "ElissoTreeView::onPopulateDone(\"" + pDir->getRelativePath() + "\")");
 }
 
-void ElissoTreeView::onSelectionChanged()
+void ElissoTreeView::onNodeSelected()
 {
     auto pTreeSelection = _treeView.get_selection();
     Gtk::TreeModel::iterator it;
@@ -377,5 +478,25 @@ void ElissoTreeView::onSelectionChanged()
             if (pActiveFolderView)
                 pActiveFolderView->setDirectory(pDir);
         }
+    }
+}
+
+void ElissoTreeView::onNodeExpanded(const Gtk::TreeModel::iterator &it,
+                                    const Gtk::TreeModel::Path &path)
+{
+    const FolderTreeModelColumns &cols = FolderTreeModelColumns::Get();
+    PFSModelBase pDir = (*it)[cols._colPDir];
+    Debug::Log(FOLDER_POPULATE, "Expanded: " + pDir->getRelativePath());
+
+    switch ((*it)[cols._colState])
+    {
+        case TreeNodeState::UNKNOWN:
+        case TreeNodeState::POPULATED_WITH_FIRST:
+            this->spawnPopulate(it);
+        break;
+
+        case TreeNodeState::POPULATING:
+        case TreeNodeState::POPULATED_WITH_FOLDERS:
+        break;
     }
 }

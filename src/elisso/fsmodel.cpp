@@ -346,8 +346,11 @@ PFSDirectory FSModelBase::resolveDirectory()
 
 /**
  *  Returns true if the file-system object has the "hidden" attribute, according to however Gio defines it.
+ *
+ *  Overridden for symlinks!
  */
-bool FSModelBase::isHidden() const
+/* virtual */
+bool FSModelBase::isHidden()
 {
     auto pInfo = _pGioFile->query_info(G_FILE_ATTRIBUTE_STANDARD_IS_HIDDEN,
                                        Gio::FileQueryInfoFlags::FILE_QUERY_INFO_NOFOLLOW_SYMLINKS);
@@ -516,13 +519,20 @@ PFSModelBase FSDirectory::isAwake(const string &strParticle,
     return nullptr;
 }
 
-void FSDirectory::getContents(FSList &llFiles,
+size_t FSDirectory::getContents(FSList &llFiles,
                               Get getContents)
 {
     FSLock lock;
+    return getContentsImpl(lock, llFiles, getContents);
+}
+
+size_t FSDirectory::getContentsImpl(FSLock &lock,
+                                    FSList &llFiles,
+                                    Get getContents)
+{
     Debug::Enter(FILE_LOW, "Directory::getContents(\"" + getBasename() + "\")");
-    if (    ((getContents != Get::ALL) && !isPopulatedWithDirectories())
-         || ((getContents == Get::ALL) && !isCompletelyPopulated())
+    if (    ((getContents == Get::ALL) && !isCompletelyPopulated())
+         || ((getContents != Get::ALL) && !isPopulatedWithDirectories())
        )
     {
         PFSDirectory pSharedThis = static_pointer_cast<FSDirectory>(shared_from_this());
@@ -534,21 +544,22 @@ void FSDirectory::getContents(FSList &llFiles,
         else
         {
             Glib::RefPtr<Gio::FileInfo> pInfo;
+            FSList llSymlinksForFirstFolder;
             while ((pInfo = en->next_file()))
             {
                 auto pGioFile = en->get_child(pInfo);
-
                 std::string strThis = pGioFile->get_basename();
                 if (    (strThis != ".")
-                    && (strThis != "..")
-                    && (!isAwake(strThis, lock))
-                )
+                     && (strThis != "..")
+                     && (!isAwake(strThis, lock))
+                   )
                 {
                     PFSModelBase pKeep;
 
                     PFSModelBase pTemp = MakeAwake(pGioFile);
 
-                    switch (pTemp->getType())
+                    auto t = pTemp->getType();
+                    switch (t)
                     {
                         case FSType::DIRECTORY:
                             // Always wake up directories.
@@ -576,7 +587,13 @@ void FSDirectory::getContents(FSList &llFiles,
                     }
 
                     if (pKeep)
+                    {
                         pKeep->setParent(pSharedThis, lock);
+
+                        if (getContents == Get::FIRST_FOLDER_ONLY)
+                            if (t == FSType::DIRECTORY)
+                                break;      // we're done
+                    }
                 }
             }
 
@@ -587,23 +604,52 @@ void FSDirectory::getContents(FSList &llFiles,
         }
     }
 
+    size_t c = 0;
     for (auto it : _pImpl->mapContents)
     {
         auto &p = it.second;
         // Leave out ".." in the list.
         if (p != _pParent)
         {
-            if (    (getContents == Get::FOLDERS_ONLY)
+            if (    (getContents == Get::ALL)
                  || (p->getType() == FSType::DIRECTORY)
-                 || (p->getResolvedTypeImpl(lock) == FSTypeResolved::SYMLINK_TO_DIRECTORY)
-                )
+                 || (    (getContents == Get::FOLDERS_ONLY)
+                      && (p->getResolvedTypeImpl(lock) == FSTypeResolved::SYMLINK_TO_DIRECTORY)
+                    )
+               )
             {
                 llFiles.push_back(p);
+                ++c;
+
+                if (getContents == Get::FIRST_FOLDER_ONLY)
+                    break;
             }
         }
     }
 
+    // This leaves one case: if we have found a real directory with Get::FIRST_FOLDER_ONLY,
+    // then it's already in llFiles. But if there is no real directory, there might be a
+    // symlink to one. All symlinks are in the folder contents, so we need to resolve all of
+    // them to find a folder.
+    if (    (getContents == Get::FIRST_FOLDER_ONLY)
+         && (!c)
+       )
+    for (auto it : _pImpl->mapContents)
+    {
+        auto &p = it.second;
+        // Leave out ".." in the list.
+        if (p != _pParent)
+            if (p->getResolvedTypeImpl(lock) == FSTypeResolved::SYMLINK_TO_DIRECTORY)
+            {
+                llFiles.push_back(p);
+                ++c;
+                break;
+            }
+    }
+
     Debug::Leave();
+
+    return c;
 }
 
 /*static */
@@ -803,6 +849,20 @@ void FSSymlink::follow(FSLock &lock)
     }
 
     Debug::Leave();
+}
+
+/**
+ *  Override the FSModelBase implementation to instead return the value for the target.
+ */
+/* virtual */
+bool FSSymlink::isHidden() /* override */
+{
+    FSLock lock;
+    auto p = this->getTarget(lock);
+    if (p)
+        return p->isHidden();
+
+    return FSModelBase::isHidden();
 }
 
 
