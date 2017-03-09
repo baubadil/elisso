@@ -68,7 +68,8 @@ ElissoApplicationWindow::ElissoApplicationWindow(Gtk::Application &app,
         auto p = this->getActiveFolderView();
         if (p)
         {
-            auto pHome = FSDirectory::GetHome();
+            FSLock lock;
+            auto pHome = FSDirectory::GetHome(lock);
             if (pHome)
                 p->setDirectory(pHome);
         }
@@ -160,7 +161,10 @@ void ElissoApplicationWindow::addFolderTab(PFSDirectory pDir)       //!< in: dir
     _aFolderViews.push_back(PElissoFolderView(pFolderView));
 
     if (!pDir)
-        pDir = FSDirectory::GetHome();
+    {
+        FSLock lock;
+        pDir = FSDirectory::GetHome(lock);
+    }
 
     _notebook.append_page(*pFolderView, pDir->getBasename());
     pFolderView->setDirectory(pDir);

@@ -59,7 +59,45 @@ typedef std::shared_ptr<FSMountable> PFSMountable;
 typedef std::list<PFSModelBase> FSList;
 typedef std::shared_ptr<FSList> PFSList;
 
-class FSLock;
+
+/***************************************************************************
+ *
+ *  FSLock
+ *
+ **************************************************************************/
+
+class LockBase
+{
+public:
+    LockBase(std::recursive_mutex &m)
+        : _m(m)
+    {
+        _m.lock();
+        _fLocked = true;
+    }
+
+    ~LockBase()
+    {
+        release();
+    }
+
+    void release()
+    {
+        if (_fLocked)
+            _m.unlock();
+        _fLocked = false;
+    }
+
+protected:
+    std::recursive_mutex    &_m;
+    bool                    _fLocked = false;
+};
+
+class FSLock : public LockBase
+{
+public:
+    FSLock();
+};
 
 
 /***************************************************************************
@@ -83,8 +121,8 @@ class FSLock;
 class FSModelBase : public std::enable_shared_from_this<FSModelBase>
 {
 public:
-    static PFSModelBase FindPath(const std::string &strPath);
-    static PFSDirectory FindDirectory(const std::string &strPath);
+    static PFSModelBase FindPath(const std::string &strPath, FSLock &lock);
+    static PFSDirectory FindDirectory(const std::string &strPath, FSLock &lock);
 
     Glib::RefPtr<Gio::File> getGioFile()
     {
@@ -100,11 +138,10 @@ public:
         return _type;
     }
 
-    FSTypeResolved getResolvedType();
+    virtual FSTypeResolved getResolvedType(FSLock &lock) = 0;
+    PFSDirectory resolveDirectory(FSLock &lock);
 
-    PFSDirectory resolveDirectory();
-
-    virtual bool isHidden();
+    virtual bool isHidden(FSLock &lock);
 
     std::string getRelativePath();
     std::string getAbsolutePath(bool fThrow = false);
@@ -124,12 +161,6 @@ protected:
     static PFSModelBase MakeAwake(Glib::RefPtr<Gio::File> pGioFile);
     FSModelBase(FSType type, Glib::RefPtr<Gio::File> pGioFile);
     virtual ~FSModelBase() { };
-
-    virtual FSTypeResolved getResolvedTypeImpl(FSLock &lock) = 0;
-
-    PFSDirectory resolveDirectoryImpl(FSLock &lock);
-
-    static PFSModelBase FindPathImpl(const std::string &strPath, FSLock &lock);
 
     void setParent(PFSDirectory pParentDirectory, FSLock &lock);
 
@@ -158,14 +189,14 @@ class FSFile : public FSModelBase
 {
     friend class FSModelBase;
 
-protected:
-    FSFile(Glib::RefPtr<Gio::File> pGioFile);
-    static PFSFile Create(Glib::RefPtr<Gio::File> pGioFile);
-
-    virtual FSTypeResolved getResolvedTypeImpl(FSLock &lock) override
+    virtual FSTypeResolved getResolvedType(FSLock &lock) override
     {
         return FSTypeResolved::FILE;
     }
+
+protected:
+    FSFile(Glib::RefPtr<Gio::File> pGioFile);
+    static PFSFile Create(Glib::RefPtr<Gio::File> pGioFile);
 };
 
 
@@ -187,7 +218,12 @@ public:
         FIRST_FOLDER_ONLY
     };
 
-    size_t getContents(FSList &llFiles, Get getContents);
+    virtual FSTypeResolved getResolvedType(FSLock &lock) override
+    {
+        return FSTypeResolved::DIRECTORY;
+    }
+
+    size_t getContents(FSList &llFiles, Get getContents, FSLock &lock);
 
     bool isPopulatedWithDirectories()
     {
@@ -199,14 +235,14 @@ public:
         return !!(_flFile & FL_POPULATED_WITH_ALL);
     }
 
-    PFSModelBase find(const std::string &strParticle);
+    PFSModelBase find(const std::string &strParticle, FSLock &lock);
 
-    PFSDirectory findSubdirectory(const std::string &strParticle);
+    PFSDirectory findSubdirectory(const std::string &strParticle, FSLock &lock);
 
     PFSModelBase isAwake(const std::string &strParticle, FSLock &lock);
 
-    static PFSDirectory GetHome();
-    static PFSDirectory GetRoot();
+    static PFSDirectory GetHome(FSLock &lock);
+    static PFSDirectory GetRoot(FSLock &lock);
 
 protected:
     struct Impl;
@@ -215,13 +251,6 @@ protected:
     FSDirectory(Glib::RefPtr<Gio::File> pGioFile);
     virtual ~FSDirectory();
     static PFSDirectory Create(Glib::RefPtr<Gio::File> pGioFile);
-
-    virtual FSTypeResolved getResolvedTypeImpl(FSLock &lock) override
-    {
-        return FSTypeResolved::DIRECTORY;
-    }
-
-    size_t getContentsImpl(FSLock &lock, FSList &llFiles, Get getContents);
 };
 
 class RootDirectory;
@@ -266,11 +295,11 @@ class FSSymlink : public FSModelBase
 {
     friend class FSModelBase;
 
+    virtual FSTypeResolved getResolvedType(FSLock &lock) override;
+
 protected:
     FSSymlink(Glib::RefPtr<Gio::File> pGioFile);
     static PFSSymlink Create(Glib::RefPtr<Gio::File> pGioFile);
-
-    virtual FSTypeResolved getResolvedTypeImpl(FSLock &lock) override;
 
     PFSModelBase getTarget(FSLock &lock)
     {
@@ -278,7 +307,7 @@ protected:
         return _pTarget;
     }
 
-    virtual bool isHidden() override;
+    virtual bool isHidden(FSLock &lock) override;
 
     enum class State
     {
@@ -308,7 +337,7 @@ protected:
     FSSpecial(Glib::RefPtr<Gio::File> pGioFile);
     static PFSSpecial Create(Glib::RefPtr<Gio::File> pGioFile);
 
-    virtual FSTypeResolved getResolvedTypeImpl(FSLock &lock) override
+    virtual FSTypeResolved getResolvedType(FSLock &lock) override
     {
         return FSTypeResolved::SPECIAL;
     }
@@ -329,7 +358,7 @@ protected:
     FSMountable(Glib::RefPtr<Gio::File> pGioFile);
     static PFSMountable Create(Glib::RefPtr<Gio::File> pGioFile);
 
-    virtual FSTypeResolved getResolvedTypeImpl(FSLock &lock) override
+    virtual FSTypeResolved getResolvedType(FSLock &lock) override
     {
         return FSTypeResolved::MOUNTABLE;
     }

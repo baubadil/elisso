@@ -17,6 +17,13 @@
 
 class ElissoApplicationWindow;
 
+struct AddOneFirst;
+typedef std::shared_ptr<AddOneFirst> PAddOneFirst;
+typedef std::list<PAddOneFirst> AddOneFirstsList;
+typedef std::shared_ptr<AddOneFirstsList> PAddOneFirstsList;
+
+typedef std::shared_ptr<Gtk::TreeRowReference> PRowReference;
+
 
 /***************************************************************************
  *
@@ -38,9 +45,15 @@ private:
     bool spawnPopulate(const Gtk::TreeModel::iterator &it);
     void onPopulateDone();
 
+    void spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst);
+    void onAddAnotherFirst();
+
     void onNodeSelected();
     void onNodeExpanded(const Gtk::TreeModel::iterator &it,
                         const Gtk::TreeModel::Path &path);
+
+    Gtk::TreeModel::iterator getIterator(const PRowReference &pRowRef);
+    PRowReference getRowReference(const Gtk::TreeModel::iterator &it);
 
     ElissoApplicationWindow     &_mainWindow;
     Gtk::TreeView               _treeView;

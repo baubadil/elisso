@@ -88,10 +88,12 @@ struct ElissoFolderView::Impl
             Gtk::TreeModel::Row row = *iter;
             FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
             std::string strBasename = Glib::filename_from_utf8(row[cols._colFilename]);
-            PFSDirectory pDir = view._pDir->resolveDirectory();
+            FSLock lock;
+            PFSDirectory pDir = view._pDir->resolveDirectory(lock);
             if (pDir)
             {
-                PFSModelBase pFS = pDir->find(strBasename);
+                FSLock lock;
+                PFSModelBase pFS = pDir->find(strBasename, lock);
                 if (pFS)
                     view.onFileActivated(pFS);
             }
@@ -190,7 +192,9 @@ bool ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
                                     bool fPushToHistory /* = true */)
 {
     bool rc = false;
-    auto t = pDirOrSymlinkToDir->getResolvedType();
+    FSLock lock;
+    auto t = pDirOrSymlinkToDir->getResolvedType(lock);
+
     switch (t)
     {
         case FSTypeResolved::DIRECTORY:
@@ -203,8 +207,8 @@ bool ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
                     auto strFull = _pDir->getRelativePath();
                     // Do not push if this is the same as the last item on the stack.
                     if (    (!_aPathHistory.size())
-                        || (_aPathHistory.back() != strFull)
-                    )
+                         || (_aPathHistory.back() != strFull)
+                       )
                         _aPathHistory.push_back(strFull);
 
                     _uPreviousOffset = 0;
@@ -250,7 +254,8 @@ bool ElissoFolderView::goBack()
         std::string strPrevious = _aPathHistory[_aPathHistory.size() - _uPreviousOffset];
         PFSModelBase pDirOld = _pDir;
         PFSModelBase pDir;
-        if ((pDir = FSModelBase::FindPath(strPrevious)))
+        FSLock lock;
+        if ((pDir = FSModelBase::FindPath(strPrevious, lock)))
             if (this->setDirectory(pDir,
                                    false))      // do not push on history stack
             {
@@ -275,7 +280,8 @@ bool ElissoFolderView::goForward()
     {
         std::string strPrevious = _aPathHistory[_aPathHistory.size() - --_uPreviousOffset];
         PFSDirectory pDir;
-        if ((pDir = FSModelBase::FindDirectory(strPrevious)))
+        FSLock lock;
+        if ((pDir = FSModelBase::FindDirectory(strPrevious, lock)))
             if (this->setDirectory(pDir,
                                    false))      // do not push on history stack
             {
@@ -381,7 +387,8 @@ void ElissoFolderView::setViewMode(FolderViewMode m)
 
 void ElissoFolderView::onFileActivated(PFSModelBase pFS)
 {
-    FSTypeResolved t = pFS->getResolvedType();
+    FSLock lock;
+    FSTypeResolved t = pFS->getResolvedType(lock);
 
     switch (t)
     {
@@ -389,7 +396,8 @@ void ElissoFolderView::onFileActivated(PFSModelBase pFS)
         case FSTypeResolved::SYMLINK_TO_DIRECTORY:
         {
             PFSDirectory pDir;
-            if ((pDir = pFS->resolveDirectory()))
+            FSLock lock;
+            if ((pDir = pFS->resolveDirectory(lock)))
                 this->setDirectory(pDir);
         }
         break;
@@ -450,8 +458,9 @@ void ElissoFolderView::connectModel(bool fConnect)
         case FolderViewMode::COMPACT:
             if (fConnect)
             {
+                FSLock lock;
                 for (auto &pFS : _pImpl->llFolderContents)
-                    if (!pFS->isHidden())
+                    if (!pFS->isHidden(lock))
                     {
                         Glib::ustring strLabel = pFS->getBasename();
                         auto p = Gtk::manage(new Gtk::Label(strLabel));
@@ -487,10 +496,13 @@ bool ElissoFolderView::spawnPopulate()
 
         new std::thread([this]()
         {
-            PFSDirectory pDir = this->_pDir->resolveDirectory();
+            FSLock lock;
+            PFSDirectory pDir = this->_pDir->resolveDirectory(lock);
             if (pDir)
                 pDir->getContents(_pImpl->llFolderContents,
-                                  FSDirectory::Get::ALL);
+                                  FSDirectory::Get::ALL,
+                                  lock);
+            lock.release();
 
             // Trigger the dispatcher, which will call "populate done".
             this->_pImpl->dispatcherPopulateDone.emit();
@@ -525,8 +537,9 @@ void ElissoFolderView::onPopulateDone()
 
     Debug::Log(FOLDER_POPULATE, "ElissoFolderView::onPopulateDone(\"" + _pDir->getRelativePath() + "\")");
 
+    FSLock lock;
     for (auto &pFS : _pImpl->llFolderContents)
-        if (!pFS->isHidden())
+        if (!pFS->isHidden(lock))
         {
             auto row = *(_pImpl->pListStore->append());
 
@@ -548,7 +561,8 @@ void ElissoFolderView::onPopulateDone()
             row[cols._colFilename] = pFS->getBasename();
             row[cols._colSize] = pFS->getFileSize();
 
-            auto t = pFS->getResolvedType();
+            FSLock lock;
+            auto t = pFS->getResolvedType(lock);
             row[cols._colTypeResolved] = t;
 
             const char *p = "Special";
