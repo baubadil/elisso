@@ -9,6 +9,7 @@
  */
 
 #include "elisso/elisso.h"
+#include "elisso/application.h"
 #include "elisso/mainwindow.h"
 
 ElissoApplicationWindow::ElissoApplicationWindow(Gtk::Application &app,

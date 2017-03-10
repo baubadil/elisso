@@ -11,10 +11,8 @@
 #ifndef ELISSO_H
 #define ELISSO_H
 
-#include "xwp/basetypes.h"
 #include "xwp/stringhelp.h"
 #include "xwp/debug.h"
-#include "xwp/regex.h"
 
 // const DebugFlag DEBUG_ALWAYS          = 0;
 
@@ -41,6 +39,5 @@ DEF_STRING(ACTION_GO_BACK, "go-back");
 DEF_STRING(ACTION_GO_FORWARD, "go-forward");
 DEF_STRING(ACTION_GO_HOME, "go-home");
 DEF_STRING(ACTION_ABOUT, "about");
-
 
 #endif // ELISSO_H

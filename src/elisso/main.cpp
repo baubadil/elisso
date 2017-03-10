@@ -11,6 +11,7 @@
 #define DEF_STRING_IMPLEMENTATION
 
 #include "elisso/elisso.h"
+#include "elisso/application.h"
 #include "elisso/mainwindow.h"
 
 #include "xwp/except.h"
@@ -121,51 +122,47 @@ R"i____(
  *
  **************************************************************************/
 
-class ElissoApplication : public Gtk::Application
+ElissoApplication::ElissoApplication(int argc,
+                                     char *argv[])
+    :   Gtk::Application(argc,
+                         argv,
+                         "org.baubadil.elisso")
 {
-protected:
-    ElissoApplication(int argc,
-                      char *argv[])
-        : Gtk::Application(argc,
-                           argv,
-                           "org.baubadil.elisso")
-    { }
 
-    void on_startup()
+}
+
+void ElissoApplication::on_startup()
+{
+    Gtk::Application::on_startup();
+
+    auto pBuilder = Gtk::Builder::create();
+    try
     {
-        Gtk::Application::on_startup();
-
-        _pBuilder = Gtk::Builder::create();
-        try
-        {
-            _pBuilder->add_from_string(ui_info);
-        }
-        catch(const Glib::Error& ex)
-        {
-            throw FSException("Building menus failed: " + ex.what());
-        }
-
-        //Get the menubar and the app menu, and add them to the application:
-        auto pMenu = _pBuilder->get_object("menu-example");
-        this->set_menubar(Glib::RefPtr<Gio::Menu>::cast_dynamic(pMenu));
+        pBuilder->add_from_string(ui_info);
+    }
+    catch(const Glib::Error& ex)
+    {
+        throw FSException("Building menus failed: " + ex.what());
     }
 
-    void on_activate()
-    {
-        auto p = new ElissoApplicationWindow(*this, nullptr);
-        this->add_window(*p);
-        p->show();
-    }
+    //Get the menubar and the app menu, and add them to the application:
+    auto pMenu = pBuilder->get_object("menu-example");
+    this->set_menubar(Glib::RefPtr<Gio::Menu>::cast_dynamic(pMenu));
+}
 
-    Glib::RefPtr<Gtk::Builder> _pBuilder;
+void ElissoApplication::on_activate()
+{
+    auto p = new ElissoApplicationWindow(*this, nullptr);
+    this->add_window(*p);
+    p->show();
+}
 
-public:
-    static Glib::RefPtr<ElissoApplication> create(int argc,
-                                                  char *argv[])
-    {
-        return Glib::RefPtr<ElissoApplication>(new ElissoApplication(argc, argv));
-    }
-};
+/* static */
+Glib::RefPtr<ElissoApplication> ElissoApplication::create(int argc,
+                                                          char *argv[])
+{
+    return Glib::RefPtr<ElissoApplication>(new ElissoApplication(argc, argv));
+}
 
 /***************************************************************************
  *

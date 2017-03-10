@@ -11,7 +11,6 @@
 #include "elisso/elisso.h"
 #include "elisso/foldertree.h"
 #include "elisso/mainwindow.h"
-#include "xwp/worker.h"
 
 #include <thread>
 
