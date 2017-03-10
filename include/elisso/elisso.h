@@ -11,6 +11,8 @@
 #ifndef ELISSO_H
 #define ELISSO_H
 
+#define ELISSO_VERSION "0.1.0"
+
 #include "xwp/stringhelp.h"
 #include "xwp/debug.h"
 
@@ -39,5 +41,7 @@ DEF_STRING(ACTION_GO_BACK, "go-back");
 DEF_STRING(ACTION_GO_FORWARD, "go-forward");
 DEF_STRING(ACTION_GO_HOME, "go-home");
 DEF_STRING(ACTION_ABOUT, "about");
+
+DEF_STRING(SETTINGS_WINDOWPOS, "window-pos");
 
 #endif // ELISSO_H

@@ -20,9 +20,15 @@ include $(KBUILD_PATH)/subheader.kmk
 #
 include $(PATH_CURRENT)/src/xwp/Makefile.kmk
 
+GSCHEMA_SOURCE_DIR := $(PATH_CURRENT)/data/gschema
+GSCHEMA_TARGET_DIR := $(PATH_STAGE_SHARE)
+GSCHEMA_COMPILED :=  $(GSCHEMA_TARGET_DIR)/gschemas.compiled
+$(GSCHEMA_COMPILED): $(wildcard $(GSCHEMA_SOURCE_DIR)/*.xml) | $$(dir $$@)
+	glib-compile-schemas --targetdir=$(GSCHEMA_TARGET_DIR) $(GSCHEMA_SOURCE_DIR)
+OTHERS += $(GSCHEMA_COMPILED)
+
 PROGRAMS += elisso
 elisso_TEMPLATE = EXE
-elisso_SOURCES =
 elisso_LIBS = $(PATH_STAGE_LIB)/xwp.a $(GTKMM_LIBS) libpcre libpthread
 
 include $(PATH_CURRENT)/src/elisso/Makefile.kmk

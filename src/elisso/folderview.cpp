@@ -9,6 +9,7 @@
  */
 
 #include "elisso/elisso.h"
+#include "elisso/application.h"
 #include "elisso/folderview.h"
 #include "elisso/fsmodel.h"
 #include "elisso/mainwindow.h"
@@ -38,12 +39,12 @@ public:
         add(_colTypeString);
     }
 
-    Gtk::TreeModelColumn<Glib::ustring>             _colFilename;
-    Gtk::TreeModelColumn<u_int64_t>                 _colSize;
-    Gtk::TreeModelColumn<Glib::RefPtr<Gdk::Pixbuf>> _colIconSmall;
-    Gtk::TreeModelColumn<Glib::RefPtr<Gdk::Pixbuf>> _colIconBig;
-    Gtk::TreeModelColumn<FSTypeResolved>            _colTypeResolved;
-    Gtk::TreeModelColumn<Glib::ustring>             _colTypeString;
+    Gtk::TreeModelColumn<Glib::ustring>     _colFilename;
+    Gtk::TreeModelColumn<u_int64_t>         _colSize;
+    Gtk::TreeModelColumn<PPixBuf>           _colIconSmall;
+    Gtk::TreeModelColumn<PPixBuf>           _colIconBig;
+    Gtk::TreeModelColumn<FSTypeResolved>    _colTypeResolved;
+    Gtk::TreeModelColumn<Glib::ustring>     _colTypeString;
 
     static FolderContentsModelColumns& Get()
     {
@@ -553,9 +554,9 @@ void ElissoFolderView::onPopulateDone()
                                         sv.push_back(strParticle);
                                 });
 
-            Glib::RefPtr<Gdk::Pixbuf> pb1 = _pImpl->pIconTheme->choose_icon(sv, 16).load_icon();
+            PPixBuf pb1 = _pImpl->pIconTheme->choose_icon(sv, 16).load_icon();
             row[cols._colIconSmall] = pb1;
-            Glib::RefPtr<Gdk::Pixbuf> pb2 = _pImpl->pIconTheme->choose_icon(sv, 50).load_icon();
+            PPixBuf pb2 = _pImpl->pIconTheme->choose_icon(sv, 50).load_icon();
             row[cols._colIconBig] = pb2;
 
             row[cols._colFilename] = pFS->getBasename();

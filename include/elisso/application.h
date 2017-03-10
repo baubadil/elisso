@@ -15,6 +15,8 @@
 
 #include "xwp/basetypes.h"
 
+typedef Glib::RefPtr<Gdk::Pixbuf> PPixBuf;
+
 /***************************************************************************
  *
  *  ElissoApplication
@@ -23,6 +25,18 @@
 
 class ElissoApplication : public Gtk::Application
 {
+public:
+    static Glib::RefPtr<ElissoApplication> create(int argc,
+                                                  char *argv[]);
+
+    PPixBuf getIcon();
+
+    Glib::ustring getSettingsString(const std::string &strKey);
+    int getSettingsInt(const std::string &strKey);
+
+    void setSettingsString(const std::string &strKey,
+                           const Glib::ustring &strData);
+
 protected:
     ElissoApplication(int argc,
                       char *argv[]);
@@ -31,9 +45,8 @@ protected:
 
     void on_activate();
 
-public:
-    static Glib::RefPtr<ElissoApplication> create(int argc,
-                                                  char *argv[]);
+    PPixBuf                     _pIcon;
+    Glib::RefPtr<Gio::Settings> _pSettings;
 };
 
 #endif

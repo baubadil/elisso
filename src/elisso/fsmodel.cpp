@@ -130,7 +130,7 @@ PFSModelBase FSModelBase::FindPath(const std::string &strPath, FSLock &lock)
 
                     // Go back to the parent and skip over the rest of this step.
                     pCurrent = pCurrent->_pParent;
-                    strForStat = GetDirname(strForStat);
+                    strForStat = getDirnameString(strForStat);
 
                     Debug::Log(FILE_LOW, "Loop " + to_string(c) + ": collapsed \"" + pPrev->getRelativePath() + "/" + strParticle + "\" to " + quote(pCurrent->getRelativePath()));
                 }
@@ -384,27 +384,6 @@ const std::string& FSModelBase::describeType()
 std::string FSModelBase::describe(bool fLong /* = false */ )
 {
     return  describeType() + " \"" + (fLong ? getRelativePath() : getBasename()) + "\" (#" + to_string(_uID) + ")";
-}
-
-/* static */
-std::string FSModelBase::GetDirname(const std::string& str)
-{
-    const char *p1 = str.c_str();
-    const char *p2 = strrchr(p1, '/');
-    Debug::Log(FILE_LOW, "dirname of " + string(p1));
-    if (p2)
-        return str.substr(0, p2 - p1);
-    return "";
-}
-
-/* static */
-std::string FSModelBase::GetBasename(const std::string &str)
-{
-    const char *p1 = str.c_str();
-    const char *p2 = strrchr(p1, '/');
-    if (p2)
-        return p2 + 1;
-    return str;
 }
 
 

@@ -12,7 +12,7 @@
 #include "elisso/application.h"
 #include "elisso/mainwindow.h"
 
-ElissoApplicationWindow::ElissoApplicationWindow(Gtk::Application &app,
+ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app,
                                                  PFSDirectory pdirInitial)      //!< in: initial directory or nullptr for "home"
     : _app(app),
       _mainVBox(Gtk::ORIENTATION_VERTICAL),
@@ -20,6 +20,9 @@ ElissoApplicationWindow::ElissoApplicationWindow(Gtk::Application &app,
       _treeViewLeft(*this),
       _notebook()
 {
+    /*
+     *  Connect to actions.
+     */
     this->add_action(ACTION_FILE_QUIT, [this](){
         get_application()->quit();
     });
@@ -78,15 +81,28 @@ ElissoApplicationWindow::ElissoApplicationWindow(Gtk::Application &app,
 
     this->add_action(ACTION_ABOUT, [this](){
         auto w = Gtk::AboutDialog();
+        w.set_version(ELISSO_VERSION);
         w.set_copyright("(C) 2017 Baubadil GmbH");
+        w.set_website("http://www.baubadil.de");
         w.set_comments("Soon to be the best file manager for Linux.");
+        w.set_license_type(Gtk::License::LICENSE_CUSTOM);
         w.set_license("All rights reserved");
+        w.set_logo(_app.getIcon());
         w.set_transient_for(*this);
         w.run();
     });
 
-//     this->set_border_width(10);
-    this->set_default_size(1000, 600);
+    /*
+     *  Window setup
+     */
+    this->setSizeAndPosition();
+
+    this->set_icon(app.getIcon());
+
+
+    /*
+     *  Children setup
+     */
 
     _vPaned.set_position(200);
     _vPaned.set_wide_handle(true);
@@ -131,6 +147,49 @@ ElissoApplicationWindow::ElissoApplicationWindow(Gtk::Application &app,
     _notebook.show_all();
 }
 
+void ElissoApplicationWindow::setSizeAndPosition()
+{
+    auto strPos = _app.getSettingsString(SETTINGS_WINDOWPOS);     // x,x,1000,600
+    auto v = explodeVector(strPos, ",");
+    if (v.size() == 6)
+    {
+        _width = stoi(v[2]);
+        _height = stoi(v[3]);
+
+        bool fCenterX = (v[0] == "x");
+        bool fCenterY = (v[1] == "x");
+
+        Gdk::Rectangle rectCurrentMonitor;
+        if (fCenterX ||  fCenterY)
+        {
+            // It's not enough to get the total screen size since there may be multiple monitors.
+            auto pScreen = this->get_screen();
+            int m = pScreen->get_monitor_at_window(pScreen->get_active_window());
+            pScreen->get_monitor_geometry(m, rectCurrentMonitor);
+        }
+
+        if (fCenterX)
+            _x = rectCurrentMonitor.get_x() + (rectCurrentMonitor.get_width() - _width) / 2;
+        else
+            _x = stoi(v[0]);
+        if (fCenterY)
+            _y = rectCurrentMonitor.get_y() + (rectCurrentMonitor.get_height() - _height) / 2;
+        else
+            _y = stoi(v[1]);
+
+        _fIsMaximized = !!(stoi(v[4]));
+        _fIsFullscreen = !!(stoi(v[5]));
+    }
+
+    this->set_default_size(_width, _height);
+    this->move(_x, _y);
+
+    if (_fIsMaximized)
+        this->maximize();
+    if (_fIsFullscreen)
+        this->fullscreen();
+}
+
 Gtk::ToolButton* ElissoApplicationWindow::makeToolButton(const Glib::ustring &strIconName,
                                                          PSimpleAction pAction)
 {
@@ -148,6 +207,47 @@ Gtk::ToolButton* ElissoApplicationWindow::makeToolButton(const Glib::ustring &st
         });
     }
     return pButton;
+}
+
+/* virtual */
+void ElissoApplicationWindow::on_size_allocate(Gtk::Allocation& allocation) /* override */
+{
+    ApplicationWindow::on_size_allocate(allocation);
+
+    if (!_fIsMaximized && !_fIsFullscreen)
+    {
+        this->get_position(_x, _y);
+        this->get_size(_width, _height);
+    }
+}
+
+/* virtual */
+bool ElissoApplicationWindow::on_window_state_event(GdkEventWindowState *ev) /* override */
+{
+    ApplicationWindow::on_window_state_event(ev);
+
+    _fIsMaximized = (ev->new_window_state & GDK_WINDOW_STATE_MAXIMIZED) != 0;
+    _fIsFullscreen = (ev->new_window_state & GDK_WINDOW_STATE_FULLSCREEN) != 0;
+
+    return false; // propagate
+}
+
+/* virtual */
+bool ElissoApplicationWindow::on_delete_event(GdkEventAny *ev) /* override */
+{
+    ApplicationWindow::on_delete_event(ev);
+
+    StringVector v;
+    v.push_back(to_string(_x));
+    v.push_back(to_string(_y));
+    v.push_back(to_string(_width));
+    v.push_back(to_string(_height));
+    v.push_back((_fIsMaximized) ? "1" : "0");
+    v.push_back((_fIsFullscreen) ? "1" : "0");
+    if (v.size() == 6)
+        _app.setSettingsString(SETTINGS_WINDOWPOS, implode(",", v));
+
+    return false; // propagate
 }
 
 /**

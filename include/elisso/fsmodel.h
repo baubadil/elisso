@@ -152,9 +152,6 @@ public:
     const std::string& describeType();
     std::string describe(bool fLong = false);
 
-    static std::string GetDirname(const std::string& str);
-    static std::string GetBasename(const std::string &str);
-
 protected:
     friend class FSDirectory;
 

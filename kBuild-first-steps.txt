@@ -1,0 +1,30 @@
+See http://trac.netlabs.org/kbuild/wiki/Documentation for the big picture.
+
+To make kBuild build something for you, add something to the top-level target lists
+(LIBRARIES, DLLS, PROGRAMS, OTHERS). For example, to build an executable, do
+"PROGRAMS += myexe".
+
+kBuild then takes the "myexe" identifier and uses it as a prefix for lots of other
+variables, which you can override.
+
+Most importantly, you need to set:
+
+ -- prefix_TEMPLATE needs to be set to one of the kBuild templates.
+
+    A template is a set of environment variables. For example, to build a simple executable,
+    define "TEMPLATE_EXE = My description for an executable" in Config.kmk, and then follow
+    up with sub-definitions.
+
+    Most importantly, you must define a TEMPLATE_EXE_TOOL and set it to one of the predefined
+    tools in /usr/share/kBuild.
+
+    With the above, you want to set "myexe_TEMPLATE = EXE", and then it should work magically.
+
+ -- kBuild also needs to know which sources belong to the prefix. So also set prefix_SOURCES
+    to a list of source files (e.g. "myexe.cpp"), and then the rest should work magically.
+
+Important environment variables:
+
+ -- BUILD_TYPE=debug|release
+
+ -- KBUILD_VERBOSE=1|2

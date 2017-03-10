@@ -15,6 +15,7 @@
 #include "elisso/mainwindow.h"
 
 #include "xwp/except.h"
+#include "xwp/exec.h"
 
 
 /***************************************************************************
@@ -128,6 +129,27 @@ ElissoApplication::ElissoApplication(int argc,
                          argv,
                          "org.baubadil.elisso")
 {
+    // This is a bit of an elabore setup to load our settings schema without
+    // having to install it as root under /usr/share/. It is complicated by
+    // the fact that we have to use the raw C API since gtkmm has no complete
+    // bindings for SettingsSchemaSource, it seems.
+    std::string strExecutable = getExecutableFileName(argv[0]);
+    // /home/ufm/src/elisso/out/linux.amd64/debug/stage/bin/elisso
+    std::string strParentDir = getDirnameString(strExecutable);
+    std::string strGrandParentDir = getDirnameString(strParentDir);
+
+    auto pSource_c = g_settings_schema_source_new_from_directory((strGrandParentDir + "/share").c_str(),
+                                                                 NULL,
+                                                                 false,
+                                                                 NULL);
+    Glib::RefPtr<Gio::SettingsSchemaSource> pSource = Glib::wrap(pSource_c);
+
+    auto pSchema_c = g_settings_schema_source_lookup(pSource_c, this->get_id().c_str(), false);
+    GSettings *pSettings_c = g_settings_new_full(pSchema_c,
+                                                 NULL,      // default backend
+                                                 NULL);     // default path
+
+    _pSettings = Glib::wrap(pSettings_c);
 
 }
 
@@ -155,6 +177,32 @@ void ElissoApplication::on_activate()
     auto p = new ElissoApplicationWindow(*this, nullptr);
     this->add_window(*p);
     p->show();
+}
+
+PPixBuf ElissoApplication::getIcon()
+{
+    if (!_pIcon)
+    {
+        auto pIconTheme = Gtk::IconTheme::get_default();
+        _pIcon = pIconTheme->load_icon("system-file-manager", 256);
+    }
+
+    return _pIcon;
+}
+
+Glib::ustring ElissoApplication::getSettingsString(const std::string &strKey)
+{
+    return _pSettings->get_string(strKey);
+}
+
+int ElissoApplication::getSettingsInt(const std::string &strKey)
+{
+    return _pSettings->get_int(strKey);
+}
+
+void ElissoApplication::setSettingsString(const std::string &strKey, const Glib::ustring &strData)
+{
+    _pSettings->set_string(strKey, strData);
 }
 
 /* static */

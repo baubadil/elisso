@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.baubadil.elisso" path="/org/baubadil/elisso/">
+      <key type="s" name="window-pos">
+          <default>"x,x,1000,600,0,0"</default>
+          <summary>Position and size of the main window</summary>
+          <description>The position and size of the main application window, in "x,y,width,height,maximized,fullscreen" string format</description>
+      </key>
+  </schema>
+</schemalist>

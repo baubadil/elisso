@@ -11,14 +11,14 @@
 #ifndef ELISSO_MAINWINDOW_H
 #define ELISSO_MAINWINDOW_H
 
-#include <gtkmm.h>
-
+#include "elisso/application.h"
 #include "elisso/folderview.h"
 #include "elisso/foldertree.h"
 
 class ElissoAction;
 typedef Glib::RefPtr<Gio::SimpleAction> PSimpleAction;
 
+class ElissoApplication;
 
 /***************************************************************************
  *
@@ -58,9 +58,11 @@ typedef Glib::RefPtr<Gio::SimpleAction> PSimpleAction;
 class ElissoApplicationWindow : public Gtk::ApplicationWindow
 {
 public:
-    ElissoApplicationWindow(Gtk::Application &app,
+    ElissoApplicationWindow(ElissoApplication &app,
                             PFSDirectory pdirInitial);
     virtual ~ElissoApplicationWindow();
+
+    void setSizeAndPosition();
 
     int errorBox(Glib::ustring strMessage);
 
@@ -74,25 +76,34 @@ public:
     void enableActions();
 
 protected:
-    Gtk::Application    &_app;
-    Gtk::Box            _mainVBox;
-    Gtk::Paned          _vPaned;
-    ElissoTreeView      _treeViewLeft;
-    Gtk::Notebook       _notebook;
-
-    PSimpleAction       _pActionGoBack;
-    Gtk::ToolButton     *_pButtonGoBack;
-    PSimpleAction       _pActionGoForward;
-    Gtk::ToolButton     *_pButtonGoForward;
-    PSimpleAction       _pActionGoParent;
-    Gtk::ToolButton     *_pButtonGoParent;
-
     void addFolderTab(PFSDirectory pDir);
 
     Gtk::ToolButton* makeToolButton(const Glib::ustring &strIconName,
                                     PSimpleAction pAction);
 
-    std::vector<PElissoFolderView> _aFolderViews;
+    virtual void on_size_allocate(Gtk::Allocation& allocation) override;
+    virtual bool on_window_state_event(GdkEventWindowState *) override;
+    virtual bool on_delete_event(GdkEventAny *) override;
+
+    ElissoApplication               &_app;
+
+    PSimpleAction                   _pActionGoBack;
+    Gtk::ToolButton                 *_pButtonGoBack;
+    PSimpleAction                   _pActionGoForward;
+    Gtk::ToolButton                 *_pButtonGoForward;
+    PSimpleAction                   _pActionGoParent;
+    Gtk::ToolButton                 *_pButtonGoParent;
+
+    int                             _x = 0, _y = 0, _width = 100, _height = 100;
+    bool                            _fIsMaximized = false,
+                                    _fIsFullscreen = false;
+
+    Gtk::Box                        _mainVBox;
+    Gtk::Paned                      _vPaned;
+    ElissoTreeView                  _treeViewLeft;
+    Gtk::Notebook                   _notebook;
+
+    std::vector<PElissoFolderView>  _aFolderViews;
 };
 
 #endif // ELISSO_MAINWINDOW_H
