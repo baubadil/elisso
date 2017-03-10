@@ -129,7 +129,11 @@ public:
         return _pGioFile;
     }
 
-    std::string getBasename();
+    const std::string& getBasename()
+    {
+        return _strBasename;
+    }
+
     uint64_t getFileSize();
     Glib::ustring getIcon();
 
@@ -141,7 +145,7 @@ public:
     virtual FSTypeResolved getResolvedType(FSLock &lock) = 0;
     PFSDirectory resolveDirectory(FSLock &lock);
 
-    virtual bool isHidden(FSLock &lock);
+    bool isHidden();
 
     std::string getRelativePath();
     std::string getAbsolutePath(bool fThrow = false);
@@ -165,6 +169,7 @@ protected:
     FSType                      _type = FSType::UNINITIALIZED;
     uint8_t                     _flFile = 0;
     Glib::RefPtr<Gio::File>     _pGioFile;
+    std::string                 _strBasename;
     PFSDirectory                _pParent;
 };
 
@@ -303,8 +308,6 @@ protected:
         follow(lock);
         return _pTarget;
     }
-
-    virtual bool isHidden(FSLock &lock) override;
 
     enum class State
     {

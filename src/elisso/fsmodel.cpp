@@ -263,7 +263,8 @@ PFSDirectory FSModelBase::FindDirectory(const std::string &strPath, FSLock &lock
 FSModelBase::FSModelBase(FSType type, Glib::RefPtr<Gio::File> pGioFile)
     : _uID(g_uFSID++),      // atomic
       _type(type),
-      _pGioFile(pGioFile)
+      _pGioFile(pGioFile),
+      _strBasename(_pGioFile->get_basename())
 {
 }
 
@@ -295,22 +296,22 @@ void FSModelBase::setParent(PFSDirectory pParentDirectory, FSLock &lock)
     }
 }
 
-std::string FSModelBase::getBasename()
-{
-    return _pGioFile->get_basename();
-}
-
 /**
  *  Returns true if the file-system object has the "hidden" attribute, according to however Gio defines it.
  *
  *  Overridden for symlinks!
  */
-/* virtual */
-bool FSModelBase::isHidden(FSLock &lock)
+bool FSModelBase::isHidden()
 {
-    auto pInfo = _pGioFile->query_info(G_FILE_ATTRIBUTE_STANDARD_IS_HIDDEN,
-                                       Gio::FileQueryInfoFlags::FILE_QUERY_INFO_NOFOLLOW_SYMLINKS);
-    return pInfo->is_hidden();
+    auto len = _strBasename.length();
+    if (!len)
+        return true;
+    return     (_strBasename[0] == '.')
+            || (_strBasename[len - 1] == '~');
+
+//     auto pInfo = _pGioFile->query_info(G_FILE_ATTRIBUTE_STANDARD_IS_HIDDEN,
+//                                        Gio::FileQueryInfoFlags::FILE_QUERY_INFO_NOFOLLOW_SYMLINKS);
+//     return pInfo->is_hidden();
 }
 
 /*
@@ -774,19 +775,6 @@ void FSSymlink::follow(FSLock &lock)
     }
 
     Debug::Leave();
-}
-
-/**
- *  Override the FSModelBase implementation to instead return the value for the target.
- */
-/* virtual */
-bool FSSymlink::isHidden(FSLock &lock) /* override */
-{
-    auto p = this->getTarget(lock);
-    if (p)
-        return p->isHidden(lock);
-
-    return FSModelBase::isHidden(lock);
 }
 
 
