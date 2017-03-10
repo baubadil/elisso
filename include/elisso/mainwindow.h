@@ -62,6 +62,11 @@ public:
                             PFSDirectory pdirInitial);
     virtual ~ElissoApplicationWindow();
 
+    ElissoApplication& getApplication()
+    {
+        return _app;
+    }
+
     void setSizeAndPosition();
 
     int errorBox(Glib::ustring strMessage);

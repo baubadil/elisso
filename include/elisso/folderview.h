@@ -77,6 +77,7 @@ private:
     void dumpStack();
     void onPopulateDone();
     void connectModel(bool fConnect);
+    void setListViewColumns();
 
     ElissoApplicationWindow     &_mainWindow;
 
@@ -84,7 +85,7 @@ private:
     FolderViewMode              _mode = FolderViewMode::UNDEFINED;
     Gtk::IconView               _iconView;
     Gtk::TreeView               _treeView;
-    Gtk::FlowBox                _compactView;
+//     Gtk::FlowBox                _compactView;
 
     PFSModelBase                _pDir;
     std::vector<std::string>    _aPathHistory;

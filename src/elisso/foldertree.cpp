@@ -339,9 +339,8 @@ void ElissoTreeView::onPopulateDone()
     }
 
     PAddOneFirstsList pllToAddFirst = std::make_shared<AddOneFirstsList>();
-    FSLock lock;
     for (auto &pFS : pPopulated->_llContents)
-        if (!pFS->isHidden(lock))
+        if (!pFS->isHidden())
         {
             Gtk::TreeModel::iterator itChild = children.end();
             Glib::ustring strName = pFS->getBasename();

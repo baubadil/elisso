@@ -43,5 +43,6 @@ DEF_STRING(ACTION_GO_HOME, "go-home");
 DEF_STRING(ACTION_ABOUT, "about");
 
 DEF_STRING(SETTINGS_WINDOWPOS, "window-pos");
+DEF_STRING(SETTINGS_LIST_COLUMN_WIDTHS, "list-column-widths");
 
 #endif // ELISSO_H

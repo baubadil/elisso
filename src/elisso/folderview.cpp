@@ -114,7 +114,7 @@ ElissoFolderView::ElissoFolderView(ElissoApplicationWindow &mainWindow)
       _mainWindow(mainWindow),
       _iconView(),
       _treeView(),
-      _compactView(),
+//       _compactView(),
       _pImpl(new ElissoFolderView::Impl())
 {
     // Allow multiple selections.
@@ -132,41 +132,20 @@ ElissoFolderView::ElissoFolderView(ElissoApplicationWindow &mainWindow)
     FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
     _pImpl->pListStore = Gtk::ListStore::create(cols);
 
-    /* Set up the icon view */
-    _iconView.set_pixbuf_column(cols._colIconBig);
-    _iconView.set_text_column(cols._colFilename);
-
+    /* Set up the icon view (more in setViewMode()) */
     _iconView.signal_item_activated().connect([this](const Gtk::TreeModel::Path &path)
     {
         _pImpl->onTreeModelPathActivated(*this, path);
     });
 
     /* Set up the list view */
-    int i;
-    Gtk::TreeView::Column* pColumn;
-
-    i = _treeView.append_column("Icon", cols._colIconSmall);
-
-    i = _treeView.append_column("Name", cols._colFilename);
-    if ((pColumn = _treeView.get_column(i - 1)))
-        pColumn->set_sort_column(cols._colFilename);
-
-    i = _treeView.append_column("Type", cols._colTypeString);
-    if ((pColumn = _treeView.get_column(i - 1)))
-        pColumn->set_sort_column(cols._colTypeString);
-
-    i = _treeView.append_column("Size", cols._colSize);
-    if ((pColumn = _treeView.get_column(i - 1)))
-        pColumn->set_sort_column(cols._colSize);
+    setListViewColumns();
 
     _treeView.signal_row_activated().connect([this](const Gtk::TreeModel::Path &path,
                                                     Gtk::TreeViewColumn *pColumn)
     {
         _pImpl->onTreeModelPathActivated(*this, path);
     });
-
-    /* Set up the compact view */
-//     _compactView.
 
     this->setViewMode(FolderViewMode::LIST);
 }
@@ -341,6 +320,7 @@ void ElissoFolderView::setViewMode(FolderViewMode m)
         switch (_mode)
         {
             case FolderViewMode::ICONS:
+            case FolderViewMode::COMPACT:
                 _iconView.hide();
                 this->remove();
             break;
@@ -350,11 +330,10 @@ void ElissoFolderView::setViewMode(FolderViewMode m)
                 this->remove();
             break;
 
-            case FolderViewMode::COMPACT:
-                _compactView.hide();
-                this->remove();
-            break;
-
+//                 _compactView.hide();
+//                 this->remove();
+//             break;
+//
             default:
             break;
         }
@@ -362,19 +341,41 @@ void ElissoFolderView::setViewMode(FolderViewMode m)
         switch (m)
         {
             case FolderViewMode::ICONS:
+            case FolderViewMode::COMPACT:
+            {
                 this->add(_iconView);
                 _iconView.show();
-            break;
+
+                FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
+                if (m == FolderViewMode::ICONS)
+                {
+                    // icon
+                    _iconView.set_item_orientation(Gtk::Orientation::ORIENTATION_VERTICAL);
+                    _iconView.set_pixbuf_column(cols._colIconBig);
+                    _iconView.set_text_column(cols._colFilename);
+                    _iconView.set_item_width(-1);
+                    _iconView.set_row_spacing(5);
+                }
+                else
+                {
+                    // compact
+                    _iconView.set_item_orientation(Gtk::Orientation::ORIENTATION_HORIZONTAL);
+                    _iconView.set_pixbuf_column(cols._colIconSmall);
+                    _iconView.set_text_column(cols._colFilename);
+                    _iconView.set_item_width(200);
+                    _iconView.set_row_spacing(1);
+                }
+            }
 
             case FolderViewMode::LIST:
                 this->add(_treeView);
                 _treeView.show();
             break;
 
-            case FolderViewMode::COMPACT:
-                this->add(_compactView);
-                _compactView.show();
-            break;
+//             case FolderViewMode::COMPACT:
+//                 this->add(_compactView);
+//                 _compactView.show();
+//             break;
 
             default:
             break;
@@ -413,22 +414,12 @@ void ElissoFolderView::onFileActivated(PFSModelBase pFS)
                                                       NULL);            // image/jpeg
             if (pContentType)
             {
-                GAppInfo *pAppInfo_c = g_app_info_get_default_for_type(pContentType, FALSE);
-                Glib::RefPtr<Gio::AppInfo> pAppInfo = Glib::wrap(pAppInfo_c);
+                Glib::RefPtr<Gio::AppInfo> pAppInfo = Glib::wrap(g_app_info_get_default_for_type(pContentType, FALSE));
+                g_free(pContentType);
                 if (pAppInfo)
                     pAppInfo->launch(pFS->getGioFile());
                 else
                     _mainWindow.errorBox("Cannot determine default application for file \"" + pFS->getRelativePath() + "\"");
-
-//                 Gtk::MessageDialog dialog(_mainWindow,
-//                                         "File clicked",
-//                                         false /* use_markup */,
-//                                         Gtk::MESSAGE_QUESTION,
-//                                         Gtk::BUTTONS_OK_CANCEL);
-//                 dialog.set_secondary_text("Launch \"" + pAppInfo->get_commandline() + "\"?");
-//                 if (dialog.run() == Gtk::RESPONSE_OK)
-
-                g_free(pContentType);
             }
         }
         break;
@@ -443,6 +434,7 @@ void ElissoFolderView::connectModel(bool fConnect)
     switch (_mode)
     {
         case FolderViewMode::ICONS:
+        case FolderViewMode::COMPACT:
             if (fConnect)
                 _iconView.set_model(_pImpl->pListStore);
             else
@@ -456,31 +448,88 @@ void ElissoFolderView::connectModel(bool fConnect)
                 _treeView.unset_model();
         break;
 
-        case FolderViewMode::COMPACT:
-            if (fConnect)
-            {
-                FSLock lock;
-                for (auto &pFS : _pImpl->llFolderContents)
-                    if (!pFS->isHidden(lock))
-                    {
-                        Glib::ustring strLabel = pFS->getBasename();
-                        auto p = Gtk::manage(new Gtk::Label(strLabel));
-                        _compactView.insert(*p, -1);
-                    }
-                _compactView.show_all();
-            }
-            else
-            {
-                auto childList = _compactView.get_children();
-                for (auto &p : childList)
-                    _compactView.remove(*p);
-            }
-
+//             if (fConnect)
+//             {
+//                 for (auto &pFS : _pImpl->llFolderContents)
+//                     if (!pFS->isHidden())
+//                     {
+//                         Glib::ustring strLabel = pFS->getBasename();
+//                         auto p = Gtk::manage(new Gtk::Label(strLabel));
+//                         _compactView.insert(*p, -1);
+//                     }
+//                 _compactView.show_all();
+//             }
+//             else
+//             {
+//                 auto childList = _compactView.get_children();
+//                 for (auto &p : childList)
+//                     _compactView.remove(*p);
+//             }
+//
         break;
 
         default:
         break;
     }
+}
+
+void ElissoFolderView::setListViewColumns()
+{
+    int i;
+    Gtk::TreeView::Column* pColumn;
+
+    int aSizes[4] = { 40, 40, 40, 40 };
+    auto s = _mainWindow.getApplication().getSettingsString(SETTINGS_LIST_COLUMN_WIDTHS);
+    StringVector sv = explodeVector(s, ",");
+    if (sv.size() == 4)
+    {
+        int i = 0;
+        for (auto &s : sv)
+        {
+            int v = stoi(s);
+            if (v)
+                aSizes[i] = v;
+            i++;
+        }
+    }
+
+    FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
+
+    i = _treeView.append_column("Icon", cols._colIconSmall);
+    if ((pColumn = _treeView.get_column(i - 1)))
+    {
+        pColumn->set_sizing(Gtk::TREE_VIEW_COLUMN_FIXED);
+        pColumn->set_fixed_width(aSizes[i - 1]);
+    }
+
+    i = _treeView.append_column("Name", cols._colFilename);
+    if ((pColumn = _treeView.get_column(i - 1)))
+    {
+        pColumn->set_sizing(Gtk::TREE_VIEW_COLUMN_FIXED);
+        pColumn->set_fixed_width(aSizes[i - 1]);
+        pColumn->set_resizable(true);
+        pColumn->set_sort_column(cols._colFilename);
+    }
+
+    i = _treeView.append_column("Size", cols._colSize);
+    if ((pColumn = _treeView.get_column(i - 1)))
+    {
+        pColumn->set_sizing(Gtk::TREE_VIEW_COLUMN_FIXED);
+        pColumn->set_fixed_width(aSizes[i - 1]);
+        pColumn->set_resizable(true);
+        pColumn->set_sort_column(cols._colSize);
+    }
+
+    i = _treeView.append_column("Type", cols._colTypeString);
+    if ((pColumn = _treeView.get_column(i - 1)))
+    {
+        pColumn->set_sizing(Gtk::TREE_VIEW_COLUMN_FIXED);
+        pColumn->set_fixed_width(aSizes[i - 1]);
+        pColumn->set_resizable(true);
+        pColumn->set_sort_column(cols._colTypeString);
+    }
+
+    _treeView.set_fixed_height_mode(true);
 }
 
 /**
@@ -538,9 +587,8 @@ void ElissoFolderView::onPopulateDone()
 
     Debug::Log(FOLDER_POPULATE, "ElissoFolderView::onPopulateDone(\"" + _pDir->getRelativePath() + "\")");
 
-    FSLock lock;
     for (auto &pFS : _pImpl->llFolderContents)
-        if (!pFS->isHidden(lock))
+        if (!pFS->isHidden())
         {
             auto row = *(_pImpl->pListStore->append());
 
