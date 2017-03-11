@@ -27,13 +27,13 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app,
         get_application()->quit();
     });
 
-    this->add_action(ACTION_VIEW_ICONS, [this](){
+    _pActionViewIcons = this->add_action(ACTION_VIEW_ICONS, [this](){
         auto p = this->getActiveFolderView();
         if (p)
             p->setViewMode(FolderViewMode::ICONS);
     });
 
-    this->add_action(ACTION_VIEW_LIST, [this](){
+    _pActionViewList = this->add_action(ACTION_VIEW_LIST, [this](){
         auto p = this->getActiveFolderView();
         if (p)
             p->setViewMode(FolderViewMode::LIST);
@@ -43,6 +43,10 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app,
         auto p = this->getActiveFolderView();
         if (p)
             p->setViewMode(FolderViewMode::COMPACT);
+    });
+
+    _pActionViewRefresh = this->add_action(ACTION_VIEW_REFRESH, [this](){
+        // TODO
     });
 
     _pActionGoBack = this->add_action(ACTION_GO_BACK, [this](){
@@ -68,7 +72,8 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app,
         }
     });
 
-    this->add_action(ACTION_GO_HOME, [this](){
+    _pActionGoHome = this->add_action(ACTION_GO_HOME, [this]()
+    {
         auto p = this->getActiveFolderView();
         if (p)
         {
@@ -112,12 +117,19 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app,
     Gtk::Toolbar* pToolbar = new Gtk::Toolbar();
     _mainVBox.pack_start(*pToolbar, Gtk::PACK_SHRINK);
 
-    _pButtonGoBack = makeToolButton("go-previous", _pActionGoBack);
-    pToolbar->append(*_pButtonGoBack);
-    _pButtonGoForward = makeToolButton("go-next", _pActionGoForward);
-    pToolbar->append(*_pButtonGoForward);
-    _pButtonGoParent = makeToolButton("go-up", _pActionGoParent);
-    pToolbar->append(*_pButtonGoParent);
+    pToolbar->append(*(_pButtonGoBack = makeToolButton("go-previous-symbolic", _pActionGoBack)));
+    pToolbar->append(*(_pButtonGoForward = makeToolButton("go-next-symbolic", _pActionGoForward)));
+    pToolbar->append(*(_pButtonGoParent = makeToolButton("go-up-symbolic", _pActionGoParent)));
+    pToolbar->append(*(_pButtonGoHome = makeToolButton("go-home-symbolic", _pActionGoHome)));
+
+    auto pSeparator = new Gtk::SeparatorToolItem();
+    pSeparator->set_expand(true);
+    pSeparator->set_draw(false);
+    pToolbar->append(*pSeparator);
+
+    pToolbar->append(*(_pButtonViewIcons = makeToolButton("view-grid-symbolic", _pActionViewIcons, true)));
+    pToolbar->append(*(_pButtonViewList = makeToolButton("view-list-symbolic", _pActionViewList)));
+    pToolbar->append(*(_pButtonViewRefresh = makeToolButton("view-refresh-symbolic", _pActionViewRefresh)));
 
     this->signal_action_enabled_changed().connect([this](const Glib::ustring &strAction, bool fEnabled)
     {
@@ -143,7 +155,10 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app,
 
     this->show_all_children();
 
-    this->addFolderTab(pdirInitial);
+    Glib::signal_idle().connect([this, pdirInitial]() -> bool {
+        this->addFolderTab(pdirInitial);
+        return false;       // don't call again
+    });
     _notebook.show_all();
 }
 
@@ -191,7 +206,8 @@ void ElissoApplicationWindow::setSizeAndPosition()
 }
 
 Gtk::ToolButton* ElissoApplicationWindow::makeToolButton(const Glib::ustring &strIconName,
-                                                         PSimpleAction pAction)
+                                                         PSimpleAction pAction,
+                                                         bool fAlignRight /* = false*/ )
 {
     Gtk::ToolButton *pButton = nullptr;
     if (pAction)
@@ -200,6 +216,8 @@ Gtk::ToolButton* ElissoApplicationWindow::makeToolButton(const Glib::ustring &st
         pImage->set_from_icon_name(strIconName,
                                 Gtk::BuiltinIconSize::ICON_SIZE_SMALL_TOOLBAR);
         pButton = Gtk::manage(new Gtk::ToolButton(*pImage));
+        if (fAlignRight)
+            pButton->set_halign(Gtk::ALIGN_START);
         // Connect to "clicked" signal on button.
         pButton->signal_clicked().connect([this, pAction]()
         {
@@ -268,6 +286,7 @@ void ElissoApplicationWindow::addFolderTab(PFSDirectory pDir)       //!< in: dir
     }
 
     _notebook.append_page(*pFolderView, pDir->getBasename());
+    pFolderView->show();
     pFolderView->setDirectory(pDir);
 }
 
