@@ -20,105 +20,6 @@
 
 /***************************************************************************
  *
- *  Menu
- *
- **************************************************************************/
-
-//Layout the actions in a menubar and an application menu:
-Glib::ustring ui_info =
-R"i____(
-<interface>
-  <!-- menubar -->
-  <menu id='menu-example'>
-    <submenu>
-      <attribute name='label' translatable='yes'>_File</attribute>
-      <section>
-        <item>
-          <attribute name='label' translatable='yes'>_Quit</attribute>
-          <attribute name='action'>win.file-quit</attribute>
-          <attribute name='accel'>&lt;Primary&gt;q</attribute>
-        </item>
-      </section>
-    </submenu>
-    <submenu>
-      <attribute name='label' translatable='yes'>_Edit</attribute>
-      <section>
-        <item>
-          <attribute name='label' translatable='yes'>_Copy</attribute>
-          <attribute name='action'>win.copy</attribute>
-          <attribute name='accel'>&lt;Primary&gt;c</attribute>
-        </item>
-        <item>
-          <attribute name='label' translatable='yes'>_Paste</attribute>
-          <attribute name='action'>win.paste</attribute>
-          <attribute name='accel'>&lt;Primary&gt;v</attribute>
-        </item>
-        <item>
-          <attribute name='label' translatable='yes'>_Something</attribute>
-          <attribute name='action'>win.something</attribute>
-        </item>
-      </section>
-    </submenu>
-    <submenu>
-      <attribute name='label' translatable='yes'>_View</attribute>
-      <section>
-        <item>
-          <attribute name='label' translatable='yes'>_Icons</attribute>
-          <attribute name='action'>win.view-icons</attribute>
-          <attribute name='accel'>&lt;Primary&gt;1</attribute>
-        </item>
-        <item>
-          <attribute name='label' translatable='yes'>_List</attribute>
-          <attribute name='action'>win.view-list</attribute>
-          <attribute name='accel'>&lt;Primary&gt;2</attribute>
-        </item>
-        <item>
-          <attribute name='label' translatable='yes'>_Compact</attribute>
-          <attribute name='action'>win.view-compact</attribute>
-          <attribute name='accel'>&lt;Primary&gt;3</attribute>
-        </item>
-      </section>
-    </submenu>
-    <submenu>
-      <attribute name='label' translatable='yes'>_Go</attribute>
-      <section>
-        <item>
-          <attribute name='label' translatable='yes'>_Parent</attribute>
-          <attribute name='action'>win.go-parent</attribute>
-          <attribute name='accel'>&lt;Alt&gt;Up</attribute>
-        </item>
-        <item>
-          <attribute name='label' translatable='yes'>_Back</attribute>
-          <attribute name='action'>win.go-back</attribute>
-          <attribute name='accel'>&lt;Alt&gt;Left</attribute>
-        </item>
-        <item>
-          <attribute name='label' translatable='yes'>_Forward</attribute>
-          <attribute name='action'>win.go-forward</attribute>
-          <attribute name='accel'>&lt;Alt&gt;Right</attribute>
-        </item>
-        <item>
-          <attribute name='label' translatable='yes'>_Home</attribute>
-          <attribute name='action'>win.go-home</attribute>
-          <attribute name='accel'>&lt;Alt&gt;Home</attribute>
-        </item>
-      </section>
-    </submenu>
-    <submenu>
-      <attribute name='label' translatable='yes'>_Help</attribute>
-      <section>
-        <item>
-          <attribute name='label' translatable='yes'>_About</attribute>
-          <attribute name='action'>win.about</attribute>
-        </item>
-      </section>
-    </submenu>
-  </menu>
-</interface>)i____";
-
-
-/***************************************************************************
- *
  *  ElissoApplication
  *
  **************************************************************************/
@@ -157,19 +58,40 @@ void ElissoApplication::on_startup()
 {
     Gtk::Application::on_startup();
 
-    auto pBuilder = Gtk::Builder::create();
-    try
-    {
-        pBuilder->add_from_string(ui_info);
-    }
-    catch(const Glib::Error& ex)
-    {
-        throw FSException("Building menus failed: " + ex.what());
-    }
+    auto pMenuBar = Gio::Menu::create();
 
-    //Get the menubar and the app menu, and add them to the application:
-    auto pMenu = pBuilder->get_object("menu-example");
-    this->set_menubar(Glib::RefPtr<Gio::Menu>::cast_dynamic(pMenu));
+    auto pMenuFile = Gio::Menu::create();
+    pMenuBar->append_submenu("_File", pMenuFile);
+    addMenuItem(pMenuFile, "New _tab", ACTION_FILE_NEW_TAB, "<Primary>t");
+    addMenuItem(pMenuFile, "New _window", ACTION_FILE_NEW_WINDOW, "<Primary>n");
+    addMenuItem(pMenuFile, "_Quit", ACTION_FILE_QUIT, "<Primary>q");
+    addMenuItem(pMenuFile, "Close tab", ACTION_FILE_CLOSE_TAB, "<Primary>w");
+
+    auto pMenuEdit = Gio::Menu::create();
+    pMenuBar->append_submenu("_Edit", pMenuEdit);
+    addMenuItem(pMenuEdit, "_Copy", ACTION_EDIT_COPY, "<Primary>c");
+    addMenuItem(pMenuEdit, "Cu_t", ACTION_EDIT_CUT, "<Primary>x");
+    addMenuItem(pMenuEdit, "_Paste", ACTION_EDIT_PASTE, "<Primary>v");
+
+    auto pMenuView = Gio::Menu::create();
+    pMenuBar->append_submenu("_View", pMenuView);
+    addMenuItem(pMenuView, "Icons", ACTION_VIEW_ICONS, "<Primary>1");
+    addMenuItem(pMenuView, "List", ACTION_VIEW_LIST, "<Primary>2");
+    addMenuItem(pMenuView, "Compact", ACTION_VIEW_COMPACT, "<Primary>3");
+    addMenuItem(pMenuView, "Refresh", ACTION_VIEW_REFRESH, "<Primary>r");
+
+    auto pMenuGo = Gio::Menu::create();
+    pMenuBar->append_submenu("_Go", pMenuGo);
+    addMenuItem(pMenuGo, "Parent", ACTION_GO_PARENT, "<Alt>Up");
+    addMenuItem(pMenuGo, "Back", ACTION_GO_BACK, "<Alt>Left");
+    addMenuItem(pMenuGo, "Forward", ACTION_GO_FORWARD, "<Alt>Right");
+    addMenuItem(pMenuGo, "Home", ACTION_GO_HOME, "<Alt>Home");
+
+    auto pMenuHelp = Gio::Menu::create();
+    pMenuBar->append_submenu("_Help", pMenuHelp);
+    addMenuItem(pMenuHelp, "About", ACTION_ABOUT);
+
+    this->set_menubar(pMenuBar);
 }
 
 void ElissoApplication::on_activate()
@@ -177,6 +99,22 @@ void ElissoApplication::on_activate()
     auto p = new ElissoApplicationWindow(*this, nullptr);
     this->add_window(*p);
     p->show();
+}
+
+void
+ElissoApplication::addMenuItem(Glib::RefPtr<Gio::Menu> pMenu,
+                               const Glib::ustring &strName,
+                               const Glib::ustring &strAction,          //!< in: will be prefixed with "win."
+                               const Glib::ustring &strAccelerator /* = ""*/ )
+{
+    Glib::ustring strActionLong = "win." + strAction;
+    auto pMenuItem = Gio::MenuItem::create(strName, strActionLong);
+    pMenu->append_item(pMenuItem);
+    if (strAccelerator.length())
+    {
+        std::vector<Glib::ustring> sv = { strAccelerator };
+        this->set_accels_for_action(strActionLong, sv);
+    }
 }
 
 PPixBuf ElissoApplication::getIcon()

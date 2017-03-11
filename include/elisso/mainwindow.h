@@ -84,7 +84,8 @@ protected:
     void addFolderTab(PFSDirectory pDir);
 
     Gtk::ToolButton* makeToolButton(const Glib::ustring &strIconName,
-                                    PSimpleAction pAction);
+                                    PSimpleAction pAction,
+                                    bool fAlignRight = false);
 
     virtual void on_size_allocate(Gtk::Allocation& allocation) override;
     virtual bool on_window_state_event(GdkEventWindowState *) override;
@@ -98,6 +99,14 @@ protected:
     Gtk::ToolButton                 *_pButtonGoForward;
     PSimpleAction                   _pActionGoParent;
     Gtk::ToolButton                 *_pButtonGoParent;
+    PSimpleAction                   _pActionGoHome;
+    Gtk::ToolButton                 *_pButtonGoHome;
+    PSimpleAction                   _pActionViewIcons;
+    Gtk::ToolButton                 *_pButtonViewIcons;
+    PSimpleAction                   _pActionViewList;
+    Gtk::ToolButton                 *_pButtonViewList;
+    PSimpleAction                   _pActionViewRefresh;
+    Gtk::ToolButton                 *_pButtonViewRefresh;
 
     int                             _x = 0, _y = 0, _width = 100, _height = 100;
     bool                            _fIsMaximized = false,

@@ -45,6 +45,11 @@ protected:
 
     void on_activate();
 
+    void addMenuItem(Glib::RefPtr<Gio::Menu> pMenu,
+                     const Glib::ustring &strName,
+                     const Glib::ustring &strAction,
+                     const Glib::ustring &strAccelerator = "");
+
     PPixBuf                     _pIcon;
     Glib::RefPtr<Gio::Settings> _pSettings;
 };

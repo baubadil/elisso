@@ -32,10 +32,17 @@ const DebugFlag FOLDER_STACK        = (1 << 22);
 
 using namespace XWP;
 
+DEF_STRING(ACTION_FILE_NEW_TAB, "file-new-tab");
+DEF_STRING(ACTION_FILE_NEW_WINDOW, "file-new-window");
 DEF_STRING(ACTION_FILE_QUIT, "file-quit");
+DEF_STRING(ACTION_FILE_CLOSE_TAB, "file-close-tab");
+DEF_STRING(ACTION_EDIT_COPY, "edit-copy");
+DEF_STRING(ACTION_EDIT_CUT, "edit-cut");
+DEF_STRING(ACTION_EDIT_PASTE, "edit-paste");
 DEF_STRING(ACTION_VIEW_ICONS, "view-icons");
 DEF_STRING(ACTION_VIEW_LIST, "view-list");
 DEF_STRING(ACTION_VIEW_COMPACT, "view-compact");
+DEF_STRING(ACTION_VIEW_REFRESH, "view-refresh");
 DEF_STRING(ACTION_GO_PARENT, "go-parent");
 DEF_STRING(ACTION_GO_BACK, "go-back");
 DEF_STRING(ACTION_GO_FORWARD, "go-forward");
