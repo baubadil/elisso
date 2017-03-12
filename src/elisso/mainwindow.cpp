@@ -20,82 +20,7 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app,
       _treeViewLeft(*this),
       _notebook()
 {
-    /*
-     *  Connect to actions.
-     */
-    this->add_action(ACTION_FILE_QUIT, [this](){
-        get_application()->quit();
-    });
-
-    _pActionViewIcons = this->add_action(ACTION_VIEW_ICONS, [this](){
-        auto p = this->getActiveFolderView();
-        if (p)
-            p->setViewMode(FolderViewMode::ICONS);
-    });
-
-    _pActionViewList = this->add_action(ACTION_VIEW_LIST, [this](){
-        auto p = this->getActiveFolderView();
-        if (p)
-            p->setViewMode(FolderViewMode::LIST);
-    });
-
-    this->add_action(ACTION_VIEW_COMPACT, [this](){
-        auto p = this->getActiveFolderView();
-        if (p)
-            p->setViewMode(FolderViewMode::COMPACT);
-    });
-
-    _pActionViewRefresh = this->add_action(ACTION_VIEW_REFRESH, [this](){
-        // TODO
-    });
-
-    _pActionGoBack = this->add_action(ACTION_GO_BACK, [this](){
-        auto pFolderView = this->getActiveFolderView();
-        if (pFolderView)
-            pFolderView->goBack();
-    });
-
-    _pActionGoForward = this->add_action(ACTION_GO_FORWARD, [this](){
-        auto pFolderView = this->getActiveFolderView();
-        if (pFolderView)
-            pFolderView->goForward();
-    });
-
-    _pActionGoParent = this->add_action(ACTION_GO_PARENT, [this](){
-        auto pFolderView = this->getActiveFolderView();
-        if (pFolderView)
-        {
-            PFSModelBase pDir;
-            if ((pDir = pFolderView->getDirectory()))
-                if ((pDir = pDir->getParent()))
-                    pFolderView->setDirectory(pDir);
-        }
-    });
-
-    _pActionGoHome = this->add_action(ACTION_GO_HOME, [this]()
-    {
-        auto p = this->getActiveFolderView();
-        if (p)
-        {
-            FSLock lock;
-            auto pHome = FSDirectory::GetHome(lock);
-            if (pHome)
-                p->setDirectory(pHome);
-        }
-    });
-
-    this->add_action(ACTION_ABOUT, [this](){
-        auto w = Gtk::AboutDialog();
-        w.set_version(ELISSO_VERSION);
-        w.set_copyright("(C) 2017 Baubadil GmbH");
-        w.set_website("http://www.baubadil.de");
-        w.set_comments("Soon to be the best file manager for Linux.");
-        w.set_license_type(Gtk::License::LICENSE_CUSTOM);
-        w.set_license("All rights reserved");
-        w.set_logo(_app.getIcon());
-        w.set_transient_for(*this);
-        w.run();
-    });
+    this->initActionHandlers();
 
     /*
      *  Window setup
@@ -104,15 +29,9 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app,
 
     this->set_icon(app.getIcon());
 
-
     /*
-     *  Children setup
+     *  Toolbar
      */
-
-    _vPaned.set_position(200);
-    _vPaned.set_wide_handle(true);
-    _vPaned.add1(_treeViewLeft);
-    _vPaned.add2(_notebook);
 
     Gtk::Toolbar* pToolbar = new Gtk::Toolbar();
     _mainVBox.pack_start(*pToolbar, Gtk::PACK_SHRINK);
@@ -142,6 +61,26 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app,
             _pButtonGoParent->set_sensitive(fEnabled);
     });
 
+    /*
+     *  Children setup
+     */
+
+    _notebook.signal_switch_page().connect([this](Gtk::Widget *pw,
+                                                  guint page_number)
+    {
+//         if (page_number < this->_aFolderViews.size())
+//         {
+//             auto &switchedTo = _aFolderViews[page_number];
+//             Glib::RefPtr<ElissoFolderView> p;
+//             onFolderViewReady(switchedTo);
+//         }
+    });
+
+    _vPaned.set_position(200);
+    _vPaned.set_wide_handle(true);
+    _vPaned.add1(_treeViewLeft);
+    _vPaned.add2(_notebook);
+
     _mainVBox.pack_start(_vPaned);
 
 //     auto pStatusBar = new Gtk::Statusbar();
@@ -155,11 +94,132 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app,
 
     this->show_all_children();
 
-    Glib::signal_idle().connect([this, pdirInitial]() -> bool {
+    // Add the first page in an idle loop so we have no delay in showing the window.
+    Glib::signal_idle().connect([this, pdirInitial]() -> bool
+    {
         this->addFolderTab(pdirInitial);
         return false;       // don't call again
     });
+
     _notebook.show_all();
+}
+
+void ElissoApplicationWindow::initActionHandlers()
+{
+    /*
+     *  File menu
+     */
+    this->add_action(ACTION_FILE_NEW_TAB, [this]()
+    {
+        ElissoFolderView *pView;
+        if ((pView = getActiveFolderView()))
+        {
+            PFSModelBase pDir;
+            if ((pDir = pView->getDirectory()))
+            {
+                this->addFolderTab(pDir);
+            }
+        }
+    });
+
+    this->add_action(ACTION_FILE_QUIT, [this]()
+    {
+        getApplication().quit();
+    });
+
+    this->add_action(ACTION_FILE_CLOSE_TAB, [this]()
+    {
+        auto p = this->getActiveFolderView();
+        if (p)
+            this->closeFolderTab(*p);
+    });
+
+    /*
+     *  View menu
+     */
+    _pActionViewIcons = this->add_action(ACTION_VIEW_ICONS, [this]()
+    {
+        auto p = this->getActiveFolderView();
+        if (p)
+            p->setViewMode(FolderViewMode::ICONS);
+    });
+
+    _pActionViewList = this->add_action(ACTION_VIEW_LIST, [this]()
+    {
+        auto p = this->getActiveFolderView();
+        if (p)
+            p->setViewMode(FolderViewMode::LIST);
+    });
+
+    this->add_action(ACTION_VIEW_COMPACT, [this]()
+    {
+        auto p = this->getActiveFolderView();
+        if (p)
+            p->setViewMode(FolderViewMode::COMPACT);
+    });
+
+    _pActionViewRefresh = this->add_action(ACTION_VIEW_REFRESH, [this]()
+    {
+        // TODO
+    });
+
+    /*
+     *  Go menu
+     */
+    _pActionGoBack = this->add_action(ACTION_GO_BACK, [this]()
+    {
+        auto pFolderView = this->getActiveFolderView();
+        if (pFolderView)
+            pFolderView->goBack();
+    });
+
+    _pActionGoForward = this->add_action(ACTION_GO_FORWARD, [this]()
+    {
+        auto pFolderView = this->getActiveFolderView();
+        if (pFolderView)
+            pFolderView->goForward();
+    });
+
+    _pActionGoParent = this->add_action(ACTION_GO_PARENT, [this]()
+    {
+        auto pFolderView = this->getActiveFolderView();
+        if (pFolderView)
+        {
+            PFSModelBase pDir;
+            if ((pDir = pFolderView->getDirectory()))
+                if ((pDir = pDir->getParent()))
+                    pFolderView->setDirectory(pDir);
+        }
+    });
+
+    _pActionGoHome = this->add_action(ACTION_GO_HOME, [this]()
+    {
+        auto p = this->getActiveFolderView();
+        if (p)
+        {
+            FSLock lock;
+            auto pHome = FSDirectory::GetHome(lock);
+            if (pHome)
+                p->setDirectory(pHome);
+        }
+    });
+
+    /*
+     *  Help menu
+     */
+    this->add_action(ACTION_ABOUT, [this]()
+    {
+        auto w = Gtk::AboutDialog();
+        w.set_version(ELISSO_VERSION);
+        w.set_copyright("(C) 2017 Baubadil GmbH");
+        w.set_website("http://www.baubadil.de");
+        w.set_comments("Soon to be the best file manager for Linux.");
+        w.set_license_type(Gtk::License::LICENSE_CUSTOM);
+        w.set_license("All rights reserved");
+        w.set_logo(_app.getIcon());
+        w.set_transient_for(*this);
+        w.run();
+    });
 }
 
 void ElissoApplicationWindow::setSizeAndPosition()
@@ -274,20 +334,44 @@ bool ElissoApplicationWindow::on_delete_event(GdkEventAny *ev) /* override */
  *
  *  If pDir is nullptr, we retrieve the user's home directory from the FS backend.
  */
-void ElissoApplicationWindow::addFolderTab(PFSDirectory pDir)       //!< in: directory to open, or nullptr for "home"
+void ElissoApplicationWindow::addFolderTab(PFSModelBase pDirOrSymlink)       //!< in: directory to open, or nullptr for "home"
 {
-    ElissoFolderView *pFolderView = new ElissoFolderView(*this);
-    _aFolderViews.push_back(PElissoFolderView(pFolderView));
+    // Create a new view and push it onto the std::vector, which owns it.
+    auto pView = new ElissoFolderView(*this);
 
-    if (!pDir)
+    if (!pDirOrSymlink)
     {
         FSLock lock;
-        pDir = FSDirectory::GetHome(lock);
+        pDirOrSymlink = FSDirectory::GetHome(lock);
     }
 
-    _notebook.append_page(*pFolderView, pDir->getBasename());
-    pFolderView->show();
-    pFolderView->setDirectory(pDir);
+    _notebook.append_page(*pView, pDirOrSymlink->getBasename());
+    pView->show();
+    pView->setDirectory(pDirOrSymlink);
+}
+
+/**
+ *  Closes the notebook tab for the given ElissoFolderView. If this is the last
+ *  tab, it closes the entire ElissoApplicationWindow.
+ */
+void ElissoApplicationWindow::closeFolderTab(ElissoFolderView &viewClose)
+{
+    int cPages = _notebook.get_n_pages();
+    if (cPages > 1)
+    {
+        for (int i = 0; i < cPages; ++i)
+        {
+            auto pPageWidget = _notebook.get_nth_page(i);
+            ElissoFolderView *pViewThis = static_cast<ElissoFolderView *>(pPageWidget);
+            if (pViewThis->getID() == viewClose.getID())
+            {
+                _notebook.remove_page(*pPageWidget);
+                break;
+            }
+        }
+    }
+    else
+        this->close();
 }
 
 /* virtual */
@@ -306,17 +390,21 @@ int ElissoApplicationWindow::errorBox(Glib::ustring strMessage)
     return dialog.run();
 }
 
-PElissoFolderView ElissoApplicationWindow::getActiveFolderView() const
+/**
+ *  Returns the ElissoFolderView that is on the currently active notebook page.
+ */
+ElissoFolderView* ElissoApplicationWindow::getActiveFolderView()
 {
     auto i = _notebook.get_current_page();
     if (i != -1)
-        return _aFolderViews[i];
-    return PElissoFolderView(NULL);
+        return static_cast<ElissoFolderView*>(_notebook.get_nth_page(i));
+
+    return nullptr;
 }
 
 void ElissoApplicationWindow::enableActions()
 {
-    PElissoFolderView pActive;
+    ElissoFolderView *pActive;
     if ((pActive = getActiveFolderView()))
     {
         _pActionGoBack->set_enabled(pActive->canGoBack());
@@ -324,3 +412,30 @@ void ElissoApplicationWindow::enableActions()
     }
 }
 
+void ElissoApplicationWindow::onLoadingFolderView(ElissoFolderView &view)
+{
+    PFSModelBase pDir = view.getDirectory();
+
+    set_title("Loading " + pDir->getBasename() + "...");
+}
+
+/**
+ *  Gets called when the main window needs updating as a result of the folder view changing. In particular:
+ *
+ *   -- when the notebook page changes;
+ *
+ *   -- when the state of the current notebook page changes.
+ *
+ *  In both cases we want to update the title bar, and we want to update the tree to point to the
+ *  folder that's displaying on the right.
+ */
+void ElissoApplicationWindow::onFolderViewReady(ElissoFolderView &view)
+{
+    PFSModelBase pDir = view.getDirectory();
+
+    Glib::ustring strTitle = pDir->getRelativePath();
+    Debug::Log(FOLDER_POPULATE, string(__func__) + "(\"" + pDir->getRelativePath() + "\")");
+
+    strTitle += " — " + APPLICATION_NAME;
+    this->set_title(strTitle);
+}

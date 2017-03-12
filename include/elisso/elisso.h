@@ -32,6 +32,8 @@ const DebugFlag FOLDER_STACK        = (1 << 22);
 
 using namespace XWP;
 
+DEF_STRING(APPLICATION_NAME, "elisso");
+
 DEF_STRING(ACTION_FILE_NEW_TAB, "file-new-tab");
 DEF_STRING(ACTION_FILE_NEW_WINDOW, "file-new-window");
 DEF_STRING(ACTION_FILE_QUIT, "file-quit");

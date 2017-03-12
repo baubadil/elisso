@@ -34,13 +34,11 @@ enum class ViewState
 {
     UNDEFINED,
     POPULATING,
-    POPULATED
+    POPULATED,
+    POPULATE_ERROR
 };
 
 class ElissoApplicationWindow;
-
-class ElissoFolderView;
-typedef Glib::RefPtr<ElissoFolderView> PElissoFolderView;
 
 /**
  *  The folder view is the right half of a folder window and derives from
@@ -52,6 +50,11 @@ class ElissoFolderView : public Gtk::ScrolledWindow
 public:
     ElissoFolderView(ElissoApplicationWindow &mainWindow);
     virtual ~ElissoFolderView();
+
+    size_t getID()
+    {
+        return _id;
+    }
 
     PFSModelBase getDirectory()
     {
@@ -78,6 +81,8 @@ private:
     void onPopulateDone();
     void connectModel(bool fConnect);
     void setListViewColumns();
+
+    size_t                      _id;
 
     ElissoApplicationWindow     &_mainWindow;
 

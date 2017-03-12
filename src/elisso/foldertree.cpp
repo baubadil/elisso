@@ -26,7 +26,8 @@ enum class TreeNodeState
     UNKNOWN,
     POPULATING,
     POPULATED_WITH_FIRST,
-    POPULATED_WITH_FOLDERS
+    POPULATED_WITH_FOLDERS,
+    POPULATE_ERROR
 };
 
 class FolderTreeModelColumns : public Gtk::TreeModelColumnRecord
@@ -124,11 +125,39 @@ struct ResultBase
     PFSModelBase            _pDirOrSymlink;
     PRowReference           _pRowRef;
 
+protected:
+    std::string             *_pstrError = nullptr;
+
     ResultBase(PFSModelBase pDirOrSymlink,
                const PRowReference &pRowRef)
       : _pDirOrSymlink(pDirOrSymlink),
         _pRowRef(pRowRef)
     { }
+    ResultBase(const ResultBase&) = delete;
+    ResultBase& operator=(const ResultBase&) = delete;
+
+    virtual ~ResultBase()
+    {
+        if (_pstrError)
+            delete _pstrError;
+    }
+
+public:
+    void setError(exception &e)
+    {
+        _pstrError = new std::string(e.what());
+    }
+
+    bool fHasError()
+    {
+        return !!_pstrError;
+    }
+
+    std::string getError()
+    {
+        return (_pstrError) ? *_pstrError : "";
+    }
+
 };
 
 struct Populated : ResultBase
@@ -372,21 +401,29 @@ void ElissoTreeView::spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst)
     {
         for (PAddOneFirst pAddOneFirst : *pllToAddFirst)
         {
-            FSLock flock;
-            PFSDirectory pDir = pAddOneFirst->_pDirOrSymlink->resolveDirectory(flock);
-            if (pDir)
+            try
             {
-                FSList llFiles;
-                pDir->getContents(llFiles, FSDirectory::Get::FIRST_FOLDER_ONLY, flock);
-                for (auto &pFS : llFiles)
-//                     if (!pFS->isHidden(flock))
-                    {
-                        pAddOneFirst->_pFirstSubfolder = pFS;
-                        flock.release();
+                FSLock flock;
+                PFSDirectory pDir = pAddOneFirst->_pDirOrSymlink->resolveDirectory(flock);
+                if (pDir)
+                {
+                    FSList llFiles;
+                    pDir->getContents(llFiles, FSDirectory::Get::FIRST_FOLDER_ONLY, flock);
+                    for (auto &pFS : llFiles)
+    //                     if (!pFS->isHidden(flock))
+                        {
+                            pAddOneFirst->_pFirstSubfolder = pFS;
+                            flock.release();
 
-                        _pImpl->workerAddOneFirst.addResult(pAddOneFirst);
-                        break;
-                    }
+                            _pImpl->workerAddOneFirst.addResult(pAddOneFirst);
+                            break;
+                        }
+                }
+            }
+            catch (exception &e)
+            {
+                pAddOneFirst->setError(e);
+                _pImpl->workerAddOneFirst.addResult(pAddOneFirst);
             }
         }
     });
@@ -452,8 +489,10 @@ void ElissoTreeView::onNodeExpanded(const Gtk::TreeModel::iterator &it,
             this->spawnPopulate(it);
         break;
 
-        case TreeNodeState::POPULATING:
-        case TreeNodeState::POPULATED_WITH_FOLDERS:
+        default:
+//         case TreeNodeState::POPULATING:
+//         case TreeNodeState::POPULATED_WITH_FOLDERS:
+//         case TreeNodeState::POPULATE_ERROR:
         break;
     }
 }

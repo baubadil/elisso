@@ -16,6 +16,7 @@
 #include "elisso/fsmodel.h"
 
 class ElissoApplicationWindow;
+class ElissoFolderView;
 
 struct AddOneFirst;
 typedef std::shared_ptr<AddOneFirst> PAddOneFirst;

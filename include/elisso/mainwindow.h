@@ -20,6 +20,7 @@ typedef Glib::RefPtr<Gio::SimpleAction> PSimpleAction;
 
 class ElissoApplication;
 
+
 /***************************************************************************
  *
  *  ElissoApplicationWindow
@@ -62,31 +63,53 @@ public:
                             PFSDirectory pdirInitial);
     virtual ~ElissoApplicationWindow();
 
+    /**
+     *  Returns the ElissoApplication that created us.
+     */
     ElissoApplication& getApplication()
     {
         return _app;
     }
 
-    void setSizeAndPosition();
-
     int errorBox(Glib::ustring strMessage);
 
+    /**
+     *  Returns the ElissoTreeView that makes up the left of the member Gtk::Paned.
+     */
+    ElissoTreeView& getTreeView()
+    {
+        return _treeViewLeft;
+    }
+
+    /**
+     *  Returns the notebook that makes up the right of the member Gtk::Paned, which in turns
+     *  has ElissoFolderView widgets as notebook pages.
+     */
     Gtk::Notebook& getNotebook()
     {
         return _notebook;
     }
 
-    PElissoFolderView getActiveFolderView() const;
+    ElissoFolderView* getActiveFolderView();
 
     void enableActions();
 
+    void onLoadingFolderView(ElissoFolderView &view);
+    void onFolderViewReady(ElissoFolderView &view);
+
 protected:
-    void addFolderTab(PFSDirectory pDir);
+    void initActionHandlers();
+    void setSizeAndPosition();
+
+    void addFolderTab(PFSModelBase pDirOrSymlink);
+
+    void closeFolderTab(ElissoFolderView &viewClose);
 
     Gtk::ToolButton* makeToolButton(const Glib::ustring &strIconName,
                                     PSimpleAction pAction,
                                     bool fAlignRight = false);
 
+    // Override window signal handlers
     virtual void on_size_allocate(Gtk::Allocation& allocation) override;
     virtual bool on_window_state_event(GdkEventWindowState *) override;
     virtual bool on_delete_event(GdkEventAny *) override;
@@ -116,8 +139,6 @@ protected:
     Gtk::Paned                      _vPaned;
     ElissoTreeView                  _treeViewLeft;
     Gtk::Notebook                   _notebook;
-
-    std::vector<PElissoFolderView>  _aFolderViews;
 };
 
 #endif // ELISSO_MAINWINDOW_H

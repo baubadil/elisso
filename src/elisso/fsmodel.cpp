@@ -520,8 +520,14 @@ size_t FSDirectory::getContents(FSList &llFiles,
                         pKeep->setParent(pSharedThis, lock);
 
                         if (getContents == Get::FIRST_FOLDER_ONLY)
+                        {
                             if (t == FSType::DIRECTORY)
                                 break;      // we're done
+                            else if (    (t == FSType::SYMLINK)
+                                      && (pKeep->getResolvedType(lock) == FSTypeResolved::SYMLINK_TO_DIRECTORY)
+                                    )
+                                break;
+                        }
                     }
                 }
             }

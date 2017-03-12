@@ -18,6 +18,16 @@
 
 #include <thread>
 #include <iostream>
+#include <atomic>
+
+
+/***************************************************************************
+ *
+ *  Globals, static variable instantiations
+ *
+ **************************************************************************/
+
+std::atomic<std::uint64_t>  g_uViewID(1);
 
 
 /***************************************************************************
@@ -77,8 +87,7 @@ struct ElissoFolderView::Impl
 
     Impl()
         : pIconTheme(Gtk::IconTheme::get_default())
-    {
-    }
+    { }
 
     void onTreeModelPathActivated(ElissoFolderView &view,
                                   const Gtk::TreeModel::Path &path)
@@ -89,14 +98,16 @@ struct ElissoFolderView::Impl
             Gtk::TreeModel::Row row = *iter;
             FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
             std::string strBasename = Glib::filename_from_utf8(row[cols._colFilename]);
+
+            std::string strParentDir = view._pDir->getRelativePath();
+            std::string strFullPath = makePath(strParentDir, strBasename);
+
             FSLock lock;
-            PFSDirectory pDir = view._pDir->resolveDirectory(lock);
-            if (pDir)
+            PFSModelBase pFS;
+            if ((pFS = FSModelBase::FindPath(strFullPath, lock)))
             {
-                FSLock lock;
-                PFSModelBase pFS = pDir->find(strBasename, lock);
-                if (pFS)
-                    view.onFileActivated(pFS);
+                Debug::Log(FOLDER_POPULATE, string(__func__) + "(\"" + pFS->getRelativePath() + "\")");
+                view.onFileActivated(pFS);
             }
         }
     }
@@ -111,6 +122,7 @@ struct ElissoFolderView::Impl
 
 ElissoFolderView::ElissoFolderView(ElissoApplicationWindow &mainWindow)
     : Gtk::ScrolledWindow(),
+      _id(g_uViewID++),
       _mainWindow(mainWindow),
       _iconView(),
       _treeView(),
@@ -281,11 +293,12 @@ void ElissoFolderView::setState(ViewState s)
             case ViewState::POPULATING:
             {
                 this->connectModel(false);
-                _mainWindow.set_title("Loading " + _pDir->getBasename() + "...");
                 Gtk::Spinner *pSpinner = new Gtk::Spinner();
                 _mainWindow.getNotebook().set_tab_label(*this, *pSpinner);
                 pSpinner->show();
                 pSpinner->start();
+
+                _mainWindow.onLoadingFolderView(*this);
             }
             break;
 
@@ -300,8 +313,9 @@ void ElissoFolderView::setState(ViewState s)
                     _mainWindow.getNotebook().set_tab_label_text(*this,
                                                                  _pDir->getBasename());
                 }
-                _mainWindow.set_title(strTitle);
 
+                // Notify the tree that this folder has been populated.
+                _mainWindow.onFolderViewReady(*this);
             }
             break;
 
@@ -397,10 +411,10 @@ void ElissoFolderView::onFileActivated(PFSModelBase pFS)
         case FSTypeResolved::DIRECTORY:
         case FSTypeResolved::SYMLINK_TO_DIRECTORY:
         {
-            PFSDirectory pDir;
-            FSLock lock;
-            if ((pDir = pFS->resolveDirectory(lock)))
-                this->setDirectory(pDir);
+//             PFSDirectory pDir;
+//             FSLock lock;
+//             if ((pDir = pFS->resolveDirectory(lock)))
+                this->setDirectory(pFS);
         }
         break;
 
@@ -534,6 +548,8 @@ void ElissoFolderView::setListViewColumns()
 
 /**
  *  Returns true if a populate thread was started, or false if the folder had already been populated.
+ *
+ *  Gets called only from setDirectory() at this time.
  */
 bool ElissoFolderView::spawnPopulate()
 {
@@ -546,14 +562,20 @@ bool ElissoFolderView::spawnPopulate()
 
         new std::thread([this]()
         {
-            FSLock lock;
-            PFSDirectory pDir = this->_pDir->resolveDirectory(lock);
-            if (pDir)
-                pDir->getContents(_pImpl->llFolderContents,
-                                  FSDirectory::Get::ALL,
-                                  lock);
-            lock.release();
-
+            try
+            {
+                FSLock lock;
+                PFSDirectory pDir = this->_pDir->resolveDirectory(lock);
+                if (pDir)
+                    pDir->getContents(_pImpl->llFolderContents,
+                                      FSDirectory::Get::ALL,
+                                      lock);
+                lock.release();
+            }
+            catch(exception &e)
+            {
+                this->setState(ViewState::POPULATE_ERROR);
+            }
             // Trigger the dispatcher, which will call "populate done".
             this->_pImpl->dispatcherPopulateDone.emit();
         });
@@ -630,4 +652,3 @@ void ElissoFolderView::onPopulateDone()
 
     this->setState(ViewState::POPULATED);
 }
-

@@ -20,7 +20,64 @@
 
 /***************************************************************************
  *
- *  ElissoApplication
+ *  Public ElissoApplication methods
+ *
+ **************************************************************************/
+
+/**
+ *  Public factory to create a refptr to a new ElissoApplication. The constructor is
+ *  protected.
+ */
+/* static */
+PElissoApplication
+ElissoApplication::create(int argc,
+                          char *argv[])
+{
+    return PElissoApplication(new ElissoApplication(argc, argv));
+}
+
+/**
+ *  Returns the application icon. Fetches and caches it on the first call.
+ */
+PPixBuf ElissoApplication::getIcon()
+{
+    if (!_pIcon)
+    {
+        auto pIconTheme = Gtk::IconTheme::get_default();
+        _pIcon = pIconTheme->load_icon("system-file-manager", 256);
+    }
+
+    return _pIcon;
+}
+
+/**
+ *  Returns a settings string from the application's GSettings.
+ */
+Glib::ustring ElissoApplication::getSettingsString(const std::string &strKey)
+{
+    return _pSettings->get_string(strKey);
+}
+
+/**
+ *  Returns a settings integer from the application's GSettings.
+ */
+int ElissoApplication::getSettingsInt(const std::string &strKey)
+{
+    return _pSettings->get_int(strKey);
+}
+
+/**
+ *  Writes a settings string into the application's GSettings.
+ */
+void ElissoApplication::setSettingsString(const std::string &strKey, const Glib::ustring &strData)
+{
+    _pSettings->set_string(strKey, strData);
+}
+
+
+/***************************************************************************
+ *
+ *  Protected ElissoApplication methods
  *
  **************************************************************************/
 
@@ -117,38 +174,6 @@ ElissoApplication::addMenuItem(Glib::RefPtr<Gio::Menu> pMenu,
     }
 }
 
-PPixBuf ElissoApplication::getIcon()
-{
-    if (!_pIcon)
-    {
-        auto pIconTheme = Gtk::IconTheme::get_default();
-        _pIcon = pIconTheme->load_icon("system-file-manager", 256);
-    }
-
-    return _pIcon;
-}
-
-Glib::ustring ElissoApplication::getSettingsString(const std::string &strKey)
-{
-    return _pSettings->get_string(strKey);
-}
-
-int ElissoApplication::getSettingsInt(const std::string &strKey)
-{
-    return _pSettings->get_int(strKey);
-}
-
-void ElissoApplication::setSettingsString(const std::string &strKey, const Glib::ustring &strData)
-{
-    _pSettings->set_string(strKey, strData);
-}
-
-/* static */
-Glib::RefPtr<ElissoApplication> ElissoApplication::create(int argc,
-                                                          char *argv[])
-{
-    return Glib::RefPtr<ElissoApplication>(new ElissoApplication(argc, argv));
-}
 
 /***************************************************************************
  *
