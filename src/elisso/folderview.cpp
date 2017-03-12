@@ -144,6 +144,31 @@ ElissoFolderView::ElissoFolderView(ElissoApplicationWindow &mainWindow)
     FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
     _pImpl->pListStore = Gtk::ListStore::create(cols);
 
+    _pImpl->pListStore->set_sort_func(cols._colFilename, [&cols](const Gtk::TreeModel::iterator &a,
+                                                                 const Gtk::TreeModel::iterator &b) -> int
+    {
+        auto rowA = *a;
+        auto rowB = *b;
+        auto typeA = rowA[cols._colTypeResolved];
+        auto typeB = rowB[cols._colTypeResolved];
+        bool fAIsFolder = (typeA == FSTypeResolved::DIRECTORY) || (typeA == FSTypeResolved::SYMLINK_TO_DIRECTORY);
+        bool fBIsFolder = (typeB == FSTypeResolved::DIRECTORY) || (typeB == FSTypeResolved::SYMLINK_TO_DIRECTORY);
+        if (fAIsFolder)
+        {
+            if (!fBIsFolder)
+                return -1;
+        }
+        else
+            if (fBIsFolder)
+                return +1;
+
+        const Glib::ustring &strA = rowA[cols._colFilename];
+        const Glib::ustring &strB = rowB[cols._colFilename];
+        return strA.compare(strB);
+    });
+
+    _pImpl->pListStore->set_sort_column(cols._colFilename, Gtk::SortType::SORT_ASCENDING);
+
     /* Set up the icon view (more in setViewMode()) */
     _iconView.signal_item_activated().connect([this](const Gtk::TreeModel::Path &path)
     {
