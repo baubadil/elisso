@@ -39,9 +39,13 @@ PCurrentDirectory CurrentDirectory::s_theCWD = NULL;
 
 std::recursive_mutex g_mutexFiles;
 
-FSLock::FSLock()
-    : LockBase(g_mutexFiles)
-{ }
+class FSLock : public XWP::Lock
+{
+public:
+    FSLock()
+        : Lock(g_mutexFiles)
+    { }
+};
 
 
 /***************************************************************************
@@ -68,7 +72,7 @@ struct FSDirectory::Impl
  *  Returns nullptr if the path is invalid.
  */
 /* static */
-PFSModelBase FSModelBase::FindPath(const std::string &strPath, FSLock &lock)
+PFSModelBase FSModelBase::FindPath(const std::string &strPath)
 {
     Debug::Enter(FILE_LOW, __func__ + string("(" + strPath + ")"));
 
@@ -82,6 +86,8 @@ PFSModelBase FSModelBase::FindPath(const std::string &strPath, FSLock &lock)
     StringVector aParticles = explodeVector(strPathSplit, "/");
     Debug::Log(FILE_LOW, to_string(aParticles.size()) + " particle(s) given");
 
+    FSLock lock;
+
     string strForStat;
     uint c = 0;
 //     bool fPreviousWasNamed = false;
@@ -93,7 +99,7 @@ PFSModelBase FSModelBase::FindPath(const std::string &strPath, FSLock &lock)
             if (aParticles.size() > 1)
                 Debug::Log(FILE_LOW, "Ignoring particle . in list");
             else
-                return CurrentDirectory::GetImpl(lock);
+                return CurrentDirectory::GetImpl();
         }
         else
         {
@@ -103,11 +109,11 @@ PFSModelBase FSModelBase::FindPath(const std::string &strPath, FSLock &lock)
             {
                 if (fAbsolute)
                     // First item on an absolute path must be a child of the root directory.
-                    pDir = RootDirectory::GetImpl(lock);
+                    pDir = RootDirectory::GetImpl();
                 else
                 {
                     // First item on a relative path must be a child of the curdir.
-                    pDir = CurrentDirectory::GetImpl(lock);
+                    pDir = CurrentDirectory::GetImpl();
                     strForStat = ".";
                 }
             }
@@ -134,7 +140,7 @@ PFSModelBase FSModelBase::FindPath(const std::string &strPath, FSLock &lock)
 
                     Debug::Log(FILE_LOW, "Loop " + to_string(c) + ": collapsed \"" + pPrev->getRelativePath() + "/" + strParticle + "\" to " + quote(pCurrent->getRelativePath()));
                 }
-                else if (!(pDir = pCurrent->resolveDirectory(lock)))
+                else if (!(pDir = pCurrent->resolveDirectory()))
                     throw FSException("path particle \"" + pCurrent->getBasename() + "\" is not a directory");
             }
 
@@ -143,7 +149,7 @@ PFSModelBase FSModelBase::FindPath(const std::string &strPath, FSLock &lock)
                 strForStat += "/" + strParticle;
                 PFSModelBase pChild;
 
-                if ((pChild = pDir->isAwake(strParticle, lock)))
+                if ((pChild = pDir->isAwake(strParticle)))
                     Debug::Log(FILE_LOW, "Loop " + to_string(c) + ": particle \"" + strParticle + "\" is already awake: " + pChild->describe());
                 else
                 {
@@ -157,9 +163,9 @@ PFSModelBase FSModelBase::FindPath(const std::string &strPath, FSLock &lock)
                         break;
                     }
 
-                    pChild->setParent(pDir, lock);
+                    pChild->setParent(pDir);
 
-                    if (!pDir->isAwake(strParticle, lock))
+                    if (!pDir->isAwake(strParticle))
                         throw FSException("error: particle \"" + strParticle + "\" is not in parent map");
                 }
 
@@ -185,7 +191,7 @@ PFSModelBase FSModelBase::FindPath(const std::string &strPath, FSLock &lock)
  *
  *  Returns NULL if this is a file or a symlink to something other than a directory.
  */
-PFSDirectory FSModelBase::resolveDirectory(FSLock &lock)
+PFSDirectory FSModelBase::resolveDirectory()
 {
     if (getType() == FSType::DIRECTORY)
     {
@@ -193,11 +199,11 @@ PFSDirectory FSModelBase::resolveDirectory(FSLock &lock)
         return static_pointer_cast<FSDirectory>(shared_from_this());
     }
 
-    if (getResolvedType(lock) == FSTypeResolved::SYMLINK_TO_DIRECTORY)
+    if (getResolvedType() == FSTypeResolved::SYMLINK_TO_DIRECTORY)
     {
         Debug::Log(FILE_LOW, "getting symlink target");
         FSSymlink *pSymlink = static_cast<FSSymlink*>(this);
-        return static_pointer_cast<FSDirectory>(pSymlink->getTarget(lock));
+        return static_pointer_cast<FSDirectory>(pSymlink->getTarget());
     }
 
     return NULL;
@@ -248,9 +254,9 @@ PFSModelBase FSModelBase::MakeAwake(Glib::RefPtr<Gio::File> pGioFile)
 }
 
 /* static */
-PFSDirectory FSModelBase::FindDirectory(const std::string &strPath, FSLock &lock)
+PFSDirectory FSModelBase::FindDirectory(const std::string &strPath)
 {
-    if (auto pFS = FindPath(strPath, lock))
+    if (auto pFS = FindPath(strPath))
     {
         Debug::Log(FILE_MID, "result for \"" + strPath + "\": " + pFS->describe());
         if (pFS->getType() == FSType::DIRECTORY)
@@ -268,8 +274,9 @@ FSModelBase::FSModelBase(FSType type, Glib::RefPtr<Gio::File> pGioFile)
 {
 }
 
-void FSModelBase::setParent(PFSDirectory pParentDirectory, FSLock &lock)
+void FSModelBase::setParent(PFSDirectory pParentDirectory)
 {
+    FSLock lock;
     if (!pParentDirectory)
     {
         if (_pParent)
@@ -445,9 +452,9 @@ PFSDirectory FSDirectory::Create(Glib::RefPtr<Gio::File> pGioFile)
     return std::make_shared<Derived>(pGioFile);
 }
 
-PFSModelBase FSDirectory::isAwake(const string &strParticle,
-                                  FSLock &lock)
+PFSModelBase FSDirectory::isAwake(const string &strParticle)
 {
+    FSLock lock;
     auto it = _pImpl->mapContents.find(strParticle);
     if (it != _pImpl->mapContents.end())
         return it->second;
@@ -456,9 +463,9 @@ PFSModelBase FSDirectory::isAwake(const string &strParticle,
 }
 
 size_t FSDirectory::getContents(FSList &llFiles,
-                                Get getContents,
-                                FSLock &lock)
+                                Get getContents)
 {
+    FSLock lock;
     Debug::Enter(FILE_LOW, "Directory::getContents(\"" + getBasename() + "\")");
     if (    ((getContents == Get::ALL) && !isCompletelyPopulated())
          || ((getContents != Get::ALL) && !isPopulatedWithDirectories())
@@ -480,7 +487,7 @@ size_t FSDirectory::getContents(FSList &llFiles,
                 std::string strThis = pGioFile->get_basename();
                 if (    (strThis != ".")
                      && (strThis != "..")
-                     && (!isAwake(strThis, lock))
+                     && (!isAwake(strThis))
                    )
                 {
                     PFSModelBase pKeep;
@@ -517,14 +524,14 @@ size_t FSDirectory::getContents(FSList &llFiles,
 
                     if (pKeep)
                     {
-                        pKeep->setParent(pSharedThis, lock);
+                        pKeep->setParent(pSharedThis);
 
                         if (getContents == Get::FIRST_FOLDER_ONLY)
                         {
                             if (t == FSType::DIRECTORY)
                                 break;      // we're done
                             else if (    (t == FSType::SYMLINK)
-                                      && (pKeep->getResolvedType(lock) == FSTypeResolved::SYMLINK_TO_DIRECTORY)
+                                      && (pKeep->getResolvedType() == FSTypeResolved::SYMLINK_TO_DIRECTORY)
                                     )
                                 break;
                         }
@@ -549,7 +556,7 @@ size_t FSDirectory::getContents(FSList &llFiles,
             if (    (getContents == Get::ALL)
                  || (p->getType() == FSType::DIRECTORY)
                  || (    (getContents == Get::FOLDERS_ONLY)
-                      && (p->getResolvedType(lock) == FSTypeResolved::SYMLINK_TO_DIRECTORY)
+                      && (p->getResolvedType() == FSTypeResolved::SYMLINK_TO_DIRECTORY)
                     )
                )
             {
@@ -574,7 +581,7 @@ size_t FSDirectory::getContents(FSList &llFiles,
         auto &p = it.second;
         // Leave out ".." in the list.
         if (p != _pParent)
-            if (p->getResolvedType(lock) == FSTypeResolved::SYMLINK_TO_DIRECTORY)
+            if (p->getResolvedType() == FSTypeResolved::SYMLINK_TO_DIRECTORY)
             {
                 llFiles.push_back(p);
                 ++c;
@@ -588,12 +595,12 @@ size_t FSDirectory::getContents(FSList &llFiles,
 }
 
 /*static */
-PFSModelBase FSDirectory::find(const string &strParticle,
-                               FSLock &lock)
+PFSModelBase FSDirectory::find(const string &strParticle)
 {
-//     AssertBasename(__func__, strParticle);
+    FSLock lock;
+
     PFSModelBase pReturn;
-    if ((pReturn = isAwake(strParticle, lock)))
+    if ((pReturn = isAwake(strParticle)))
         Debug::Log(FILE_MID, "Directory::find(\"" + strParticle + "\") => already awake " + pReturn->describe());
     else
     {
@@ -605,7 +612,7 @@ PFSModelBase FSDirectory::find(const string &strParticle,
         if (!(pReturn = MakeAwake(pGioFile)))
             Debug::Log(FILE_LOW, "  could not make awake");
         else
-            pReturn->setParent(static_pointer_cast<FSDirectory>(shared_from_this()), lock);
+            pReturn->setParent(static_pointer_cast<FSDirectory>(shared_from_this()));
 
         Debug::Leave();
     }
@@ -613,12 +620,11 @@ PFSModelBase FSDirectory::find(const string &strParticle,
     return pReturn;
 }
 
-PFSDirectory FSDirectory::findSubdirectory(const std::string &strParticle,
-                                           FSLock &lock)
+PFSDirectory FSDirectory::findSubdirectory(const std::string &strParticle)
 {
     PFSModelBase p;
-    if ((p = find(strParticle, lock)))
-        return p->resolveDirectory(lock);
+    if ((p = find(strParticle)))
+        return p->resolveDirectory();
 
     return nullptr;
 }
@@ -627,17 +633,17 @@ PFSDirectory FSDirectory::findSubdirectory(const std::string &strParticle,
  *  Returns the user's home directory, or nullptr on errors.
  */
 /* static */
-PFSDirectory FSDirectory::GetHome(FSLock &lock)
+PFSDirectory FSDirectory::GetHome()
 {
     const char *p;
     if ((p = getenv("HOME")))
-        return FindDirectory(p, lock);
+        return FindDirectory(p);
     return nullptr;
 }
 
-PFSDirectory FSDirectory::GetRoot(FSLock &lock)
+PFSDirectory FSDirectory::GetRoot()
 {
-    return RootDirectory::GetImpl(lock);
+    return RootDirectory::GetImpl();
 }
 
 RootDirectory::RootDirectory()
@@ -647,8 +653,9 @@ RootDirectory::RootDirectory()
 }
 
 /*static */
-PRootDirectory RootDirectory::GetImpl(FSLock &lock)
+PRootDirectory RootDirectory::GetImpl()
 {
+    FSLock lock;
     if (!s_theRoot)
     {
         // Class has a private constructor, so make_shared doesn't work without this hackery which derives a class from it.
@@ -669,8 +676,9 @@ CurrentDirectory::CurrentDirectory()
 }
 
 /*static */
-PCurrentDirectory CurrentDirectory::GetImpl(FSLock &lock)
+PCurrentDirectory CurrentDirectory::GetImpl()
 {
+    FSLock lock;
     if (!s_theCWD)
     {
         // Class has a private constructor, so make_shared doesn't work without this hackery which derives a class from it.
@@ -697,8 +705,9 @@ FSSymlink::FSSymlink(Glib::RefPtr<Gio::File> pGioFile)
 }
 
 /* virtual */
-FSTypeResolved FSSymlink::getResolvedType(FSLock &lock) /* override */
+FSTypeResolved FSSymlink::getResolvedType() /* override */
 {
+    FSLock lock;
     Debug::Log(FILE_LOW, "Symlink::getResolvedTypeImpl()");
     follow(lock);
 
@@ -733,6 +742,14 @@ PFSSymlink FSSymlink::Create(Glib::RefPtr<Gio::File> pGioFile)
     return std::make_shared<Derived>(pGioFile);
 }
 
+PFSModelBase FSSymlink::getTarget()
+{
+    FSLock lock;
+    follow(lock);
+    return _pTarget;
+}
+
+
 void FSSymlink::follow(FSLock &lock)
 {
     Debug::Enter(FILE_LOW, "FSSymlink::follow(\"" + getRelativePath() + "\"");
@@ -764,7 +781,7 @@ void FSSymlink::follow(FSLock &lock)
                     strTarget = strParentDir + "/";
                 strTarget += strContents;
             }
-            if ((_pTarget = FindPath(strTarget, lock)))
+            if ((_pTarget = FindPath(strTarget)))
             {
                 if (_pTarget->getType() == FSType::DIRECTORY)
                     _state = State::TO_DIRECTORY;

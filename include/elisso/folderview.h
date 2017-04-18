@@ -15,6 +15,30 @@
 
 #include "elisso/fsmodel.h"
 
+class ElissoFolderView;
+
+/***************************************************************************
+ *
+ *  TreeViewWithPopup
+ *
+ **************************************************************************/
+
+class TreeViewWithPopup : public Gtk::TreeView
+{
+    friend class ElissoFolderView;
+
+protected:
+    bool on_button_press_event(GdkEventButton* button_event) override;
+
+private:
+    void setParent(ElissoFolderView &view)
+    {
+        this->_pView = &view;
+    }
+
+    ElissoFolderView *_pView = NULL;
+};
+
 
 /***************************************************************************
  *
@@ -47,6 +71,8 @@ class ElissoApplicationWindow;
  */
 class ElissoFolderView : public Gtk::ScrolledWindow
 {
+    friend class TreeViewWithPopup;
+
 public:
     ElissoFolderView(ElissoApplicationWindow &mainWindow);
     virtual ~ElissoFolderView();
@@ -72,7 +98,8 @@ public:
     void setState(ViewState s);
     void setViewMode(FolderViewMode m);
 
-    void onFileActivated(PFSModelBase pFS);
+    void openFile(PFSModelBase pFS);
+    void openTerminalOnSelectedFolder();
 
     bool spawnPopulate();
 
@@ -82,6 +109,14 @@ private:
     void connectModel(bool fConnect);
     void setListViewColumns();
 
+    PFSModelBase getFSObject(Gtk::TreeModel::iterator &iter);
+    struct Selection;
+    size_t getSelection(Selection &sel);
+
+    void onPathActivated(const Gtk::TreeModel::Path &path);
+    void onSelectionChanged();
+    void onMouseButton3Pressed(GdkEventButton* event);
+
     size_t                      _id;
 
     ElissoApplicationWindow     &_mainWindow;
@@ -89,7 +124,7 @@ private:
     ViewState                   _state = ViewState::UNDEFINED;
     FolderViewMode              _mode = FolderViewMode::UNDEFINED;
     Gtk::IconView               _iconView;
-    Gtk::TreeView               _treeView;
+    TreeViewWithPopup           _treeView;
 //     Gtk::FlowBox                _compactView;
 
     PFSModelBase                _pDir;
@@ -97,7 +132,7 @@ private:
     uint32_t                    _uPreviousOffset = 0;
 
     struct Impl;
-    Impl            *_pImpl;
+    Impl                        *_pImpl;
 };
 
 #endif // ELISSO_FOLDERVIEW_H

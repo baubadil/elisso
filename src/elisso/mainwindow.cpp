@@ -8,9 +8,9 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the LICENSE file for more details.
  */
 
-#include "elisso/elisso.h"
-#include "elisso/application.h"
 #include "elisso/mainwindow.h"
+
+#include "elisso/elisso.h"
 
 ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app,
                                                  PFSDirectory pdirInitial)      //!< in: initial directory or nullptr for "home"
@@ -135,6 +135,49 @@ void ElissoApplicationWindow::initActionHandlers()
     });
 
     /*
+     *  Edit menu
+     */
+
+    _pActionEditOpen = this->add_action(ACTION_EDIT_OPEN, [this]()
+    {
+        auto p = this->getActiveFolderView();
+        if (p)
+            p->openFile(nullptr);
+    });
+
+    _pActionEditTerminal = this->add_action(ACTION_EDIT_TERMINAL, [this]()
+    {
+        auto p = this->getActiveFolderView();
+        if (p)
+            p->openTerminalOnSelectedFolder();
+    });
+
+    _pActionEditCopy = this->add_action(ACTION_EDIT_COPY, [this]()
+    {
+    });
+
+    _pActionEditCut = this->add_action(ACTION_EDIT_CUT, [this]()
+    {
+    });
+
+    _pActionEditPaste = this->add_action(ACTION_EDIT_PASTE, [this]()
+    {
+    });
+
+    _pActionEditRename = this->add_action(ACTION_EDIT_RENAME, [this]()
+    {
+    });
+
+    _pActionEditTrash = this->add_action(ACTION_EDIT_TRASH, [this]()
+    {
+    });
+
+    _pActionEditProperties = this->add_action(ACTION_EDIT_PROPERTIES, [this]()
+    {
+    });
+
+
+    /*
      *  View menu
      */
     _pActionViewIcons = this->add_action(ACTION_VIEW_ICONS, [this]()
@@ -197,8 +240,7 @@ void ElissoApplicationWindow::initActionHandlers()
         auto p = this->getActiveFolderView();
         if (p)
         {
-            FSLock lock;
-            auto pHome = FSDirectory::GetHome(lock);
+            auto pHome = FSDirectory::GetHome();
             if (pHome)
                 p->setDirectory(pHome);
         }
@@ -341,8 +383,7 @@ void ElissoApplicationWindow::addFolderTab(PFSModelBase pDirOrSymlink)       //!
 
     if (!pDirOrSymlink)
     {
-        FSLock lock;
-        pDirOrSymlink = FSDirectory::GetHome(lock);
+        pDirOrSymlink = FSDirectory::GetHome();
     }
 
     _notebook.append_page(*pView, pDirOrSymlink->getBasename());
@@ -402,7 +443,27 @@ ElissoFolderView* ElissoApplicationWindow::getActiveFolderView()
     return nullptr;
 }
 
-void ElissoApplicationWindow::enableActions()
+/**
+ *  Called from ElissoFolderView::onSelectionChanged() whenever the selection changes.
+ */
+void ElissoApplicationWindow::enableEditActions(size_t cFolders, size_t cOtherFiles)
+{
+    Debug::Log(DEBUG_ALWAYS, "cFolders: " + to_string(cFolders) + ", cOtherFiles: " + to_string(cOtherFiles));
+    size_t cTotal = cFolders + cOtherFiles;
+    _pActionEditOpen->set_enabled(cTotal == 1);
+    _pActionEditTerminal->set_enabled((cTotal == 1) && (cFolders == 1));
+    _pActionEditCopy->set_enabled(cTotal > 0);
+    _pActionEditCut->set_enabled(cTotal > 0);
+    _pActionEditPaste->set_enabled(false);
+    _pActionEditRename->set_enabled(cTotal == 1);
+    _pActionEditTrash->set_enabled(cTotal > 0);
+    _pActionEditProperties->set_enabled(cTotal == 1);
+}
+
+/**
+ *  Called from ElissoFolderView::setDirectory() to enable back/forward actions.
+ */
+void ElissoApplicationWindow::enableBackForwardActions()
 {
     ElissoFolderView *pActive;
     if ((pActive = getActiveFolderView()))

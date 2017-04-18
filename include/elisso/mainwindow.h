@@ -40,7 +40,7 @@ class ElissoApplication;
  *       |
  *       +- GtkPaned: to split between tree (left) and notebook (right)
  *           |
- *           +- ElissoTreeView (subclass of GtkScrolledWindow)
+ *           +- ElissoFolderTree (subclass of GtkScrolledWindow)
  *           |
  *           +- GtkNotebook
  *               |
@@ -74,9 +74,9 @@ public:
     int errorBox(Glib::ustring strMessage);
 
     /**
-     *  Returns the ElissoTreeView that makes up the left of the member Gtk::Paned.
+     *  Returns the ElissoFolderTree that makes up the left of the member Gtk::Paned.
      */
-    ElissoTreeView& getTreeView()
+    ElissoFolderTree& getTreeView()
     {
         return _treeViewLeft;
     }
@@ -92,7 +92,8 @@ public:
 
     ElissoFolderView* getActiveFolderView();
 
-    void enableActions();
+    void enableEditActions(size_t cFolders, size_t cOtherFiles);
+    void enableBackForwardActions();
 
     void onLoadingFolderView(ElissoFolderView &view);
     void onFolderViewReady(ElissoFolderView &view);
@@ -116,6 +117,15 @@ protected:
 
     ElissoApplication               &_app;
 
+    PSimpleAction                   _pActionEditOpen;
+    PSimpleAction                   _pActionEditTerminal;
+    PSimpleAction                   _pActionEditCopy;
+    PSimpleAction                   _pActionEditCut;
+    PSimpleAction                   _pActionEditPaste;
+    PSimpleAction                   _pActionEditRename;
+    PSimpleAction                   _pActionEditTrash;
+    PSimpleAction                   _pActionEditProperties;
+
     PSimpleAction                   _pActionGoBack;
     Gtk::ToolButton                 *_pButtonGoBack;
     PSimpleAction                   _pActionGoForward;
@@ -137,7 +147,7 @@ protected:
 
     Gtk::Box                        _mainVBox;
     Gtk::Paned                      _vPaned;
-    ElissoTreeView                  _treeViewLeft;
+    ElissoFolderTree                _treeViewLeft;
     Gtk::Notebook                   _notebook;
 };
 

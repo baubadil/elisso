@@ -8,11 +8,12 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the LICENSE file for more details.
  */
 
-#include "elisso/elisso.h"
 #include "elisso/foldertree.h"
-#include "elisso/mainwindow.h"
 
 #include <thread>
+
+#include "elisso/elisso.h"
+#include "elisso/mainwindow.h"
 
 
 /***************************************************************************
@@ -90,14 +91,14 @@ public:
 
     void addResult(P pResult)
     {
-        LockBase lock(mutex);
+        Lock lock(mutex);
         deque.push_back(pResult);
         dispatcher.emit();
     }
 
     P fetchResult()
     {
-        LockBase lock(mutex);
+        Lock lock(mutex);
         P p;
         if (deque.size())
         {
@@ -116,7 +117,7 @@ protected:
 
 /***************************************************************************
  *
- *  ElissoTreeView::Impl (private)
+ *  ElissoFolderTree::Impl (private)
  *
  **************************************************************************/
 
@@ -182,7 +183,7 @@ struct AddOneFirst : ResultBase
     { }
 };
 
-struct ElissoTreeView::Impl
+struct ElissoFolderTree::Impl
 {
     std::list<PFSDirectory>         llTreeRoots;
 
@@ -201,20 +202,20 @@ struct ElissoTreeView::Impl
 
 std::recursive_mutex g_mutexJobs;
 
-class JobsLock : public LockBase
+class JobsLock : public Lock
 {
 public:
-    JobsLock() : LockBase(g_mutexJobs) { };
+    JobsLock() : Lock(g_mutexJobs) { };
 };
 
 
 /***************************************************************************
  *
- *  ElissoTreeView
+ *  ElissoFolderTree
  *
  **************************************************************************/
 
-ElissoTreeView::ElissoTreeView(ElissoApplicationWindow &mainWindow)
+ElissoFolderTree::ElissoFolderTree(ElissoApplicationWindow &mainWindow)
     : Gtk::ScrolledWindow(),
       _mainWindow(mainWindow),
       _treeView(),
@@ -266,18 +267,17 @@ ElissoTreeView::ElissoTreeView(ElissoApplicationWindow &mainWindow)
 
     this->show_all_children();
 
-    FSLock lock;
-    this->addTreeRoot("Home", FSDirectory::GetHome(lock));
+    this->addTreeRoot("Home", FSDirectory::GetHome());
 //     this->addTreeRoot("File system", FSDirectory::GetRoot());
 }
 
 /* virtual */
-ElissoTreeView::~ElissoTreeView()
+ElissoFolderTree::~ElissoFolderTree()
 {
     delete _pImpl;
 }
 
-void ElissoTreeView::addTreeRoot(const Glib::ustring &strName,
+void ElissoFolderTree::addTreeRoot(const Glib::ustring &strName,
                                  PFSDirectory pDir)
 {
     const FolderTreeModelColumns &cols = FolderTreeModelColumns::Get();
@@ -298,7 +298,7 @@ void ElissoTreeView::addTreeRoot(const Glib::ustring &strName,
 /**
  *  Spawns a TreeJob to populate the tree node represented by the given iterator.
  */
-bool ElissoTreeView::spawnPopulate(const Gtk::TreeModel::iterator &it)
+bool ElissoFolderTree::spawnPopulate(const Gtk::TreeModel::iterator &it)
 {
     bool rc = false;
 
@@ -306,11 +306,10 @@ bool ElissoTreeView::spawnPopulate(const Gtk::TreeModel::iterator &it)
     if ((*it)[cols._colState] != TreeNodeState::POPULATED_WITH_FOLDERS)
     {
         PFSModelBase pDir = (*it)[cols._colPDir];
-        FSLock lock;
-        PFSDirectory pDir2 = pDir->resolveDirectory(lock);
+        PFSDirectory pDir2 = pDir->resolveDirectory();
         if (pDir2)
         {
-            Debug::Log(FOLDER_POPULATE, "ElissoTreeView::spawnPopulate(\"" + ((pDir2) ? pDir2->getRelativePath() : "NULL") + "\")");
+            Debug::Log(FOLDER_POPULATE, "ElissoFolderTree::spawnPopulate(\"" + ((pDir2) ? pDir2->getRelativePath() : "NULL") + "\")");
 
             (*it)[cols._colState] = TreeNodeState::POPULATING;
 
@@ -324,12 +323,8 @@ bool ElissoTreeView::spawnPopulate(const Gtk::TreeModel::iterator &it)
                 // Create an FSList on the thread's stack and have it filled by the back-end.
                 PPopulated pResult = std::make_shared<Populated>(pDir, pRowRefPopulating);
 
-                {
-                    FSLock lock;
-                    pDir2->getContents(pResult->_llContents,
-                                       FSDirectory::Get::FOLDERS_ONLY,
-                                       lock);
-                }
+                pDir2->getContents(pResult->_llContents,
+                                   FSDirectory::Get::FOLDERS_ONLY);
 
                 // Hand the results over to the instance: add it to the queue, signal the dispatcher.
                 this->_pImpl->workerPopulated.addResult(pResult);
@@ -345,7 +340,7 @@ bool ElissoTreeView::spawnPopulate(const Gtk::TreeModel::iterator &it)
     return rc;
 }
 
-void ElissoTreeView::onPopulateDone()
+void ElissoFolderTree::onPopulateDone()
 {
     FolderTreeModelColumns &cols = FolderTreeModelColumns::Get();
 
@@ -392,7 +387,7 @@ void ElissoTreeView::onPopulateDone()
         this->spawnAddFirstSubfolders(pllToAddFirst);
 }
 
-void ElissoTreeView::spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst)
+void ElissoFolderTree::spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst)
 {
     /*
      * Launch the thread!
@@ -403,17 +398,15 @@ void ElissoTreeView::spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst)
         {
             try
             {
-                FSLock flock;
-                PFSDirectory pDir = pAddOneFirst->_pDirOrSymlink->resolveDirectory(flock);
+                PFSDirectory pDir = pAddOneFirst->_pDirOrSymlink->resolveDirectory();
                 if (pDir)
                 {
                     FSList llFiles;
-                    pDir->getContents(llFiles, FSDirectory::Get::FIRST_FOLDER_ONLY, flock);
+                    pDir->getContents(llFiles, FSDirectory::Get::FIRST_FOLDER_ONLY);
                     for (auto &pFS : llFiles)
     //                     if (!pFS->isHidden(flock))
                         {
                             pAddOneFirst->_pFirstSubfolder = pFS;
-                            flock.release();
 
                             _pImpl->workerAddOneFirst.addResult(pAddOneFirst);
                             break;
@@ -433,7 +426,7 @@ void ElissoTreeView::spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst)
  *  Called when this->_dispatcherAddFirst was signalled, which means the add-first
  *  thread has pushed a new item onto the queue.
  */
-void ElissoTreeView::onAddAnotherFirst()
+void ElissoFolderTree::onAddAnotherFirst()
 {
     auto pAddOneFirst = this->_pImpl->workerAddOneFirst.fetchResult();
     if (pAddOneFirst)
@@ -457,7 +450,7 @@ void ElissoTreeView::onAddAnotherFirst()
     Debug::Log(FOLDER_POPULATE, "TreeJob::onAddAnotherFirst(): leaving");
 }
 
-void ElissoTreeView::onNodeSelected()
+void ElissoFolderTree::onNodeSelected()
 {
     auto pTreeSelection = _treeView.get_selection();
     Gtk::TreeModel::iterator it;
@@ -475,7 +468,7 @@ void ElissoTreeView::onNodeSelected()
     }
 }
 
-void ElissoTreeView::onNodeExpanded(const Gtk::TreeModel::iterator &it,
+void ElissoFolderTree::onNodeExpanded(const Gtk::TreeModel::iterator &it,
                                     const Gtk::TreeModel::Path &path)
 {
     const FolderTreeModelColumns &cols = FolderTreeModelColumns::Get();
@@ -497,13 +490,13 @@ void ElissoTreeView::onNodeExpanded(const Gtk::TreeModel::iterator &it,
     }
 }
 
-Gtk::TreeModel::iterator ElissoTreeView::getIterator(const PRowReference &pRowRef)
+Gtk::TreeModel::iterator ElissoFolderTree::getIterator(const PRowReference &pRowRef)
 {
     Gtk::TreePath path = pRowRef->get_path();
     return _pImpl->pTreeStore->get_iter(path);
 }
 
-PRowReference ElissoTreeView::getRowReference(const Gtk::TreeModel::iterator &it)
+PRowReference ElissoFolderTree::getRowReference(const Gtk::TreeModel::iterator &it)
 {
     Gtk::TreePath path(it);
     return std::make_shared<Gtk::TreeRowReference>(_pImpl->pTreeStore, path);

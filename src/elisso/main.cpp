@@ -11,11 +11,12 @@
 #define DEF_STRING_IMPLEMENTATION
 
 #include "elisso/elisso.h"
-#include "elisso/application.h"
-#include "elisso/mainwindow.h"
 
 #include "xwp/except.h"
 #include "xwp/exec.h"
+
+#include "elisso/application.h"
+#include "elisso/mainwindow.h"
 
 
 /***************************************************************************
@@ -74,6 +75,30 @@ void ElissoApplication::setSettingsString(const std::string &strKey, const Glib:
     _pSettings->set_string(strKey, strData);
 }
 
+Glib::RefPtr<Gio::Menu>
+ElissoApplication::addMenuSection(Glib::RefPtr<Gio::Menu> pMenu)
+{
+    auto pSection = Gio::Menu::create();
+    pMenu->append_section(pSection);
+    return pSection;
+}
+
+void
+ElissoApplication::addMenuItem(Glib::RefPtr<Gio::Menu> pMenu,
+                               const Glib::ustring &strName,
+                               const Glib::ustring &strAction,          //!< in: will be prefixed with "win."
+                               const Glib::ustring &strAccelerator /* = ""*/ )
+{
+    Glib::ustring strActionLong = "win." + strAction;
+    auto pMenuItem = Gio::MenuItem::create(strName, strActionLong);
+    pMenu->append_item(pMenuItem);
+    if (strAccelerator.length())
+    {
+        std::vector<Glib::ustring> sv = { strAccelerator };
+        this->set_accels_for_action(strActionLong, sv);
+    }
+}
+
 
 /***************************************************************************
  *
@@ -92,7 +117,7 @@ ElissoApplication::ElissoApplication(int argc,
     // the fact that we have to use the raw C API since gtkmm has no complete
     // bindings for SettingsSchemaSource, it seems.
     std::string strExecutable = getExecutableFileName(argv[0]);
-    // /home/ufm/src/elisso/out/linux.amd64/debug/stage/bin/elisso
+    // $(HOME)/src/elisso/out/linux.amd64/debug/stage/bin/elisso
     std::string strParentDir = getDirnameString(strExecutable);
     std::string strGrandParentDir = getDirnameString(strParentDir);
 
@@ -108,7 +133,6 @@ ElissoApplication::ElissoApplication(int argc,
                                                  NULL);     // default path
 
     _pSettings = Glib::wrap(pSettings_c);
-
 }
 
 void ElissoApplication::on_startup()
@@ -119,23 +143,31 @@ void ElissoApplication::on_startup()
 
     auto pMenuFile = Gio::Menu::create();
     pMenuBar->append_submenu("_File", pMenuFile);
-    addMenuItem(pMenuFile, "New _tab", ACTION_FILE_NEW_TAB, "<Primary>t");
-    addMenuItem(pMenuFile, "New _window", ACTION_FILE_NEW_WINDOW, "<Primary>n");
-    addMenuItem(pMenuFile, "_Quit", ACTION_FILE_QUIT, "<Primary>q");
-    addMenuItem(pMenuFile, "Close tab", ACTION_FILE_CLOSE_TAB, "<Primary>w");
+    auto pFileSection1 = addMenuSection(pMenuFile);
+    addMenuItem(pFileSection1, "New _tab", ACTION_FILE_NEW_TAB, "<Primary>t");
+    addMenuItem(pFileSection1, "New _window", ACTION_FILE_NEW_WINDOW, "<Primary>n");
+    auto pFileSection2 = addMenuSection(pMenuFile);
+    addMenuItem(pFileSection2, "_Quit", ACTION_FILE_QUIT, "<Primary>q");
+    addMenuItem(pFileSection2, "Close tab", ACTION_FILE_CLOSE_TAB, "<Primary>w");
 
     auto pMenuEdit = Gio::Menu::create();
     pMenuBar->append_submenu("_Edit", pMenuEdit);
-    addMenuItem(pMenuEdit, "_Copy", ACTION_EDIT_COPY, "<Primary>c");
-    addMenuItem(pMenuEdit, "Cu_t", ACTION_EDIT_CUT, "<Primary>x");
-    addMenuItem(pMenuEdit, "_Paste", ACTION_EDIT_PASTE, "<Primary>v");
+    auto pEditSection1 = addMenuSection(pMenuEdit);
+    addMenuItem(pEditSection1, "_Copy", ACTION_EDIT_COPY, "<Primary>c");
+    addMenuItem(pEditSection1, "Cu_t", ACTION_EDIT_CUT, "<Primary>x");
+    addMenuItem(pEditSection1, "_Paste", ACTION_EDIT_PASTE, "<Primary>v");
+    auto pEditSection2 = addMenuSection(pMenuEdit);
+    addMenuItem(pEditSection2, "_Open", ACTION_EDIT_OPEN);
+    addMenuItem(pEditSection2, "Open in _terminal", ACTION_EDIT_TERMINAL);
 
     auto pMenuView = Gio::Menu::create();
     pMenuBar->append_submenu("_View", pMenuView);
-    addMenuItem(pMenuView, "Icons", ACTION_VIEW_ICONS, "<Primary>1");
-    addMenuItem(pMenuView, "List", ACTION_VIEW_LIST, "<Primary>2");
-    addMenuItem(pMenuView, "Compact", ACTION_VIEW_COMPACT, "<Primary>3");
-    addMenuItem(pMenuView, "Refresh", ACTION_VIEW_REFRESH, "<Primary>r");
+    auto pViewSection = addMenuSection(pMenuView);
+    addMenuItem(pViewSection, "Icons", ACTION_VIEW_ICONS, "<Primary>1");
+    addMenuItem(pViewSection, "List", ACTION_VIEW_LIST, "<Primary>2");
+    addMenuItem(pViewSection, "Compact", ACTION_VIEW_COMPACT, "<Primary>3");
+    auto pViewSection2 = addMenuSection(pMenuView);
+    addMenuItem(pViewSection2, "Refresh", ACTION_VIEW_REFRESH, "<Primary>r");
 
     auto pMenuGo = Gio::Menu::create();
     pMenuBar->append_submenu("_Go", pMenuGo);
@@ -156,22 +188,6 @@ void ElissoApplication::on_activate()
     auto p = new ElissoApplicationWindow(*this, nullptr);
     this->add_window(*p);
     p->show();
-}
-
-void
-ElissoApplication::addMenuItem(Glib::RefPtr<Gio::Menu> pMenu,
-                               const Glib::ustring &strName,
-                               const Glib::ustring &strAction,          //!< in: will be prefixed with "win."
-                               const Glib::ustring &strAccelerator /* = ""*/ )
-{
-    Glib::ustring strActionLong = "win." + strAction;
-    auto pMenuItem = Gio::MenuItem::create(strName, strActionLong);
-    pMenu->append_item(pMenuItem);
-    if (strAccelerator.length())
-    {
-        std::vector<Glib::ustring> sv = { strAccelerator };
-        this->set_accels_for_action(strActionLong, sv);
-    }
 }
 
 

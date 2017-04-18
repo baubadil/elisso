@@ -28,16 +28,16 @@ typedef std::shared_ptr<Gtk::TreeRowReference> PRowReference;
 
 /***************************************************************************
  *
- *  ElissoTreeView
+ *  ElissoFolderTree
  *
  **************************************************************************/
 
-class ElissoTreeView : public Gtk::ScrolledWindow
+class ElissoFolderTree : public Gtk::ScrolledWindow
 {
 public:
-    ElissoTreeView(ElissoApplicationWindow &mainWindow);
+    ElissoFolderTree(ElissoApplicationWindow &mainWindow);
 
-    virtual ~ElissoTreeView();
+    virtual ~ElissoFolderTree();
 
     void addTreeRoot(const Glib::ustring &strName,
                      PFSDirectory pDir);

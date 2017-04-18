@@ -26,7 +26,8 @@ typedef Glib::RefPtr<ElissoApplication> PElissoApplication;
  **************************************************************************/
 
 /**
- *  The Gtk::Application derivative which handles our GSettings instance, icon, main menu.
+ *  The Gtk::Application derivative which handles our GSettings instance, icon,
+ *  main menu, command line.
  */
 class ElissoApplication : public Gtk::Application
 {
@@ -43,6 +44,12 @@ public:
     void setSettingsString(const std::string &strKey,
                            const Glib::ustring &strData);
 
+    Glib::RefPtr<Gio::Menu> addMenuSection(Glib::RefPtr<Gio::Menu> pMenu);
+    void addMenuItem(Glib::RefPtr<Gio::Menu> pMenu,
+                     const Glib::ustring &strName,
+                     const Glib::ustring &strAction,
+                     const Glib::ustring &strAccelerator = "");
+
 protected:
     ElissoApplication(int argc,
                       char *argv[]);
@@ -50,11 +57,6 @@ protected:
     void on_startup();
 
     void on_activate();
-
-    void addMenuItem(Glib::RefPtr<Gio::Menu> pMenu,
-                     const Glib::ustring &strName,
-                     const Glib::ustring &strAction,
-                     const Glib::ustring &strAccelerator = "");
 
     PPixBuf                     _pIcon;
     Glib::RefPtr<Gio::Settings> _pSettings;
