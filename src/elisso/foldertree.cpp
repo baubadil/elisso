@@ -277,8 +277,9 @@ ElissoFolderTree::~ElissoFolderTree()
     delete _pImpl;
 }
 
-void ElissoFolderTree::addTreeRoot(const Glib::ustring &strName,
-                                 PFSDirectory pDir)
+void
+ElissoFolderTree::addTreeRoot(const Glib::ustring &strName,
+                              PFSDirectory pDir)
 {
     const FolderTreeModelColumns &cols = FolderTreeModelColumns::Get();
 
@@ -298,7 +299,8 @@ void ElissoFolderTree::addTreeRoot(const Glib::ustring &strName,
 /**
  *  Spawns a TreeJob to populate the tree node represented by the given iterator.
  */
-bool ElissoFolderTree::spawnPopulate(const Gtk::TreeModel::iterator &it)
+bool
+ElissoFolderTree::spawnPopulate(const Gtk::TreeModel::iterator &it)
 {
     bool rc = false;
 
@@ -340,7 +342,8 @@ bool ElissoFolderTree::spawnPopulate(const Gtk::TreeModel::iterator &it)
     return rc;
 }
 
-void ElissoFolderTree::onPopulateDone()
+void
+ElissoFolderTree::onPopulateDone()
 {
     FolderTreeModelColumns &cols = FolderTreeModelColumns::Get();
 
@@ -387,7 +390,8 @@ void ElissoFolderTree::onPopulateDone()
         this->spawnAddFirstSubfolders(pllToAddFirst);
 }
 
-void ElissoFolderTree::spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst)
+void
+ElissoFolderTree::spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst)
 {
     /*
      * Launch the thread!
@@ -426,7 +430,8 @@ void ElissoFolderTree::spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst)
  *  Called when this->_dispatcherAddFirst was signalled, which means the add-first
  *  thread has pushed a new item onto the queue.
  */
-void ElissoFolderTree::onAddAnotherFirst()
+void
+ElissoFolderTree::onAddAnotherFirst()
 {
     auto pAddOneFirst = this->_pImpl->workerAddOneFirst.fetchResult();
     if (pAddOneFirst)
@@ -468,8 +473,9 @@ void ElissoFolderTree::onNodeSelected()
     }
 }
 
-void ElissoFolderTree::onNodeExpanded(const Gtk::TreeModel::iterator &it,
-                                    const Gtk::TreeModel::Path &path)
+void
+ElissoFolderTree::onNodeExpanded(const Gtk::TreeModel::iterator &it,
+                                 const Gtk::TreeModel::Path &path)
 {
     const FolderTreeModelColumns &cols = FolderTreeModelColumns::Get();
     PFSModelBase pDir = (*it)[cols._colPDir];
@@ -490,13 +496,15 @@ void ElissoFolderTree::onNodeExpanded(const Gtk::TreeModel::iterator &it,
     }
 }
 
-Gtk::TreeModel::iterator ElissoFolderTree::getIterator(const PRowReference &pRowRef)
+Gtk::TreeModel::iterator
+ElissoFolderTree::getIterator(const PRowReference &pRowRef)
 {
     Gtk::TreePath path = pRowRef->get_path();
     return _pImpl->pTreeStore->get_iter(path);
 }
 
-PRowReference ElissoFolderTree::getRowReference(const Gtk::TreeModel::iterator &it)
+PRowReference
+ElissoFolderTree::getRowReference(const Gtk::TreeModel::iterator &it)
 {
     Gtk::TreePath path(it);
     return std::make_shared<Gtk::TreeRowReference>(_pImpl->pTreeStore, path);

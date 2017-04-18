@@ -40,7 +40,8 @@ ElissoApplication::create(int argc,
 /**
  *  Returns the application icon. Fetches and caches it on the first call.
  */
-PPixBuf ElissoApplication::getIcon()
+PPixBuf
+ElissoApplication::getIcon()
 {
     if (!_pIcon)
     {
@@ -54,7 +55,8 @@ PPixBuf ElissoApplication::getIcon()
 /**
  *  Returns a settings string from the application's GSettings.
  */
-Glib::ustring ElissoApplication::getSettingsString(const std::string &strKey)
+Glib::ustring
+ElissoApplication::getSettingsString(const std::string &strKey)
 {
     return _pSettings->get_string(strKey);
 }
@@ -62,7 +64,8 @@ Glib::ustring ElissoApplication::getSettingsString(const std::string &strKey)
 /**
  *  Returns a settings integer from the application's GSettings.
  */
-int ElissoApplication::getSettingsInt(const std::string &strKey)
+int
+ElissoApplication::getSettingsInt(const std::string &strKey)
 {
     return _pSettings->get_int(strKey);
 }
@@ -135,7 +138,8 @@ ElissoApplication::ElissoApplication(int argc,
     _pSettings = Glib::wrap(pSettings_c);
 }
 
-void ElissoApplication::on_startup()
+void
+ElissoApplication::on_startup()
 {
     Gtk::Application::on_startup();
 
@@ -183,7 +187,8 @@ void ElissoApplication::on_startup()
     this->set_menubar(pMenuBar);
 }
 
-void ElissoApplication::on_activate()
+void
+ElissoApplication::on_activate()
 {
     auto p = new ElissoApplicationWindow(*this, nullptr);
     this->add_window(*p);
@@ -197,7 +202,8 @@ void ElissoApplication::on_activate()
  *
  **************************************************************************/
 
-int main(int argc, char *argv[])
+int
+main(int argc, char *argv[])
 {
     g_flDebugSet = FOLDER_POPULATE;
 

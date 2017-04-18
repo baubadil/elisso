@@ -191,7 +191,8 @@ PFSModelBase FSModelBase::FindPath(const std::string &strPath)
  *
  *  Returns NULL if this is a file or a symlink to something other than a directory.
  */
-PFSDirectory FSModelBase::resolveDirectory()
+PFSDirectory
+FSModelBase::resolveDirectory()
 {
     if (getType() == FSType::DIRECTORY)
     {
@@ -217,7 +218,8 @@ PFSDirectory FSModelBase::resolveDirectory()
  *  testing I/O, so the given pGioFile could be for a non-existing file. We do the testing here.)
  */
 /* static */
-PFSModelBase FSModelBase::MakeAwake(Glib::RefPtr<Gio::File> pGioFile)
+PFSModelBase
+FSModelBase::MakeAwake(Glib::RefPtr<Gio::File> pGioFile)
 {
     PFSModelBase pReturn = nullptr;
     auto type = pGioFile->query_file_type(Gio::FileQueryInfoFlags::FILE_QUERY_INFO_NOFOLLOW_SYMLINKS);
@@ -254,7 +256,8 @@ PFSModelBase FSModelBase::MakeAwake(Glib::RefPtr<Gio::File> pGioFile)
 }
 
 /* static */
-PFSDirectory FSModelBase::FindDirectory(const std::string &strPath)
+PFSDirectory
+FSModelBase::FindDirectory(const std::string &strPath)
 {
     if (auto pFS = FindPath(strPath))
     {
@@ -274,7 +277,8 @@ FSModelBase::FSModelBase(FSType type, Glib::RefPtr<Gio::File> pGioFile)
 {
 }
 
-void FSModelBase::setParent(PFSDirectory pParentDirectory)
+void
+FSModelBase::setParent(PFSDirectory pParentDirectory)
 {
     FSLock lock;
     if (!pParentDirectory)
@@ -308,7 +312,8 @@ void FSModelBase::setParent(PFSDirectory pParentDirectory)
  *
  *  Overridden for symlinks!
  */
-bool FSModelBase::isHidden()
+bool
+FSModelBase::isHidden()
 {
     auto len = _strBasename.length();
     if (!len)
@@ -324,7 +329,8 @@ bool FSModelBase::isHidden()
 /*
  *  Expands the path without resorting to realpath(), which would hit the disk.
  */
-std::string FSModelBase::getRelativePath()
+std::string
+FSModelBase::getRelativePath()
 {
     std::string strFullpath;
     if (_pParent)
@@ -342,17 +348,20 @@ std::string FSModelBase::getRelativePath()
     return strFullpath;
 }
 
-uint64_t FSModelBase::getFileSize()
+uint64_t
+FSModelBase::getFileSize()
 {
     return _pGioFile->query_info()->get_size();
 }
 
-Glib::ustring FSModelBase::getIcon()
+Glib::ustring
+FSModelBase::getIcon()
 {
     return _pGioFile->query_info()->get_icon()->to_string();
 }
 
-PFSDirectory FSModelBase::getParent()
+PFSDirectory
+FSModelBase::getParent()
 {
     if (_pParent)
         ;
@@ -367,7 +376,8 @@ const std::string g_strDirectory("directory");
 const std::string g_strSymlink("symlink");
 const std::string g_strOther("other");
 
-const std::string& FSModelBase::describeType()
+const std::string&
+FSModelBase::describeType()
 {
     switch (_type)
     {
@@ -389,7 +399,8 @@ const std::string& FSModelBase::describeType()
     return g_strOther;
 }
 
-std::string FSModelBase::describe(bool fLong /* = false */ )
+std::string
+FSModelBase::describe(bool fLong /* = false */ )
 {
     return  describeType() + " \"" + (fLong ? getRelativePath() : getBasename()) + "\" (#" + to_string(_uID) + ")";
 }
@@ -407,7 +418,8 @@ FSFile::FSFile(Glib::RefPtr<Gio::File> pGioFile)
 }
 
 /* static */
-PFSFile FSFile::Create(Glib::RefPtr<Gio::File> pGioFile)
+PFSFile
+FSFile::Create(Glib::RefPtr<Gio::File> pGioFile)
 {
     /* This nasty trickery is necessary to make std::make_shared work with a protected constructor. */
     class Derived : public FSFile
@@ -440,7 +452,8 @@ FSDirectory::~FSDirectory()
 }
 
 /* static */
-PFSDirectory FSDirectory::Create(Glib::RefPtr<Gio::File> pGioFile)
+PFSDirectory
+FSDirectory::Create(Glib::RefPtr<Gio::File> pGioFile)
 {
     /* This nasty trickery is necessary to make std::make_shared work with a protected constructor. */
     class Derived : public FSDirectory
@@ -452,7 +465,8 @@ PFSDirectory FSDirectory::Create(Glib::RefPtr<Gio::File> pGioFile)
     return std::make_shared<Derived>(pGioFile);
 }
 
-PFSModelBase FSDirectory::isAwake(const string &strParticle)
+PFSModelBase
+FSDirectory::isAwake(const string &strParticle)
 {
     FSLock lock;
     auto it = _pImpl->mapContents.find(strParticle);
@@ -462,8 +476,9 @@ PFSModelBase FSDirectory::isAwake(const string &strParticle)
     return nullptr;
 }
 
-size_t FSDirectory::getContents(FSList &llFiles,
-                                Get getContents)
+size_t
+FSDirectory::getContents(FSList &llFiles,
+                         Get getContents)
 {
     FSLock lock;
     Debug::Enter(FILE_LOW, "Directory::getContents(\"" + getBasename() + "\")");
@@ -595,7 +610,8 @@ size_t FSDirectory::getContents(FSList &llFiles,
 }
 
 /*static */
-PFSModelBase FSDirectory::find(const string &strParticle)
+PFSModelBase
+FSDirectory::find(const string &strParticle)
 {
     FSLock lock;
 
@@ -620,7 +636,8 @@ PFSModelBase FSDirectory::find(const string &strParticle)
     return pReturn;
 }
 
-PFSDirectory FSDirectory::findSubdirectory(const std::string &strParticle)
+PFSDirectory
+FSDirectory::findSubdirectory(const std::string &strParticle)
 {
     PFSModelBase p;
     if ((p = find(strParticle)))
@@ -633,7 +650,8 @@ PFSDirectory FSDirectory::findSubdirectory(const std::string &strParticle)
  *  Returns the user's home directory, or nullptr on errors.
  */
 /* static */
-PFSDirectory FSDirectory::GetHome()
+PFSDirectory
+FSDirectory::GetHome()
 {
     const char *p;
     if ((p = getenv("HOME")))
@@ -641,7 +659,8 @@ PFSDirectory FSDirectory::GetHome()
     return nullptr;
 }
 
-PFSDirectory FSDirectory::GetRoot()
+PFSDirectory
+FSDirectory::GetRoot()
 {
     return RootDirectory::GetImpl();
 }
@@ -653,7 +672,8 @@ RootDirectory::RootDirectory()
 }
 
 /*static */
-PRootDirectory RootDirectory::GetImpl()
+PRootDirectory
+RootDirectory::GetImpl()
 {
     FSLock lock;
     if (!s_theRoot)
@@ -676,7 +696,8 @@ CurrentDirectory::CurrentDirectory()
 }
 
 /*static */
-PCurrentDirectory CurrentDirectory::GetImpl()
+PCurrentDirectory
+CurrentDirectory::GetImpl()
 {
     FSLock lock;
     if (!s_theCWD)
@@ -705,7 +726,8 @@ FSSymlink::FSSymlink(Glib::RefPtr<Gio::File> pGioFile)
 }
 
 /* virtual */
-FSTypeResolved FSSymlink::getResolvedType() /* override */
+FSTypeResolved
+FSSymlink::getResolvedType() /* override */
 {
     FSLock lock;
     Debug::Log(FILE_LOW, "Symlink::getResolvedTypeImpl()");
@@ -730,7 +752,8 @@ FSTypeResolved FSSymlink::getResolvedType() /* override */
 }
 
 /* static */
-PFSSymlink FSSymlink::Create(Glib::RefPtr<Gio::File> pGioFile)
+PFSSymlink
+FSSymlink::Create(Glib::RefPtr<Gio::File> pGioFile)
 {
     /* This nasty trickery is necessary to make std::make_shared work with a protected constructor. */
     class Derived : public FSSymlink
@@ -742,7 +765,8 @@ PFSSymlink FSSymlink::Create(Glib::RefPtr<Gio::File> pGioFile)
     return std::make_shared<Derived>(pGioFile);
 }
 
-PFSModelBase FSSymlink::getTarget()
+PFSModelBase
+FSSymlink::getTarget()
 {
     FSLock lock;
     follow(lock);
@@ -750,7 +774,8 @@ PFSModelBase FSSymlink::getTarget()
 }
 
 
-void FSSymlink::follow(FSLock &lock)
+void
+FSSymlink::follow(FSLock &lock)
 {
     Debug::Enter(FILE_LOW, "FSSymlink::follow(\"" + getRelativePath() + "\"");
     if (_state == State::NOT_FOLLOWED_YET)
@@ -813,7 +838,8 @@ FSSpecial::FSSpecial(Glib::RefPtr<Gio::File> pGioFile)
 }
 
 /* static */
-PFSSpecial FSSpecial::Create(Glib::RefPtr<Gio::File> pGioFile)
+PFSSpecial
+FSSpecial::Create(Glib::RefPtr<Gio::File> pGioFile)
 {
     /* This nasty trickery is necessary to make std::make_shared work with a protected constructor. */
     class Derived : public FSSpecial
@@ -838,7 +864,8 @@ FSMountable::FSMountable(Glib::RefPtr<Gio::File> pGioFile)
 }
 
 /* static */
-PFSMountable FSMountable::Create(Glib::RefPtr<Gio::File> pGioFile)
+PFSMountable
+FSMountable::Create(Glib::RefPtr<Gio::File> pGioFile)
 {
     /* This nasty trickery is necessary to make std::make_shared work with a protected constructor. */
     class Derived : public FSMountable

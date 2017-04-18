@@ -111,7 +111,8 @@ struct ElissoFolderView::Selection
  *
  **************************************************************************/
 
-bool TreeViewWithPopup::on_button_press_event(GdkEventButton* button_event) /* override */
+bool
+TreeViewWithPopup::on_button_press_event(GdkEventButton* button_event) /* override */
 {
     if  ((button_event->type == GDK_BUTTON_PRESS) && (button_event->button == 3))
     {
@@ -242,8 +243,9 @@ ElissoFolderView::~ElissoFolderView()
  *
  *  Returns true if a populate thread was started, or false if the folder had already been populated.
  */
-bool ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
-                                    bool fPushToHistory /* = true */)
+bool
+ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
+                               bool fPushToHistory /* = true */)
 {
     bool rc = false;
     auto t = pDirOrSymlinkToDir->getResolvedType();
@@ -286,12 +288,14 @@ bool ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
     return rc;
 }
 
-bool ElissoFolderView::canGoBack()
+bool
+ElissoFolderView::canGoBack()
 {
     return (_uPreviousOffset < _aPathHistory.size());
 }
 
-bool ElissoFolderView::goBack()
+bool
+ElissoFolderView::goBack()
 {
     if (this->canGoBack())
     {
@@ -313,12 +317,14 @@ bool ElissoFolderView::goBack()
     return false;
 }
 
-bool ElissoFolderView::canGoForward()
+bool
+ElissoFolderView::canGoForward()
 {
     return (_uPreviousOffset > _aPathHistory.size());
 }
 
-bool ElissoFolderView::goForward()
+bool
+ElissoFolderView::goForward()
 {
     if (this->canGoForward())
     {
@@ -335,7 +341,8 @@ bool ElissoFolderView::goForward()
     return false;
 }
 
-void ElissoFolderView::setState(ViewState s)
+void
+ElissoFolderView::setState(ViewState s)
 {
     if (s != _state)
     {
@@ -381,7 +388,8 @@ void ElissoFolderView::setState(ViewState s)
     }
 }
 
-void ElissoFolderView::setViewMode(FolderViewMode m)
+void
+ElissoFolderView::setViewMode(FolderViewMode m)
 {
     if (m != _mode)
     {
@@ -458,7 +466,8 @@ void ElissoFolderView::setViewMode(FolderViewMode m)
 /**
  *  As a special case, if pFS == nullptr, we try to get the current selection.
  */
-void ElissoFolderView::openFile(PFSModelBase pFS)
+void
+ElissoFolderView::openFile(PFSModelBase pFS)
 {
     if (!pFS)
     {
@@ -510,7 +519,8 @@ void ElissoFolderView::openFile(PFSModelBase pFS)
     }
 }
 
-void ElissoFolderView::openTerminalOnSelectedFolder()
+void
+ElissoFolderView::openTerminalOnSelectedFolder()
 {
     Selection sel;
     size_t cTotal = getSelection(sel);
@@ -534,7 +544,8 @@ void ElissoFolderView::openTerminalOnSelectedFolder()
  *
  *  Gets called only from setDirectory() at this time.
  */
-bool ElissoFolderView::spawnPopulate()
+bool
+ElissoFolderView::spawnPopulate()
 {
     bool rc = false;
     if (_state != ViewState::POPULATING)
@@ -566,9 +577,10 @@ bool ElissoFolderView::spawnPopulate()
     return rc;
 }
 
-void ForEachSubstring(const Glib::ustring &str,
-                      const Glib::ustring &strDelimiter,
-                      std::function<void (const Glib::ustring&)> fnParticle)
+void
+ForEachSubstring(const Glib::ustring &str,
+                 const Glib::ustring &strDelimiter,
+                 std::function<void (const Glib::ustring&)> fnParticle)
 {
     size_t p1 = 0;
     size_t p2;
@@ -583,7 +595,8 @@ void ForEachSubstring(const Glib::ustring &str,
     fnParticle(str.substr(p1));
 }
 
-void ElissoFolderView::dumpStack()
+void
+ElissoFolderView::dumpStack()
 {
     uint i = 0;
     for (auto &s : _aPathHistory)
@@ -591,7 +604,8 @@ void ElissoFolderView::dumpStack()
     Debug::Log(FOLDER_STACK, "offset: " + to_string(_uPreviousOffset));
 }
 
-void ElissoFolderView::onPopulateDone()
+void
+ElissoFolderView::onPopulateDone()
 {
     const FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
 
@@ -640,7 +654,8 @@ void ElissoFolderView::onPopulateDone()
     this->setState(ViewState::POPULATED);
 }
 
-void ElissoFolderView::connectModel(bool fConnect)
+void
+ElissoFolderView::connectModel(bool fConnect)
 {
     switch (_mode)
     {
@@ -693,7 +708,8 @@ void ElissoFolderView::connectModel(bool fConnect)
     }
 }
 
-void ElissoFolderView::setListViewColumns()
+void
+ElissoFolderView::setListViewColumns()
 {
     int i;
     Gtk::TreeView::Column* pColumn;
@@ -752,7 +768,8 @@ void ElissoFolderView::setListViewColumns()
     _treeView.set_fixed_height_mode(true);
 }
 
-PFSModelBase  ElissoFolderView::getFSObject(Gtk::TreeModel::iterator &iter)
+PFSModelBase
+ElissoFolderView::getFSObject(Gtk::TreeModel::iterator &iter)
 {
     if (iter)
     {
@@ -769,7 +786,8 @@ PFSModelBase  ElissoFolderView::getFSObject(Gtk::TreeModel::iterator &iter)
     return nullptr;
 }
 
-size_t ElissoFolderView::getSelection(Selection &sel)
+size_t
+ElissoFolderView::getSelection(Selection &sel)
 {
     auto pSelection = _treeView.get_selection();
     if (pSelection)
@@ -809,7 +827,8 @@ size_t ElissoFolderView::getSelection(Selection &sel)
 /**
  *  Shared event handler between the icon view and the tree view for double clicks.
  */
-void ElissoFolderView::onPathActivated(const Gtk::TreeModel::Path &path)
+void
+ElissoFolderView::onPathActivated(const Gtk::TreeModel::Path &path)
 {
     Gtk::TreeModel::iterator iter = _pImpl->pListStore->get_iter(path);
     PFSModelBase pFS = getFSObject(iter);
@@ -820,7 +839,8 @@ void ElissoFolderView::onPathActivated(const Gtk::TreeModel::Path &path)
     }
 }
 
-void ElissoFolderView::onSelectionChanged()
+void
+ElissoFolderView::onSelectionChanged()
 {
     if (_state == ViewState::POPULATED)
     {
@@ -842,7 +862,8 @@ void ElissoFolderView::onSelectionChanged()
  *
  *   -- Multiple objects selected.      Copy/Cut/Paste, Delete
  */
-void ElissoFolderView::onMouseButton3Pressed(GdkEventButton* event)
+void
+ElissoFolderView::onMouseButton3Pressed(GdkEventButton* event)
 {
     auto &app = _mainWindow.getApplication();
 

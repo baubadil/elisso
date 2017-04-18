@@ -104,7 +104,8 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app,
     _notebook.show_all();
 }
 
-void ElissoApplicationWindow::initActionHandlers()
+void
+ElissoApplicationWindow::initActionHandlers()
 {
     /*
      *  File menu
@@ -264,7 +265,8 @@ void ElissoApplicationWindow::initActionHandlers()
     });
 }
 
-void ElissoApplicationWindow::setSizeAndPosition()
+void
+ElissoApplicationWindow::setSizeAndPosition()
 {
     auto strPos = _app.getSettingsString(SETTINGS_WINDOWPOS);     // x,x,1000,600
     auto v = explodeVector(strPos, ",");
@@ -307,9 +309,10 @@ void ElissoApplicationWindow::setSizeAndPosition()
         this->fullscreen();
 }
 
-Gtk::ToolButton* ElissoApplicationWindow::makeToolButton(const Glib::ustring &strIconName,
-                                                         PSimpleAction pAction,
-                                                         bool fAlignRight /* = false*/ )
+Gtk::ToolButton*
+ElissoApplicationWindow::makeToolButton(const Glib::ustring &strIconName,
+                                        PSimpleAction pAction,
+                                        bool fAlignRight /* = false*/ )
 {
     Gtk::ToolButton *pButton = nullptr;
     if (pAction)
@@ -330,7 +333,8 @@ Gtk::ToolButton* ElissoApplicationWindow::makeToolButton(const Glib::ustring &st
 }
 
 /* virtual */
-void ElissoApplicationWindow::on_size_allocate(Gtk::Allocation& allocation) /* override */
+void
+ElissoApplicationWindow::on_size_allocate(Gtk::Allocation& allocation) /* override */
 {
     ApplicationWindow::on_size_allocate(allocation);
 
@@ -342,7 +346,8 @@ void ElissoApplicationWindow::on_size_allocate(Gtk::Allocation& allocation) /* o
 }
 
 /* virtual */
-bool ElissoApplicationWindow::on_window_state_event(GdkEventWindowState *ev) /* override */
+bool
+ElissoApplicationWindow::on_window_state_event(GdkEventWindowState *ev) /* override */
 {
     ApplicationWindow::on_window_state_event(ev);
 
@@ -353,7 +358,8 @@ bool ElissoApplicationWindow::on_window_state_event(GdkEventWindowState *ev) /* 
 }
 
 /* virtual */
-bool ElissoApplicationWindow::on_delete_event(GdkEventAny *ev) /* override */
+bool
+ElissoApplicationWindow::on_delete_event(GdkEventAny *ev) /* override */
 {
     ApplicationWindow::on_delete_event(ev);
 
@@ -376,7 +382,8 @@ bool ElissoApplicationWindow::on_delete_event(GdkEventAny *ev) /* override */
  *
  *  If pDir is nullptr, we retrieve the user's home directory from the FS backend.
  */
-void ElissoApplicationWindow::addFolderTab(PFSModelBase pDirOrSymlink)       //!< in: directory to open, or nullptr for "home"
+void
+ElissoApplicationWindow::addFolderTab(PFSModelBase pDirOrSymlink)       //!< in: directory to open, or nullptr for "home"
 {
     // Create a new view and push it onto the std::vector, which owns it.
     auto pView = new ElissoFolderView(*this);
@@ -395,7 +402,8 @@ void ElissoApplicationWindow::addFolderTab(PFSModelBase pDirOrSymlink)       //!
  *  Closes the notebook tab for the given ElissoFolderView. If this is the last
  *  tab, it closes the entire ElissoApplicationWindow.
  */
-void ElissoApplicationWindow::closeFolderTab(ElissoFolderView &viewClose)
+void
+ElissoApplicationWindow::closeFolderTab(ElissoFolderView &viewClose)
 {
     int cPages = _notebook.get_n_pages();
     if (cPages > 1)
@@ -434,7 +442,8 @@ int ElissoApplicationWindow::errorBox(Glib::ustring strMessage)
 /**
  *  Returns the ElissoFolderView that is on the currently active notebook page.
  */
-ElissoFolderView* ElissoApplicationWindow::getActiveFolderView()
+ElissoFolderView*
+ElissoApplicationWindow::getActiveFolderView()
 {
     auto i = _notebook.get_current_page();
     if (i != -1)
@@ -446,7 +455,8 @@ ElissoFolderView* ElissoApplicationWindow::getActiveFolderView()
 /**
  *  Called from ElissoFolderView::onSelectionChanged() whenever the selection changes.
  */
-void ElissoApplicationWindow::enableEditActions(size_t cFolders, size_t cOtherFiles)
+void
+ElissoApplicationWindow::enableEditActions(size_t cFolders, size_t cOtherFiles)
 {
     Debug::Log(DEBUG_ALWAYS, "cFolders: " + to_string(cFolders) + ", cOtherFiles: " + to_string(cOtherFiles));
     size_t cTotal = cFolders + cOtherFiles;
@@ -463,7 +473,8 @@ void ElissoApplicationWindow::enableEditActions(size_t cFolders, size_t cOtherFi
 /**
  *  Called from ElissoFolderView::setDirectory() to enable back/forward actions.
  */
-void ElissoApplicationWindow::enableBackForwardActions()
+void
+ElissoApplicationWindow::enableBackForwardActions()
 {
     ElissoFolderView *pActive;
     if ((pActive = getActiveFolderView()))
@@ -473,7 +484,8 @@ void ElissoApplicationWindow::enableBackForwardActions()
     }
 }
 
-void ElissoApplicationWindow::onLoadingFolderView(ElissoFolderView &view)
+void
+ElissoApplicationWindow::onLoadingFolderView(ElissoFolderView &view)
 {
     PFSModelBase pDir = view.getDirectory();
 
@@ -490,7 +502,8 @@ void ElissoApplicationWindow::onLoadingFolderView(ElissoFolderView &view)
  *  In both cases we want to update the title bar, and we want to update the tree to point to the
  *  folder that's displaying on the right.
  */
-void ElissoApplicationWindow::onFolderViewReady(ElissoFolderView &view)
+void
+ElissoApplicationWindow::onFolderViewReady(ElissoFolderView &view)
 {
     PFSModelBase pDir = view.getDirectory();
 
