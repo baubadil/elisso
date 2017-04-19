@@ -36,11 +36,13 @@ class FolderTreeModelColumns : public Gtk::TreeModelColumnRecord
 public:
     FolderTreeModelColumns()
     {
+        add(_colMajorSort);
         add(_colIconAndName);
         add(_colPDir);
         add(_colState);
     }
 
+    Gtk::TreeModelColumn<uint8_t>                   _colMajorSort;         // To keep "home" sorted before "file system" etc.
     Gtk::TreeModelColumn<Glib::ustring>             _colIconAndName;
     Gtk::TreeModelColumn<PFSModelBase>              _colPDir;
     Gtk::TreeModelColumn<TreeNodeState>             _colState;
@@ -256,7 +258,19 @@ ElissoFolderTree::ElissoFolderTree(ElissoApplicationWindow &mainWindow)
     _treeView.set_headers_visible(false);
     _treeView.append_column("Name", cols._colIconAndName);
 
-    _pImpl->pTreeStore->set_sort_column(cols._colIconAndName, Gtk::SortType::SORT_ASCENDING);
+    _pImpl->pTreeStore->set_sort_func(cols._colIconAndName, [&cols](const Gtk::TreeModel::iterator &a,
+                                                                    const Gtk::TreeModel::iterator &b) -> int
+    {
+        auto rowA = *a;
+        auto rowB = *b;
+        if (rowA[cols._colMajorSort] < rowB[cols._colMajorSort])
+            return -1;
+        if (rowA[cols._colMajorSort] > rowB[cols._colMajorSort])
+            return +1;
+        const Glib::ustring &strA = rowA[cols._colIconAndName];
+        const Glib::ustring &strB = rowB[cols._colIconAndName];
+        return strA.compare(strB);
+    });
 
     // Connect the GUI thread dispatcher for when a folder populate is done.
     _pImpl->workerPopulated.connect([this]()
@@ -278,10 +292,13 @@ ElissoFolderTree::ElissoFolderTree(ElissoApplicationWindow &mainWindow)
         this->onNodeSelected();
     });
 
-    _treeView.signal_row_activated().connect([](const Gtk::TreeModel::Path&,
-                                                Gtk::TreeViewColumn*)
+    _treeView.signal_row_activated().connect([this](const Gtk::TreeModel::Path &path,
+                                                    Gtk::TreeViewColumn*)
     {
-        Debug::Log(FOLDER_POPULATE_LOW, "tree item activated");
+        if (!_treeView.row_expanded(path))
+            _treeView.expand_row(path, false);
+        else
+            _treeView.collapse_row(path);
     });
 
     _treeView.signal_row_expanded().connect([this](const Gtk::TreeModel::iterator &it,
@@ -295,6 +312,7 @@ ElissoFolderTree::ElissoFolderTree(ElissoApplicationWindow &mainWindow)
     this->show_all_children();
 
     this->addTreeRoot("Home", FSDirectory::GetHome());
+    this->addTreeRoot("File system", FSDirectory::GetRoot());
 //     this->addTreeRoot("File system", FSDirectory::GetRoot());
 }
 
@@ -304,6 +322,8 @@ ElissoFolderTree::~ElissoFolderTree()
     delete _pImpl;
 }
 
+uint8_t g_cTreeRootItems = 0;
+
 void
 ElissoFolderTree::addTreeRoot(const Glib::ustring &strName,
                               PFSDirectory pDir)
@@ -312,6 +332,7 @@ ElissoFolderTree::addTreeRoot(const Glib::ustring &strName,
 
     Gtk::TreeModel::iterator itRoot;
     itRoot = _pImpl->pTreeStore->append();
+    (*itRoot)[cols._colMajorSort] = g_cTreeRootItems++;
     (*itRoot)[cols._colIconAndName] = strName;
     (*itRoot)[cols._colPDir] = pDir;
     (*itRoot)[cols._colState] = TreeNodeState::UNKNOWN;
@@ -413,13 +434,15 @@ ElissoFolderTree::select(PFSModelBase pDir)
                 // insert a node for the child.
                 if (!fFound)
                 {
-                    auto row = *itParticle;
+//                     auto row = *itParticle;
 //                     if (    (row[cols._colState] != TreeNodeState::POPULATED_WITH_FOLDERS)
 //                          && (row[cols._colState] != TreeNodeState::POPULATING)
 //                        )
                     {
-                        PFSDirectory pDir2 = pFSParticle->resolveDirectory();
-                        if ((pFSParticle = pDir2->find(strParticle)))
+                        FSContainer *pDir2 = pFSParticle->getContainer();
+                        if (    pDir2
+                             && ((pFSParticle = pDir2->find(strParticle)))
+                           )
                         {
                             Debug::Log(DEBUG_ALWAYS, "    inserted and selecting " + strParticle);
                             itParticle = this->insertNode(strParticle,
@@ -459,10 +482,10 @@ ElissoFolderTree::spawnPopulate(const Gtk::TreeModel::iterator &it)
     if ((*it)[cols._colState] != TreeNodeState::POPULATED_WITH_FOLDERS)
     {
         PFSModelBase pDir = (*it)[cols._colPDir];
-        PFSDirectory pDir2 = pDir->resolveDirectory();
+        FSContainer *pDir2 = pDir->getContainer();
         if (pDir2)
         {
-            Debug::Log(FOLDER_POPULATE_HIGH, "POPULATING TREE \"" + ((pDir2) ? pDir2->getRelativePath() : "NULL") + "\"");
+            Debug::Log(FOLDER_POPULATE_HIGH, "POPULATING TREE \"" + ((pDir2) ? pDir->getRelativePath() : "NULL") + "\"");
 
             (*it)[cols._colState] = TreeNodeState::POPULATING;
 
@@ -504,6 +527,10 @@ ElissoFolderTree::onPopulateDone()
 
     Debug::Log(FOLDER_POPULATE_LOW, "TreeJob::onPopulateDone(\"" + pPopulated->_pDirOrSymlink->getRelativePath() + "\")");
 
+    // Turn of sorting before inserting a lot of items. This can really slow things down exponentially otherwise.
+    _pImpl->pTreeStore->set_sort_column(Gtk::TreeSortable::DEFAULT_UNSORTED_COLUMN_ID,
+                                        Gtk::SortType::SORT_ASCENDING);
+
     auto itPopulating = this->getIterator(pPopulated->_pRowRef);
 
     PAddOneFirstsList pllToAddFirst = std::make_shared<AddOneFirstsList>();
@@ -536,6 +563,9 @@ ElissoFolderTree::onPopulateDone()
             pllToAddFirst->push_back(std::make_shared<AddOneFirst>(pFS, pRowRef));
         }
 
+    // Now sort again.
+    _pImpl->pTreeStore->set_sort_column(cols._colIconAndName, Gtk::SortType::SORT_ASCENDING);
+
     if (pllToAddFirst->size())
         this->spawnAddFirstSubfolders(pllToAddFirst);
 }
@@ -547,6 +577,7 @@ ElissoFolderTree::insertNode(const Glib::ustring &strName,
 {
     FolderTreeModelColumns &cols = FolderTreeModelColumns::Get();
     auto itChild = _pImpl->pTreeStore->append(children);
+    (*itChild)[cols._colMajorSort] = 0;
     (*itChild)[cols._colIconAndName] = strName;
     (*itChild)[cols._colPDir] = pFS;
     (*itChild)[cols._colState] = TreeNodeState::UNKNOWN;
@@ -566,7 +597,7 @@ ElissoFolderTree::spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst)
         {
             try
             {
-                PFSDirectory pDir = pAddOneFirst->_pDirOrSymlink->resolveDirectory();
+                FSContainer *pDir = pAddOneFirst->_pDirOrSymlink->getContainer();
                 if (pDir)
                 {
                     FSList llFiles;
@@ -577,7 +608,6 @@ ElissoFolderTree::spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst)
                         if (!pFS->isHidden())
                         {
                             pAddOneFirst->_pFirstSubfolder = pFS;
-
                             _pImpl->workerAddOneFirst.addResult(pAddOneFirst);
                             break;
                         }
@@ -609,12 +639,8 @@ ElissoFolderTree::onAddAnotherFirst()
         Gtk::TreePath path = pAddOneFirst->_pRowRef->get_path();
         auto it = _pImpl->pTreeStore->get_iter(path);
         if (pFSGrandchild)
-        {
-            Gtk::TreeModel::iterator itGrandChild = _pImpl->pTreeStore->append(it->children());
-            (*itGrandChild)[cols._colIconAndName] = pFSGrandchild->getBasename();
-            (*itGrandChild)[cols._colPDir] = pFSGrandchild;
-            (*itGrandChild)[cols._colState] = TreeNodeState::UNKNOWN;
-        }
+            this->insertNode(pFSGrandchild->getBasename(), pFSGrandchild, it->children());
+
         (*it)[cols._colState] = TreeNodeState::POPULATED_WITH_FIRST;
     }
 
@@ -636,7 +662,11 @@ void ElissoFolderTree::onNodeSelected()
             {
                 auto pActiveFolderView = _mainWindow.getActiveFolderView();
                 if (pActiveFolderView)
-                    pActiveFolderView->setDirectory(pDir, {});
+                    pActiveFolderView->setDirectory(pDir,
+                                                    SetDirectoryFlags::CLICK_FROM_TREE);
+
+                            // SetDirectoryFlags::CLICK_FROM_TREE prevents the callback to select the node in the
+                            // tree again, which is already selected, since we're in the "selected" signal handler.
             }
         }
     }

@@ -79,14 +79,15 @@ FolderContentsModelColumns* FolderContentsModelColumns::s_p = nullptr;
  */
 struct ElissoFolderView::PopulateData : public ProhibitCopy
 {
-    PFSDirectory        pDir;
+    PFSModelBase        pDir;
     Glib::Dispatcher    &dispatch;
     FSList              &llFolderContents;
     Glib::ustring       strError;
     std::thread         *pThread = nullptr;
     StopFlag            stopFlag;
+    bool                fClickFromTree = false;     // true if SetDirectoryFlags::CLICK_FROM_TREE was set.
 
-    PopulateData(PFSDirectory &pDir_,
+    PopulateData(PFSModelBase &pDir_,
                  Glib::Dispatcher &dispatch_,
                  FSList &llFolderContents_)
         : pDir(pDir_),
@@ -338,25 +339,30 @@ ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
             _pImpl->pListStore->clear();
             _pImpl->llFolderContents.clear();
 
-            PFSDirectory pDir = this->_pDir->resolveDirectory();
+            FSContainer *pDir = this->_pDir->getContainer();
             if (!pDir)
                 this->setError("Invalid directory");
             else
             {
                 Debug::Log(FOLDER_POPULATE_HIGH, "POPULATING LIST \"" + _pDir->getRelativePath() + "\"");
 
-                PPopulateData pPopulateData = std::make_shared<PopulateData>(pDir,
+                PPopulateData pPopulateData = std::make_shared<PopulateData>(this->_pDir,
                                                                              this->_pImpl->dispatcherPopulateDone,
                                                                              _pImpl->llFolderContents);
                 this->_pImpl->pPopulateData = pPopulateData;
+
+                if (fl.test(SetDirectoryFlags::CLICK_FROM_TREE))
+                    pPopulateData->fClickFromTree = true;
 
                 pPopulateData->pThread = new std::thread([pPopulateData]()
                 {
                     try
                     {
-                        pPopulateData->pDir->getContents(pPopulateData->llFolderContents,
-                                                         FSDirectory::Get::ALL,
-                                                         &pPopulateData->stopFlag);
+                        FSContainer *pDir = pPopulateData->pDir->getContainer();
+                        if (pDir)
+                            pDir->getContents(pPopulateData->llFolderContents,
+                                              FSDirectory::Get::ALL,
+                                              &pPopulateData->stopFlag);
                     }
                     catch(exception &e)
                     {
@@ -382,6 +388,60 @@ ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
     return rc;
 }
 
+/**
+ *  Gets called when the populate thread within setDirectory() has finished. We must now
+ *  inspect the PopulateData in the implementation struct for the results.
+ */
+void
+ElissoFolderView::onPopulateDone()
+{
+    if (!_pImpl->pPopulateData)
+        throw FSException("PopulateData is nullptr");
+
+    if (_pImpl->pPopulateData->strError.size())
+        this->setError(_pImpl->pPopulateData->strError);
+    else
+    {
+        const FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
+
+        Debug::Log(FOLDER_POPULATE_LOW, "ElissoFolderView::onPopulateDone(\"" + _pDir->getRelativePath() + "\")");
+
+        for (auto &pFS : _pImpl->llFolderContents)
+            if (!pFS->isHidden())
+            {
+                auto row = *(_pImpl->pListStore->append());
+
+//                 PPixBuf pb2 = _pImpl->pIconTheme->choose_icon(sv, 50).load_icon();
+//                 row[cols._colIconBig] = pb2;
+
+                row[cols._colFilename] = pFS->getBasename();
+                row[cols._colSize] = pFS->getFileSize();
+                row[cols._colPFile] = pFS;
+
+                auto t = pFS->getResolvedType();
+//                 row[cols._colTypeResolved] = t;
+
+                const char *p = "Special";
+                switch (t)
+                {
+                    case FSTypeResolved::FILE: p = "File"; break;
+                    case FSTypeResolved::DIRECTORY: p = "Folder"; break;
+                    case FSTypeResolved::SYMLINK_TO_FILE: p = "Link to file"; break;
+                    case FSTypeResolved::SYMLINK_TO_DIRECTORY: p = "Link to folder"; break;
+                    case FSTypeResolved::BROKEN_SYMLINK: p = "Broken link"; break;
+                    default: break;
+                }
+
+                row[cols._colTypeString] = Glib::ustring(p);
+            }
+
+        this->setState(ViewState::POPULATED);
+
+        // Release the populate data.
+        this->_pImpl->pPopulateData = nullptr;
+    }
+}
+
 void
 ElissoFolderView::refresh()
 {
@@ -389,7 +449,7 @@ ElissoFolderView::refresh()
          && (_pDir)
        )
     {
-        PFSDirectory pDir = _pDir->resolveDirectory();
+        FSContainer *pDir = _pDir->getContainer();
         if (pDir)
         {
             pDir->unsetPopulated();
@@ -500,13 +560,21 @@ ElissoFolderView::setState(ViewState s)
                 }
 
                 // Notify the tree that this folder has been populated.
-                _mainWindow.onFolderViewLoaded(*this, true);
+                // Do not select the node in the tree if the click came from
+                // the tree in the first place.
+                PFSModelBase pDirSelect;
+                if (    (!_pImpl->pPopulateData)
+                     || (!_pImpl->pPopulateData->fClickFromTree)
+                   )
+                    pDirSelect = _pDir;
+
+                _mainWindow.onFolderViewLoaded(*this, pDirSelect);
             }
             break;
 
             case ViewState::ERROR:
                 _mainWindow.getNotebook().set_tab_label_text(*this, "Error");
-                _mainWindow.onFolderViewLoaded(*this, false);
+                _mainWindow.onFolderViewLoaded(*this, nullptr);
             break;
 
             default:
@@ -628,7 +696,27 @@ ElissoFolderView::setError(Glib::ustring strError)
 }
 
 /**
+ *  Returns the single selected folder (directory or symlink pointing to one),
+ *  or nullptr if either nothing is selected or the selection is not a single
+ *  such folder.
+ */
+PFSModelBase
+ElissoFolderView::getSelectedFolder()
+{
+    Selection sel;
+    size_t cTotal = getSelection(sel);
+    if (cTotal == 1)
+        if (sel.llFolders.size() == 1)
+            return sel.llFolders.front();
+
+    return nullptr;
+}
+
+/**
  *  As a special case, if pFS == nullptr, we try to get the current selection.
+ *
+ *  m should be DEFAULT_APP, unless pFS or the current selection is a folder,
+ *  in which case FOLDER_IN_TERMINAL or FOLDER_IN_NEW_TAB are also permitted.
  */
 void
 ElissoFolderView::openFile(PFSModelBase pFS)
@@ -684,26 +772,6 @@ ElissoFolderView::openFile(PFSModelBase pFS)
 }
 
 void
-ElissoFolderView::openTerminalOnSelectedFolder()
-{
-    Selection sel;
-    size_t cTotal = getSelection(sel);
-    if (    (cTotal == 1)
-         && (sel.llFolders.size() == 1)
-       )
-    {
-        auto pFS = sel.llFolders.front();
-        if (pFS)
-        {
-            auto strPath = pFS->getRelativePath();
-            g_subprocess_new(G_SUBPROCESS_FLAGS_NONE,
-                             NULL,
-                             "open", "--screen", "auto", strPath.c_str(), nullptr);
-        }
-    }
-}
-
-void
 ForEachSubstring(const Glib::ustring &str,
                  const Glib::ustring &strDelimiter,
                  std::function<void (const Glib::ustring&)> fnParticle)
@@ -728,60 +796,6 @@ ElissoFolderView::dumpStack()
     for (auto &s : _aPathHistory)
         Debug::Log(FOLDER_STACK, "stack item " + to_string(i++) + ": " + s);
     Debug::Log(FOLDER_STACK, "offset: " + to_string(_uPreviousOffset));
-}
-
-/**
- *  Gets called when the populate thread within setDirectory() has finished. We must now
- *  inspect the PopulateData in the implementation struct for the results.
- */
-void
-ElissoFolderView::onPopulateDone()
-{
-    if (!_pImpl->pPopulateData)
-        throw FSException("PopulateData is nullptr");
-
-    if (_pImpl->pPopulateData->strError.size())
-        this->setError(_pImpl->pPopulateData->strError);
-    else
-    {
-        const FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
-
-        Debug::Log(FOLDER_POPULATE_LOW, "ElissoFolderView::onPopulateDone(\"" + _pDir->getRelativePath() + "\")");
-
-        for (auto &pFS : _pImpl->llFolderContents)
-            if (!pFS->isHidden())
-            {
-                auto row = *(_pImpl->pListStore->append());
-
-//                 PPixBuf pb2 = _pImpl->pIconTheme->choose_icon(sv, 50).load_icon();
-//                 row[cols._colIconBig] = pb2;
-
-                row[cols._colFilename] = pFS->getBasename();
-                row[cols._colSize] = pFS->getFileSize();
-                row[cols._colPFile] = pFS;
-
-                auto t = pFS->getResolvedType();
-//                 row[cols._colTypeResolved] = t;
-
-                const char *p = "Special";
-                switch (t)
-                {
-                    case FSTypeResolved::FILE: p = "File"; break;
-                    case FSTypeResolved::DIRECTORY: p = "Folder"; break;
-                    case FSTypeResolved::SYMLINK_TO_FILE: p = "Link to file"; break;
-                    case FSTypeResolved::SYMLINK_TO_DIRECTORY: p = "Link to folder"; break;
-                    case FSTypeResolved::BROKEN_SYMLINK: p = "Broken link"; break;
-                    default: break;
-                }
-
-                row[cols._colTypeString] = Glib::ustring(p);
-            }
-
-        this->setState(ViewState::POPULATED);
-
-        // Release the populate data.
-        this->_pImpl->pPopulateData = nullptr;
-    }
 }
 
 void
@@ -1037,7 +1051,8 @@ ElissoFolderView::onMouseButton3Pressed(GdkEventButton* event)
 //     if (cTotal == 1)
         app.addMenuItem(pMenu, "Open", ACTION_EDIT_OPEN);
 //     if (sel.llFolders.size())
-        app.addMenuItem(pMenu, "Open in terminal", ACTION_EDIT_TERMINAL);
+        app.addMenuItem(pMenu, "Open in new tab", ACTION_EDIT_OPEN_IN_TAB);
+        app.addMenuItem(pMenu, "Open in terminal", ACTION_EDIT_OPEN_IN_TERMINAL);
     app.addMenuItem(pMenu, "Cut", ACTION_EDIT_CUT);
     app.addMenuItem(pMenu, "Copy", ACTION_EDIT_COPY);
     app.addMenuItem(pMenu, "Paste", ACTION_EDIT_PASTE);

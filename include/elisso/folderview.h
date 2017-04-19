@@ -67,15 +67,17 @@ enum class ViewState
 
 class ElissoApplicationWindow;
 
+/**
+ *  Bit flags to be used with setDirectory().
+ */
 enum class SetDirectoryFlags : uint8_t
 {
-    PUSH_TO_HISTORY         = (1 << 0),
-    SCROLL_TO_PREVIOUS      = (1 << 1)
+    PUSH_TO_HISTORY         = (1 << 0),         // If set, the directory is added to the back/forward history stack.
+    SCROLL_TO_PREVIOUS      = (1 << 1),         // If set, the previous directory is selected in the new contents list (useful for go back/parent).
+    CLICK_FROM_TREE         = (1 << 2)          // If set, the contents are shown as a result of a click on the tree view, and we can spare the effort of finding the node in the tree.
 };
 
 typedef FlagSet<SetDirectoryFlags> SetDirectoryFlagSet;
-
-// DEFINE_BITSET(SetDirectoryFlags);
 
 /**
  *  The folder view is the right half of a folder window and derives from
@@ -118,8 +120,8 @@ public:
     void setViewMode(FolderViewMode m);
     void setError(Glib::ustring strError);
 
+    PFSModelBase getSelectedFolder();
     void openFile(PFSModelBase pFS);
-    void openTerminalOnSelectedFolder();
 
     struct PopulateData;
 

@@ -67,6 +67,8 @@ typedef std::shared_ptr<FSMountable> PFSMountable;
 typedef std::list<PFSModelBase> FSList;
 typedef std::shared_ptr<FSList> PFSList;
 
+class FSContainer;
+struct ContentsMap;
 
 /***************************************************************************
  *
@@ -109,9 +111,7 @@ enum class FSFlags : uint8_t
     POPULATED_WITH_ALL         =  (1 <<  1),        // only for dirs
     IS_ROOT_DIRECTORY          =  (1 <<  2),        // only for dirs; strParticle is ""
     IS_CURRENT_DIRECTORY       =  (1 <<  3),        // only for dirs; strParticle is "."
-    IS_RELATIVE_PARENT         =  (1 <<  4),        // only for dirs; strParticle is ".."
-    DELETED                    =  (1 <<  5),        // After Unlink() has been called.
-    DIRTY                      =  (1 <<  6)         // Used during directory refresh.
+    DIRTY                      =  (1 <<  4)         // only used during populate
 };
 
 typedef FlagSet<FSFlags> FSFlagSet;
@@ -127,6 +127,9 @@ typedef FlagSet<FSFlags> FSFlagSet;
  *
  *   -- To get objects for the contents of a folder (directory), use
  *      FSDirectory::getContents() and FSDirectory::find().
+ *
+ *  This code also handles symlinks and can treat symlinks to directories like
+ *  directories; see FSSymlink for details.
  */
 class FSModelBase : public std::enable_shared_from_this<FSModelBase>
 {
@@ -157,7 +160,7 @@ public:
     }
 
     virtual FSTypeResolved getResolvedType() = 0;
-    PFSDirectory resolveDirectory();
+    FSContainer* getContainer();
 
     bool isHidden();
 
@@ -165,7 +168,7 @@ public:
     std::string getAbsolutePath(bool fThrow = false);
     std::string getFormattedPath();
 
-    PFSDirectory getParent();
+    PFSModelBase getParent();
 
     bool isUnder(PFSDirectory pDir);
 
@@ -173,7 +176,7 @@ public:
     std::string describe(bool fLong = false);
 
 protected:
-    friend class FSDirectory;
+    friend class FSContainer;
 
     static PFSModelBase MakeAwake(Glib::RefPtr<Gio::File> pGioFile);
     FSModelBase(FSType type,
@@ -181,16 +184,22 @@ protected:
                 uint64_t cbSize);
     virtual ~FSModelBase() { };
 
-    void setParent(PFSDirectory pParentDirectory);
+    ContentsMap* getContentsMap();
+    void setParent(PFSModelBase pNewParent);
+
+    PFSModelBase getSharedFromThis()
+    {
+        return shared_from_this();
+    }
 
     uint64_t                    _uID = 0;
     FSType                      _type = FSType::UNINITIALIZED;
-    FSFlagSet                   _flFile;
+    FSFlagSet                   _fl;
     Glib::RefPtr<Gio::File>     _pGioFile;
     std::string                 _strBasename;
     uint64_t                    _cbSize;
     Glib::RefPtr<Gio::Icon>     _pIcon;
-    PFSDirectory                _pParent;
+    PFSModelBase                _pParent;
 };
 
 
@@ -200,6 +209,10 @@ protected:
  *
  **************************************************************************/
 
+/**
+ *  FSModelBase subclass for ordinary files. Everything that is not a directory
+ *  and not a symlink is instantiated as an instance of this.
+ */
 class FSFile : public FSModelBase
 {
     friend class FSModelBase;
@@ -219,14 +232,28 @@ protected:
 
 /***************************************************************************
  *
- *  FSDirectory
+ *  FSContainer
  *
  **************************************************************************/
 
-class FSDirectory : public FSModelBase
+/**
+ *  Helper class that implements directory contents. This is inherited via
+ *  multiple inheritance by both FSContainer and FSSymlink and contains
+ *  the public methods that both these classes should have to populate
+ *  their contents.
+ *
+ *  This allows you to call methods like getContents() and find() on both
+ *  directories and symlinks to directories while preserving path information,
+ *  but without losing type safety.
+ *
+ *  As an example, if you have /dir/symlink/subdir but "symlink" is really
+ *  a symlink pointing to /otherdir, FSModelBase::FindPath() will still
+ *  build a path for /dir/symlink/subdir and the "symlink" particle will
+ *  be an instance of FSSymlink with its own contents. However, you can
+ *  call getTarget() on the symlink and receive a PFSDirectory for /otherdir.
+ */
+class FSContainer : public ProhibitCopy
 {
-    friend class FSModelBase;
-
 public:
     enum class Get
     {
@@ -234,11 +261,6 @@ public:
         FOLDERS_ONLY,
         FIRST_FOLDER_ONLY
     };
-
-    virtual FSTypeResolved getResolvedType() override
-    {
-        return FSTypeResolved::DIRECTORY;
-    }
 
     bool isPopulatedWithDirectories();
 
@@ -252,25 +274,56 @@ public:
 
     PFSModelBase find(const std::string &strParticle);
 
-    PFSDirectory findSubdirectory(const std::string &strParticle);
-
     PFSModelBase isAwake(const std::string &strParticle);
+
+protected:
+    friend class FSModelBase;
+
+    FSContainer(FSModelBase &refBase);
+    virtual ~FSContainer();
+
+    ContentsMap         *_pMap;
+
+    FSModelBase         &_refBase;
+};
+
+/***************************************************************************
+ *
+ *  FSDirectory
+ *
+ **************************************************************************/
+
+/**
+ *  FSModelBase subclass for physical directories. This multiply-inherits from FSContainer
+ *  so the content methods work.
+ *
+ *  Note that symlinks to directories are instantiated as FSSymlink instances instead,
+ *  like all symlinks.
+ */
+class FSDirectory : public FSModelBase, public FSContainer
+{
+    friend class FSModelBase;
+
+public:
+    virtual FSTypeResolved getResolvedType() override
+    {
+        return FSTypeResolved::DIRECTORY;
+    }
 
     static PFSDirectory GetHome();
     static PFSDirectory GetRoot();
 
 protected:
-    struct Impl;
-    Impl                *_pImpl;
-
     FSDirectory(Glib::RefPtr<Gio::File> pGioFile);
-    virtual ~FSDirectory();
     static PFSDirectory Create(Glib::RefPtr<Gio::File> pGioFile);
 };
 
 class RootDirectory;
 typedef std::shared_ptr<RootDirectory> PRootDirectory;
 
+/**
+ *  Specialization of the root directory, "/".
+ */
 class RootDirectory : public FSDirectory
 {
     friend class FSModelBase;
@@ -287,6 +340,9 @@ private:
 class CurrentDirectory;
 typedef std::shared_ptr<CurrentDirectory> PCurrentDirectory;
 
+/**
+ *  Specialization of the current user's home directory.
+ */
 class CurrentDirectory : public FSDirectory
 {
     friend class FSModelBase;
@@ -306,7 +362,34 @@ private:
  *
  **************************************************************************/
 
-class FSSymlink : public FSModelBase
+/**
+ *  FSModelBase subclass for symbolic links. All symbolic links are instantiated
+ *  as instances of this, even if the symlink's target is a directory.
+ *
+ *  To speed up things, we only read the symlink target lazily, on request.
+ *  If you do getContents() and receive a list of symlinks, the symlink is not
+ *  read until you call either getTarget() or getResolvedType(). Those two
+ *  call the private follow() method, which does read the link and instantiates
+ *  the target.
+ *
+ *  If the symlink is broken, then getTarget() will return nullptr, and
+ *  getResolvedType() will return BROKEN_SYMLINK.
+ *
+ *  Otherwise getResolvedType() will return SYMLINK_TO_FILE or SYMLINK_TO_DIRECTORY.
+ *
+ *  Only if getResolvedType() returns SYMLINK_TO_DIRECTORY, you can follow up
+ *  in two ways:
+ *
+ *   -- You can call getTarget(), which returns the target, which will really be
+ *      an FSDirectory for the target. You can then populate that directory,
+ *      but the path will be different (the symlink will have been followed).
+ *
+ *  --  You can call the FSContainer content methods directly on the symlink,
+ *      since FSSymlink multiply-inherits from both FSModelBase and FSContainer.
+ *      In that case the symlink behaves exactly like a directory, and the
+ *      symlink is not followed.
+ */
+class FSSymlink : public FSModelBase, public FSContainer
 {
     friend class FSModelBase;
 
@@ -325,8 +408,8 @@ protected:
         TO_FILE = 2,
         TO_DIRECTORY = 3
     };
-    State           _state = State::NOT_FOLLOWED_YET;
-    PFSModelBase    _pTarget;
+    State               _state;
+    PFSModelBase        _pTarget;
 
 private:
     void follow(FSLock &lock);

@@ -98,7 +98,7 @@ public:
     void enableBackForwardActions();
 
     void onLoadingFolderView(ElissoFolderView &view);
-    void onFolderViewLoaded(ElissoFolderView &view, bool fSuccess);
+    void onFolderViewLoaded(ElissoFolderView &view, PFSModelBase pDirSelect);
 
 protected:
     void initActionHandlers();
@@ -122,7 +122,8 @@ protected:
     ElissoApplication               &_app;
 
     PSimpleAction                   _pActionEditOpen;
-    PSimpleAction                   _pActionEditTerminal;
+    PSimpleAction                   _pActionEditOpenInTab;
+    PSimpleAction                   _pActionEditOpenInTerminal;
     PSimpleAction                   _pActionEditCopy;
     PSimpleAction                   _pActionEditCut;
     PSimpleAction                   _pActionEditPaste;

@@ -171,7 +171,8 @@ ElissoApplication::on_startup() /* override */
     addMenuItem(pEditSection1, "_Paste", ACTION_EDIT_PASTE, "<Primary>v");
     auto pEditSection2 = addMenuSection(pMenuEdit);
     addMenuItem(pEditSection2, "_Open", ACTION_EDIT_OPEN);
-    addMenuItem(pEditSection2, "Open in _terminal", ACTION_EDIT_TERMINAL);
+    addMenuItem(pEditSection2, "Open in new ta_b", ACTION_EDIT_OPEN_IN_TAB);
+    addMenuItem(pEditSection2, "Open in _terminal", ACTION_EDIT_OPEN_IN_TERMINAL);
 
     auto pMenuView = Gio::Menu::create();
     pMenuBar->append_submenu("_View", pMenuView);

@@ -68,21 +68,6 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app,
             _pButtonViewRefresh->set_sensitive(fEnabled);
     });
 
-    /*
-     *  Children setup
-     */
-
-    _notebook.signal_switch_page().connect([this](Gtk::Widget *pw,
-                                                  guint page_number)
-    {
-//         if (page_number < this->_aFolderViews.size())
-//         {
-//             auto &switchedTo = _aFolderViews[page_number];
-//             Glib::RefPtr<ElissoFolderView> p;
-//             onFolderViewReady(switchedTo);
-//         }
-    });
-
     _vPaned.set_position(200);
     _vPaned.set_wide_handle(true);
     _vPaned.add1(_treeViewLeft);
@@ -108,7 +93,23 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app,
         return false;       // don't call again
     });
 
+    _notebook.set_scrollable(true);
     _notebook.show_all();
+
+    /*
+     *  Children setup
+     */
+
+    _notebook.signal_switch_page().connect([this](Gtk::Widget *pw,
+                                                  guint page_number)
+    {
+        auto p = static_cast<ElissoFolderView*>(pw);
+        if (p)
+        {
+            PFSModelBase pDir = p->getDirectory();
+            this->onFolderViewLoaded(*p, pDir);
+        }
+    });
 }
 
 /**
@@ -127,9 +128,12 @@ ElissoApplicationWindow::addFolderTab(PFSModelBase pDirOrSymlink)       //!< in:
     if (!p2)
         p2 = FSDirectory::GetHome();
 
-    _notebook.append_page(*pView,
-                          p2->getBasename());
+    int n = _notebook.append_page(*pView,
+                                  p2->getBasename());
     pView->show();
+    _notebook.set_current_page(n);
+    _notebook.set_tab_reorderable(*pView, true);
+
     pView->setDirectory(p2,
                         {});     // do not push to history
 }
@@ -172,9 +176,14 @@ ElissoApplicationWindow::initActionHandlers()
         this->handleViewAction(ACTION_EDIT_OPEN);
     });
 
-    _pActionEditTerminal = this->add_action(ACTION_EDIT_TERMINAL, [this]()
+    _pActionEditOpenInTab = this->add_action(ACTION_EDIT_OPEN_IN_TAB, [this]()
     {
-        this->handleViewAction(ACTION_EDIT_TERMINAL);
+        this->handleViewAction(ACTION_EDIT_OPEN_IN_TAB);
+    });
+
+    _pActionEditOpenInTerminal = this->add_action(ACTION_EDIT_OPEN_IN_TERMINAL, [this]()
+    {
+        this->handleViewAction(ACTION_EDIT_OPEN_IN_TERMINAL);
     });
 
     _pActionEditCopy = this->add_action(ACTION_EDIT_COPY, [this]()
@@ -448,8 +457,10 @@ ElissoApplicationWindow::enableEditActions(size_t cFolders, size_t cOtherFiles)
 {
     Debug::Log(DEBUG_ALWAYS, "cFolders: " + to_string(cFolders) + ", cOtherFiles: " + to_string(cOtherFiles));
     size_t cTotal = cFolders + cOtherFiles;
+    bool fSingleFolder = (cTotal == 1) && (cFolders == 1);
     _pActionEditOpen->set_enabled(cTotal == 1);
-    _pActionEditTerminal->set_enabled((cTotal == 1) && (cFolders == 1));
+    _pActionEditOpenInTab->set_enabled(fSingleFolder);
+    _pActionEditOpenInTerminal->set_enabled(fSingleFolder);
     _pActionEditCopy->set_enabled(cTotal > 0);
     _pActionEditCut->set_enabled(cTotal > 0);
     _pActionEditPaste->set_enabled(false);
@@ -493,17 +504,22 @@ ElissoApplicationWindow::onLoadingFolderView(ElissoFolderView &view)
  */
 void
 ElissoApplicationWindow::onFolderViewLoaded(ElissoFolderView &view,
-                                            bool fSuccess)
+                                            PFSModelBase pDirSelect)
 {
     PFSModelBase pDir = view.getDirectory();
 
-    Glib::ustring strTitle = pDir->getRelativePath();
-    Debug::Log(FOLDER_POPULATE_HIGH, string(__func__) + "(\"" + pDir->getRelativePath() + "\")");
+    Glib::ustring strTitle = "?";
+    if (pDir)
+    {
+        strTitle = pDir->getRelativePath();
+        Debug::Log(FOLDER_POPULATE_HIGH, string(__func__) + "(\"" + pDir->getRelativePath() + "\")");
+    }
 
     this->setWindowTitle(strTitle);
     this->enableViewActions(true);
 
-    _treeViewLeft.select(pDir);
+    if (pDirSelect)
+        _treeViewLeft.select(pDirSelect);
 }
 
 void
@@ -525,8 +541,23 @@ ElissoApplicationWindow::handleViewAction(const std::string &strAction)
             this->closeFolderTab(*p);
         else if (strAction == ACTION_EDIT_OPEN)
             p->openFile(nullptr);
-        else if (strAction == ACTION_EDIT_TERMINAL)
-            p->openTerminalOnSelectedFolder();
+        else if (strAction == ACTION_EDIT_OPEN_IN_TAB)
+        {
+            auto pFS = p->getSelectedFolder();
+            if (pFS)
+                this->addFolderTab(pFS);
+        }
+        else if (strAction == ACTION_EDIT_OPEN_IN_TERMINAL)
+        {
+            auto pFS = p->getSelectedFolder();
+            if (pFS)
+            {
+                auto strPath = pFS->getRelativePath();
+                g_subprocess_new(G_SUBPROCESS_FLAGS_NONE,
+                                 NULL,
+                                 "open", "--screen", "auto", strPath.c_str(), nullptr);
+            }
+        }
         else if (strAction == ACTION_VIEW_ICONS)
             p->setViewMode(FolderViewMode::ICONS);
         else if (strAction == ACTION_VIEW_LIST)
