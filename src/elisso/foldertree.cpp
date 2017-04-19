@@ -81,7 +81,7 @@ FolderTreeModelColumns* FolderTreeModelColumns::s_p = nullptr;
  *  The worker thread is not part of this structure.
  */
 template<class P>
-class WorkerResult
+class WorkerResult : public ProhibitCopy
 {
 public:
     void connect(std::function<void ()> fn)
@@ -91,8 +91,11 @@ public:
 
     void addResult(P pResult)
     {
-        Lock lock(mutex);
-        deque.push_back(pResult);
+        // Do not hold the mutex while messing with the dispatcher -> that could deadlock.
+        {
+            Lock lock(mutex);
+            deque.push_back(pResult);
+        }
         dispatcher.emit();
     }
 
@@ -121,7 +124,7 @@ protected:
  *
  **************************************************************************/
 
-struct ResultBase
+struct ResultBase : public ProhibitCopy
 {
     PFSModelBase            _pDirOrSymlink;
     PRowReference           _pRowRef;
@@ -183,7 +186,7 @@ struct AddOneFirst : ResultBase
     { }
 };
 
-struct ElissoFolderTree::Impl
+struct ElissoFolderTree::Impl : public ProhibitCopy
 {
     std::list<PFSDirectory>         llTreeRoots;
 
@@ -221,23 +224,6 @@ ElissoFolderTree::ElissoFolderTree(ElissoApplicationWindow &mainWindow)
       _treeView(),
       _pImpl(new Impl)
 {
-    auto pTreeSelection = _treeView.get_selection();
-    pTreeSelection->signal_changed().connect([this](){
-        this->onNodeSelected();
-    });
-
-    _treeView.signal_row_activated().connect([](const Gtk::TreeModel::Path&,
-                                                Gtk::TreeViewColumn*)
-    {
-        Debug::Log(FOLDER_POPULATE, "tree item activated");
-    });
-
-    _treeView.signal_row_expanded().connect([this](const Gtk::TreeModel::iterator &it,
-                                                   const Gtk::TreeModel::Path &path)
-    {
-        this->onNodeExpanded(it, path);
-    });
-
     FolderTreeModelColumns &cols = FolderTreeModelColumns::Get();
     _pImpl->pTreeStore = Gtk::TreeStore::create(cols);
 
@@ -261,6 +247,23 @@ ElissoFolderTree::ElissoFolderTree(ElissoApplicationWindow &mainWindow)
         Debug::Enter(FOLDER_POPULATE, "workerAddOneFirst.dispatcher");
         this->onAddAnotherFirst();
         Debug::Leave();
+    });
+
+    auto pTreeSelection = _treeView.get_selection();
+    pTreeSelection->signal_changed().connect([this](){
+        this->onNodeSelected();
+    });
+
+    _treeView.signal_row_activated().connect([](const Gtk::TreeModel::Path&,
+                                                Gtk::TreeViewColumn*)
+    {
+        Debug::Log(FOLDER_POPULATE, "tree item activated");
+    });
+
+    _treeView.signal_row_expanded().connect([this](const Gtk::TreeModel::iterator &it,
+                                                   const Gtk::TreeModel::Path &path)
+    {
+        this->onNodeExpanded(it, path);
     });
 
     this->add(_treeView);
@@ -326,7 +329,8 @@ ElissoFolderTree::spawnPopulate(const Gtk::TreeModel::iterator &it)
                 PPopulated pResult = std::make_shared<Populated>(pDir, pRowRefPopulating);
 
                 pDir2->getContents(pResult->_llContents,
-                                   FSDirectory::Get::FOLDERS_ONLY);
+                                   FSDirectory::Get::FOLDERS_ONLY,
+                                   nullptr);        // ptr to stop flag
 
                 // Hand the results over to the instance: add it to the queue, signal the dispatcher.
                 this->_pImpl->workerPopulated.addResult(pResult);
@@ -406,7 +410,9 @@ ElissoFolderTree::spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst)
                 if (pDir)
                 {
                     FSList llFiles;
-                    pDir->getContents(llFiles, FSDirectory::Get::FIRST_FOLDER_ONLY);
+                    pDir->getContents(llFiles,
+                                      FSDirectory::Get::FIRST_FOLDER_ONLY,
+                                      nullptr);
                     for (auto &pFS : llFiles)
     //                     if (!pFS->isHidden(flock))
                         {
@@ -468,7 +474,7 @@ void ElissoFolderTree::onNodeSelected()
         {
             auto pActiveFolderView = _mainWindow.getActiveFolderView();
             if (pActiveFolderView)
-                pActiveFolderView->setDirectory(pDir);
+                pActiveFolderView->setDirectory(pDir, {});
         }
     }
 }

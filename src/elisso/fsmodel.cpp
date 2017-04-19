@@ -230,7 +230,7 @@ FSModelBase::MakeAwake(Glib::RefPtr<Gio::File> pGioFile)
         break;      // return nullptr
 
         case Gio::FileType::FILE_TYPE_REGULAR:         // File handle represents a regular file.
-            pReturn = FSFile::Create(pGioFile);
+            pReturn = FSFile::Create(pGioFile, pGioFile->query_info()->get_size());
         break;
 
         case Gio::FileType::FILE_TYPE_DIRECTORY:       // File handle represents a directory.
@@ -269,12 +269,16 @@ FSModelBase::FindDirectory(const std::string &strPath)
     return nullptr;
 }
 
-FSModelBase::FSModelBase(FSType type, Glib::RefPtr<Gio::File> pGioFile)
+FSModelBase::FSModelBase(FSType type,
+                         Glib::RefPtr<Gio::File> pGioFile,
+                         uint64_t cbSize)
     : _uID(g_uFSID++),      // atomic
       _type(type),
       _pGioFile(pGioFile),
-      _strBasename(_pGioFile->get_basename())
+      _strBasename(_pGioFile->get_basename()),
+      _cbSize(cbSize)
 {
+    _pIcon = _pGioFile->query_info()->get_icon();
 }
 
 void
@@ -348,16 +352,10 @@ FSModelBase::getRelativePath()
     return strFullpath;
 }
 
-uint64_t
-FSModelBase::getFileSize()
-{
-    return _pGioFile->query_info()->get_size();
-}
-
 Glib::ustring
 FSModelBase::getIcon()
 {
-    return _pGioFile->query_info()->get_icon()->to_string();
+    return _pIcon->to_string();
 }
 
 PFSDirectory
@@ -365,7 +363,7 @@ FSModelBase::getParent()
 {
     if (_pParent)
         ;
-    else if (_flFile & FL_IS_ROOT_DIRECTORY)
+    else if (_flFile.test(FSFlags::IS_ROOT_DIRECTORY))
         ;       // return NULL;
 
     return _pParent;
@@ -412,23 +410,26 @@ FSModelBase::describe(bool fLong /* = false */ )
  *
  **************************************************************************/
 
-FSFile::FSFile(Glib::RefPtr<Gio::File> pGioFile)
-    : FSModelBase(FSType::FILE, pGioFile)
+FSFile::FSFile(Glib::RefPtr<Gio::File> pGioFile,
+               uint64_t cbSize)
+    : FSModelBase(FSType::FILE,
+                  pGioFile,
+                  cbSize)
 {
 }
 
 /* static */
 PFSFile
-FSFile::Create(Glib::RefPtr<Gio::File> pGioFile)
+FSFile::Create(Glib::RefPtr<Gio::File> pGioFile, uint64_t cbSize)
 {
     /* This nasty trickery is necessary to make std::make_shared work with a protected constructor. */
     class Derived : public FSFile
     {
     public:
-        Derived(Glib::RefPtr<Gio::File> pGioFile) : FSFile(pGioFile) { }
+        Derived(Glib::RefPtr<Gio::File> pGioFile, uint64_t cbSize) : FSFile(pGioFile, cbSize) { }
     };
 
-    return std::make_shared<Derived>(pGioFile);
+    return std::make_shared<Derived>(pGioFile, cbSize);
 }
 
 
@@ -439,7 +440,7 @@ FSFile::Create(Glib::RefPtr<Gio::File> pGioFile)
  **************************************************************************/
 
 FSDirectory::FSDirectory(Glib::RefPtr<Gio::File> pGioFile)
-    : FSModelBase(FSType::DIRECTORY, pGioFile),
+    : FSModelBase(FSType::DIRECTORY, pGioFile, 0),
       _pImpl(new Impl)
 
 {
@@ -476,137 +477,248 @@ FSDirectory::isAwake(const string &strParticle)
     return nullptr;
 }
 
-size_t
-FSDirectory::getContents(FSList &llFiles,
-                         Get getContents)
+bool
+FSDirectory::isPopulatedWithDirectories()
 {
     FSLock lock;
+    return _flFile.test(FSFlags::POPULATED_WITH_DIRECTORIES);
+}
+
+bool
+FSDirectory::isCompletelyPopulated()
+{
+    FSLock lock;
+    return _flFile.test(FSFlags::POPULATED_WITH_ALL);
+}
+
+
+
+/**
+ *  Returns the directory's contents by copying them into the given list.
+ *
+ *  If this is called for the first time on this directory, this performs blocking I/O
+ *  and can take several seconds to complete, depending on the size of the directory
+ *  contents and the medium.
+ *
+ *  You can pass the address of an atomic bool with pfStopFlag, which is useful if you
+ *  run this on a secondary thread and you want this function to be interruptible: if
+ *  the stop flag is not nullptr, it is checked periodically, and the functions returns
+ *  early once the stop flag is true.
+ *
+ *  After completely populating the directory, an internal flag is set so that no blocking
+ *  I/O is performed when this gets called again. To clear that flag and force a refresh,
+ *  call unsetPopulated() before calling this.
+ *
+ *  The refresh algorithm is simple. For every file returned from the Gio backend,
+ *  we check if it's already in the contents map; if not, it is added. This adds missing
+ *  files.
+ *
+ *  To remove files that have been removed on disk, every file returned by the Gio backend
+ *  that was either already awake or has been added in the above loop is marked with a
+ *  "dirty" flag. A final loop then removes all objects from the contents map that do not
+ *  have the "dirty" flag set.
+ */
+size_t
+FSDirectory::getContents(FSList &llFiles,
+                         Get getContents,
+                         StopFlag *pStopFlag)
+{
     Debug::Enter(FILE_LOW, "Directory::getContents(\"" + getBasename() + "\")");
-    if (    ((getContents == Get::ALL) && !isCompletelyPopulated())
-         || ((getContents != Get::ALL) && !isPopulatedWithDirectories())
-       )
+
+    size_t c = 0;
+
+    try
     {
-        PFSDirectory pSharedThis = static_pointer_cast<FSDirectory>(shared_from_this());
-
-        Glib::RefPtr<Gio::FileEnumerator> en;
-        if (!(en = _pGioFile->enumerate_children("*",
-                                                 Gio::FileQueryInfoFlags::FILE_QUERY_INFO_NOFOLLOW_SYMLINKS)))
-            throw FSException("Error populating!");
-        else
+        bool fStopped = false;
+        FSLock lock;
+        if (    ((getContents == Get::ALL) && !isCompletelyPopulated())
+             || ((getContents != Get::ALL) && !isPopulatedWithDirectories())
+           )
         {
-            Glib::RefPtr<Gio::FileInfo> pInfo;
-            FSList llSymlinksForFirstFolder;
-            while ((pInfo = en->next_file()))
-            {
-                auto pGioFile = en->get_child(pInfo);
-                std::string strThis = pGioFile->get_basename();
-                if (    (strThis != ".")
-                     && (strThis != "..")
-                     && (!isAwake(strThis))
-                   )
+            PFSDirectory pSharedThis = static_pointer_cast<FSDirectory>(shared_from_this());
+
+            // To be able to remove outdated file objects that no longer exist on disk, set the
+            // dirty flag on all of them. We are holding the lock so we're good.
+            if (getContents == Get::ALL)
+                for (auto it : _pImpl->mapContents)
                 {
-                    PFSModelBase pKeep;
+                    auto &p = it.second;
+                    p->_flFile |= FSFlags::DIRTY;
+                }
 
-                    PFSModelBase pTemp = MakeAwake(pGioFile);
-
-                    auto t = pTemp->getType();
-                    switch (t)
+            Glib::RefPtr<Gio::FileEnumerator> en;
+            if (!(en = _pGioFile->enumerate_children("*",
+                                                     Gio::FileQueryInfoFlags::FILE_QUERY_INFO_NOFOLLOW_SYMLINKS)))
+                throw FSException("Error populating!");
+            else
+            {
+                Glib::RefPtr<Gio::FileInfo> pInfo;
+                FSList llSymlinksForFirstFolder;
+                while ((pInfo = en->next_file()))
+                {
+                    auto pGioFile = en->get_child(pInfo);
+                    std::string strThis = pGioFile->get_basename();
+                    if (    (strThis != ".")
+                         && (strThis != "..")
+                       )
                     {
-                        case FSType::DIRECTORY:
-                            // Always wake up directories.
-                            Debug::Enter(FILE_LOW, "Waking up directory " + strThis);
-                            pKeep = pTemp;
-                            Debug::Leave();
-                        break;
-
-                        case FSType::SYMLINK:
-                            // Need to wake up the symlink to figure out if it's a link to a dir.
-                            Debug::Enter(FILE_LOW, "Waking up symlink " + strThis);
-                            pKeep = pTemp;
-                            Debug::Leave();
-                        break;
-
-                        default:
-                            // Ordinary file:
-                            if (getContents == Get::ALL)
-                            {
-                                Debug::Enter(FILE_LOW, "Waking up plain file " + strThis);
-                                pKeep = pTemp;
-                                Debug::Leave();
-                            }
-                        break;
-                    }
-
-                    if (pKeep)
-                    {
-                        pKeep->setParent(pSharedThis);
-
-                        if (getContents == Get::FIRST_FOLDER_ONLY)
+                        auto pAwake = isAwake(strThis);
+                        if (pAwake)
+                            // Clear the dirty flag.
+                            pAwake->_flFile.reset(FSFlags::DIRTY);
+                        else
                         {
-                            if (t == FSType::DIRECTORY)
-                                break;      // we're done
-                            else if (    (t == FSType::SYMLINK)
-                                      && (pKeep->getResolvedType() == FSTypeResolved::SYMLINK_TO_DIRECTORY)
-                                    )
+                            if (pStopFlag)
+                                if (*pStopFlag)
+                                {
+                                    fStopped = true;
+                                    break;
+                                }
+
+                            PFSModelBase pKeep;
+
+                            // Wake up a new object. This will not have the dirty flag set.
+                            PFSModelBase pTemp = MakeAwake(pGioFile);
+
+                            auto t = pTemp->getType();
+                            switch (t)
+                            {
+                                case FSType::DIRECTORY:
+                                    // Always wake up directories.
+                                    Debug::Enter(FILE_LOW, "Waking up directory " + strThis);
+                                    pKeep = pTemp;
+                                    Debug::Leave();
                                 break;
+
+                                case FSType::SYMLINK:
+                                    // Need to wake up the symlink to figure out if it's a link to a dir.
+                                    Debug::Enter(FILE_LOW, "Waking up symlink " + strThis);
+                                    pKeep = pTemp;
+                                    Debug::Leave();
+                                break;
+
+                                default:
+                                    // Ordinary file:
+                                    if (getContents == Get::ALL)
+                                    {
+                                        Debug::Enter(FILE_LOW, "Waking up plain file " + strThis);
+                                        pKeep = pTemp;
+                                        Debug::Leave();
+                                    }
+                                break;
+                            }
+
+                            if (pKeep)
+                            {
+                                pKeep->setParent(pSharedThis);
+
+                                if (getContents == Get::FIRST_FOLDER_ONLY)
+                                {
+                                    if (t == FSType::DIRECTORY)
+                                        break;      // we're done
+                                    else if (    (t == FSType::SYMLINK)
+                                              && (pKeep->getResolvedType() == FSTypeResolved::SYMLINK_TO_DIRECTORY)
+                                            )
+                                        break;
+                                }
+                            }
                         }
                     }
                 }
+
+                if (!fStopped)
+                {
+                    if (getContents == Get::FOLDERS_ONLY)
+                        _flFile |= FSFlags::POPULATED_WITH_DIRECTORIES;
+                    else if (getContents == Get::ALL)
+                    {
+                        _flFile |= FSFlags::POPULATED_WITH_DIRECTORIES;
+                        _flFile |= FSFlags::POPULATED_WITH_ALL;
+                    }
+                }
             }
-
-            if (getContents == Get::FOLDERS_ONLY)
-                _flFile |= FL_POPULATED_WITH_DIRECTORIES;
-            else if (getContents == Get::ALL)
-                _flFile |= (FL_POPULATED_WITH_DIRECTORIES | FL_POPULATED_WITH_ALL);
         }
-    }
 
-    size_t c = 0;
-    for (auto it : _pImpl->mapContents)
-    {
-        auto &p = it.second;
-        // Leave out ".." in the list.
-        if (p != _pParent)
+        if (!fStopped)
         {
-            if (    (getContents == Get::ALL)
-                 || (p->getType() == FSType::DIRECTORY)
-                 || (    (getContents == Get::FOLDERS_ONLY)
-                      && (p->getResolvedType() == FSTypeResolved::SYMLINK_TO_DIRECTORY)
-                    )
-               )
+            for (auto it = _pImpl->mapContents.begin();
+                 it != _pImpl->mapContents.end();
+                )
             {
-                llFiles.push_back(p);
-                ++c;
+                auto &p = it->second;
+                if (    (getContents == Get::ALL)
+                     && (p->_flFile & FSFlags::DIRTY)
+                   )
+                {
+                    // Note the post increment. http://stackoverflow.com/questions/180516/how-to-filter-items-from-a-stdmap/180616#180616
+                    _pImpl->mapContents.erase(it++);
+                }
+                else
+                {
+                    // Leave out ".." in the list.
+                    if (p != _pParent)
+                    {
+                        if (    (getContents == Get::ALL)
+                             || (p->getType() == FSType::DIRECTORY)
+                             || (    (getContents == Get::FOLDERS_ONLY)
+                                  && (p->getResolvedType() == FSTypeResolved::SYMLINK_TO_DIRECTORY)
+                                )
+                           )
+                        {
+                            llFiles.push_back(p);
+                            ++c;
 
-                if (getContents == Get::FIRST_FOLDER_ONLY)
-                    break;
+                            if (getContents == Get::FIRST_FOLDER_ONLY)
+                                break;
+                        }
+                    }
+
+                    ++it;
+                }
+            }
+
+            // This leaves one case: if we have found a real directory with Get::FIRST_FOLDER_ONLY,
+            // then it's already in llFiles. But if there is no real directory, there might be a
+            // symlink to one. All symlinks are in the folder contents, so we need to resolve all of
+            // them to find a folder.
+            if (    (getContents == Get::FIRST_FOLDER_ONLY)
+                 && (!c)
+               )
+            for (auto it : _pImpl->mapContents)
+            {
+                auto &p = it.second;
+                // Leave out ".." in the list.
+                if (p != _pParent)
+                    if (p->getResolvedType() == FSTypeResolved::SYMLINK_TO_DIRECTORY)
+                    {
+                        llFiles.push_back(p);
+                        ++c;
+                        break;
+                    }
             }
         }
     }
-
-    // This leaves one case: if we have found a real directory with Get::FIRST_FOLDER_ONLY,
-    // then it's already in llFiles. But if there is no real directory, there might be a
-    // symlink to one. All symlinks are in the folder contents, so we need to resolve all of
-    // them to find a folder.
-    if (    (getContents == Get::FIRST_FOLDER_ONLY)
-         && (!c)
-       )
-    for (auto it : _pImpl->mapContents)
+    catch(Gio::Error &e)
     {
-        auto &p = it.second;
-        // Leave out ".." in the list.
-        if (p != _pParent)
-            if (p->getResolvedType() == FSTypeResolved::SYMLINK_TO_DIRECTORY)
-            {
-                llFiles.push_back(p);
-                ++c;
-                break;
-            }
+        throw FSException(e.what());
     }
 
     Debug::Leave();
 
     return c;
+}
+
+/**
+ *  Unsets both the "populated with all" and "populated with directories" flags for this
+ *  directory, which will cause getContents() to refresh the contents list from disk on
+ *  the next call.
+ */
+void
+FSDirectory::unsetPopulated()
+{
+    FSLock lock;
+    _flFile.reset(FSFlags::POPULATED_WITH_ALL);
+    _flFile.reset(FSFlags::POPULATED_WITH_DIRECTORIES);
 }
 
 /*static */
@@ -668,7 +780,7 @@ FSDirectory::GetRoot()
 RootDirectory::RootDirectory()
     : FSDirectory(Gio::File::create_for_path("/"))
 {
-    _flFile = FL_IS_ROOT_DIRECTORY;
+    _flFile = FSFlags::IS_ROOT_DIRECTORY;
 }
 
 /*static */
@@ -692,7 +804,7 @@ RootDirectory::GetImpl()
 CurrentDirectory::CurrentDirectory()
     : FSDirectory(Gio::File::create_for_path("."))
 {
-    _flFile = FL_IS_CURRENT_DIRECTORY;
+    _flFile = FSFlags::IS_CURRENT_DIRECTORY;
 }
 
 /*static */
@@ -721,7 +833,7 @@ CurrentDirectory::GetImpl()
  **************************************************************************/
 
 FSSymlink::FSSymlink(Glib::RefPtr<Gio::File> pGioFile)
-    : FSModelBase(FSType::SYMLINK, pGioFile)
+    : FSModelBase(FSType::SYMLINK, pGioFile, 0)
 {
 }
 
@@ -833,7 +945,7 @@ FSSymlink::follow(FSLock &lock)
  **************************************************************************/
 
 FSSpecial::FSSpecial(Glib::RefPtr<Gio::File> pGioFile)
-    : FSModelBase(FSType::SPECIAL, pGioFile)
+    : FSModelBase(FSType::SPECIAL, pGioFile, 0)
 {
 }
 
@@ -859,7 +971,7 @@ FSSpecial::Create(Glib::RefPtr<Gio::File> pGioFile)
  **************************************************************************/
 
 FSMountable::FSMountable(Glib::RefPtr<Gio::File> pGioFile)
-    : FSModelBase(FSType::MOUNTABLE, pGioFile)
+    : FSModelBase(FSType::MOUNTABLE, pGioFile, 0)
 {
 }
 

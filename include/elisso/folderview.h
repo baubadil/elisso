@@ -15,6 +15,8 @@
 
 #include "elisso/fsmodel.h"
 
+#include "xwp/flagset.h"
+
 class ElissoFolderView;
 
 /***************************************************************************
@@ -51,7 +53,8 @@ enum class FolderViewMode
     UNDEFINED,
     ICONS,
     LIST,
-    COMPACT
+    COMPACT,
+    ERROR
 };
 
 enum class ViewState
@@ -59,10 +62,20 @@ enum class ViewState
     UNDEFINED,
     POPULATING,
     POPULATED,
-    POPULATE_ERROR
+    ERROR
 };
 
 class ElissoApplicationWindow;
+
+enum class SetDirectoryFlags : uint8_t
+{
+    PUSH_TO_HISTORY         = (1 << 0),
+    SCROLL_TO_PREVIOUS      = (1 << 1)
+};
+
+typedef FlagSet<SetDirectoryFlags> SetDirectoryFlagSet;
+
+// DEFINE_BITSET(SetDirectoryFlags);
 
 /**
  *  The folder view is the right half of a folder window and derives from
@@ -82,13 +95,19 @@ public:
         return _id;
     }
 
+    /**
+     *  Returns the FSDirectory that's currently showing. In the event that
+     *  we're displaying a directory via a symlink, an FSSymlink is returned
+     *  that points to the directory.
+     */
     PFSModelBase getDirectory()
     {
         return _pDir;
     }
 
     bool setDirectory(PFSModelBase pDirOrSymlinkToDir,
-                      bool fPushToHistory = true);
+                      SetDirectoryFlagSet fl);
+    void refresh();
 
     bool canGoBack();
     bool goBack();
@@ -97,11 +116,12 @@ public:
 
     void setState(ViewState s);
     void setViewMode(FolderViewMode m);
+    void setError(Glib::ustring strError);
 
     void openFile(PFSModelBase pFS);
     void openTerminalOnSelectedFolder();
 
-    bool spawnPopulate();
+    struct PopulateData;
 
 private:
     void dumpStack();
@@ -122,10 +142,16 @@ private:
     ElissoApplicationWindow     &_mainWindow;
 
     ViewState                   _state = ViewState::UNDEFINED;
+    Glib::ustring               _strError;          // only with ViewState::ERROR, use setError() to set
     FolderViewMode              _mode = FolderViewMode::UNDEFINED;
+    FolderViewMode              _modeBeforeError = FolderViewMode::UNDEFINED;
+
     Gtk::IconView               _iconView;
     TreeViewWithPopup           _treeView;
 //     Gtk::FlowBox                _compactView;
+    Gtk::InfoBar                _infoBarError;
+    Gtk::Label                  _infoBarLabel;
+    Gtk::CellRendererPixbuf     _cellRendererIconSmall;
 
     PFSModelBase                _pDir;
     std::vector<std::string>    _aPathHistory;

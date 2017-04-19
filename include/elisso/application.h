@@ -54,9 +54,11 @@ protected:
     ElissoApplication(int argc,
                       char *argv[]);
 
-    void on_startup();
+    void on_startup() override;
 
-    void on_activate();
+    void on_activate() override;
+
+    void on_open(const type_vec_files &files, const Glib::ustring &hint) override;
 
     PPixBuf                     _pIcon;
     Glib::RefPtr<Gio::Settings> _pSettings;

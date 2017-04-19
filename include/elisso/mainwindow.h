@@ -60,7 +60,7 @@ class ElissoApplicationWindow : public Gtk::ApplicationWindow
 {
 public:
     ElissoApplicationWindow(ElissoApplication &app,
-                            PFSDirectory pdirInitial);
+                            PFSModelBase pdirInitial);
     virtual ~ElissoApplicationWindow();
 
     /**
@@ -92,17 +92,21 @@ public:
 
     ElissoFolderView* getActiveFolderView();
 
+    void addFolderTab(PFSModelBase pDirOrSymlink);
+
     void enableEditActions(size_t cFolders, size_t cOtherFiles);
     void enableBackForwardActions();
 
     void onLoadingFolderView(ElissoFolderView &view);
-    void onFolderViewReady(ElissoFolderView &view);
+    void onFolderViewLoaded(ElissoFolderView &view, bool fSuccess);
 
 protected:
     void initActionHandlers();
     void setSizeAndPosition();
+    void setWindowTitle(Glib::ustring str);
+    void enableViewActions(bool f);
 
-    void addFolderTab(PFSModelBase pDirOrSymlink);
+    void handleViewAction(const std::string &strAction);
 
     void closeFolderTab(ElissoFolderView &viewClose);
 
@@ -112,7 +116,7 @@ protected:
 
     // Override window signal handlers
     virtual void on_size_allocate(Gtk::Allocation& allocation) override;
-    virtual bool on_window_state_event(GdkEventWindowState *) override;
+    virtual bool on_window_state_event(GdkEventWindowState*) override;
     virtual bool on_delete_event(GdkEventAny *) override;
 
     ElissoApplication               &_app;
@@ -138,6 +142,8 @@ protected:
     Gtk::ToolButton                 *_pButtonViewIcons;
     PSimpleAction                   _pActionViewList;
     Gtk::ToolButton                 *_pButtonViewList;
+    PSimpleAction                   _pActionViewCompact;
+//     Gtk::ToolButton                 *_pButtonViewCompact;
     PSimpleAction                   _pActionViewRefresh;
     Gtk::ToolButton                 *_pButtonViewRefresh;
 

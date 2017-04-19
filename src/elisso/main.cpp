@@ -113,7 +113,8 @@ ElissoApplication::ElissoApplication(int argc,
                                      char *argv[])
     :   Gtk::Application(argc,
                          argv,
-                         "org.baubadil.elisso")
+                         "org.baubadil.elisso",
+                         Gio::APPLICATION_HANDLES_OPEN)
 {
     // This is a bit of an elabore setup to load our settings schema without
     // having to install it as root under /usr/share/. It is complicated by
@@ -138,9 +139,17 @@ ElissoApplication::ElissoApplication(int argc,
     _pSettings = Glib::wrap(pSettings_c);
 }
 
+/**
+ *  Handler for the "startup" signal, which gets fired when the first instance of a
+ *  Gtk::Application is being created. Subsequent invocations of a single-instance
+ *  Gtk::Application will instead send additional "activate" or "open" signals
+ *  to the first instance.
+ */
 void
-ElissoApplication::on_startup()
+ElissoApplication::on_startup() /* override */
 {
+    Debug::Log(DEBUG_ALWAYS, __FUNCTION__);
+
     Gtk::Application::on_startup();
 
     auto pMenuBar = Gio::Menu::create();
@@ -187,12 +196,63 @@ ElissoApplication::on_startup()
     this->set_menubar(pMenuBar);
 }
 
+/**
+ *  Handler for the "activate" signal, which gets sent whenever an instance
+ *  of Gtk::Application is created. If a second instance of a single-instance
+ *  Gtk::Application is created, this is sent to the first instance.
+ *
+ *  "Activate" is emitted if an application is started without command line arguments.
+ *  Otherwise (since we have specified APPLICATION_HANDLES_OPEN), "open" gets emitted.
+ */
 void
-ElissoApplication::on_activate()
+ElissoApplication::on_activate() /* override */
 {
+    Debug::Log(DEBUG_ALWAYS, __FUNCTION__);
     auto p = new ElissoApplicationWindow(*this, nullptr);
     this->add_window(*p);
     p->show();
+}
+
+/**
+ *
+ *  Since we have specified APPLICATION_HANDLES_OPEN, "open" gets emitted on the
+ *  primary instance if an application was started with file command line arguments.
+ *  Otherwise (no arguments), "activate" gets emitted.
+ */
+void
+ElissoApplication::on_open(const type_vec_files &files,
+                           const Glib::ustring &hint) /* override */
+{
+    Debug::Log(DEBUG_ALWAYS, __FUNCTION__);
+
+    ElissoApplicationWindow *pWindow = nullptr;
+    for (auto &pFile : files)
+    {
+        std::string strPath = pFile->get_path();
+        PFSModelBase pFSBase = FSModelBase::FindPath(strPath);
+        if (!pFSBase)
+            throw FSException("Command-line argument \"" + strPath + "\" is not a file");
+
+        Debug::Log(DEBUG_ALWAYS, std::string(__FUNCTION__) + ": handling " + strPath);
+
+        if (!pWindow)
+            // first file: new window
+            pWindow = new ElissoApplicationWindow(*this, pFSBase);
+        else
+        {
+            // additional tabs in existing window
+            Glib::signal_idle().connect_once([pWindow, pFSBase]()
+            {
+                pWindow->addFolderTab(pFSBase);
+            });
+        }
+    }
+
+    if (pWindow)
+    {
+        this->add_window(*pWindow);
+        pWindow->show();
+    }
 }
 
 
@@ -205,7 +265,7 @@ ElissoApplication::on_activate()
 int
 main(int argc, char *argv[])
 {
-    g_flDebugSet = FOLDER_POPULATE;
+    g_flDebugSet = 0; // FOLDER_POPULATE;
 
     auto app = ElissoApplication::create(argc,
                                          argv);

@@ -12,10 +12,14 @@
 #define ELISSO_FSMODEL_H
 
 #include <memory>
+#include <atomic>
+#include <type_traits>
+
 #include "glibmm.h"
 #include "giomm.h"
 
 #include "xwp/lock.h"
+#include "xwp/flagset.h"
 
 #define FS_BUF_LEN 1024
 
@@ -66,9 +70,51 @@ typedef std::shared_ptr<FSList> PFSList;
 
 /***************************************************************************
  *
+ *  StopFlag
+ *
+ **************************************************************************/
+
+class StopFlag
+{
+public:
+    StopFlag()
+    {
+        f = ATOMIC_VAR_INIT(false);
+    }
+
+    operator bool()
+    {
+        return f.load();
+    }
+
+    void set()
+    {
+        f = true;
+    }
+
+private:
+    std::atomic_bool    f;
+};
+
+
+/***************************************************************************
+ *
  *  FSModelBase
  *
  **************************************************************************/
+
+enum class FSFlags : uint8_t
+{
+    POPULATED_WITH_DIRECTORIES =  (1 <<  0),        // only for dirs
+    POPULATED_WITH_ALL         =  (1 <<  1),        // only for dirs
+    IS_ROOT_DIRECTORY          =  (1 <<  2),        // only for dirs; strParticle is ""
+    IS_CURRENT_DIRECTORY       =  (1 <<  3),        // only for dirs; strParticle is "."
+    IS_RELATIVE_PARENT         =  (1 <<  4),        // only for dirs; strParticle is ".."
+    DELETED                    =  (1 <<  5),        // After Unlink() has been called.
+    DIRTY                      =  (1 <<  6)         // Used during directory refresh.
+};
+
+typedef FlagSet<FSFlags> FSFlagSet;
 
 /**
  *  Base class for all file-system objects (files, directories, symlinks, specials).
@@ -98,7 +144,11 @@ public:
         return _strBasename;
     }
 
-    uint64_t getFileSize();
+    uint64_t getFileSize()
+    {
+        return _cbSize;
+    }
+
     Glib::ustring getIcon();
 
     FSType getType() const
@@ -124,25 +174,22 @@ protected:
     friend class FSDirectory;
 
     static PFSModelBase MakeAwake(Glib::RefPtr<Gio::File> pGioFile);
-    FSModelBase(FSType type, Glib::RefPtr<Gio::File> pGioFile);
+    FSModelBase(FSType type,
+                Glib::RefPtr<Gio::File> pGioFile,
+                uint64_t cbSize);
     virtual ~FSModelBase() { };
 
     void setParent(PFSDirectory pParentDirectory);
 
     uint64_t                    _uID = 0;
     FSType                      _type = FSType::UNINITIALIZED;
-    uint8_t                     _flFile = 0;
+    FSFlagSet                   _flFile;
     Glib::RefPtr<Gio::File>     _pGioFile;
     std::string                 _strBasename;
+    uint64_t                    _cbSize;
+    Glib::RefPtr<Gio::Icon>     _pIcon;
     PFSDirectory                _pParent;
 };
-
-const uint8_t  FL_POPULATED_WITH_DIRECTORIES =  (1 <<  0);        // only for dirs
-const uint8_t  FL_POPULATED_WITH_ALL         =  (1 <<  1);        // only for dirs
-const uint8_t  FL_IS_ROOT_DIRECTORY          =  (1 <<  2);        // only for dirs; strParticle is ""
-const uint8_t  FL_IS_CURRENT_DIRECTORY       =  (1 <<  3);        // only for dirs; strParticle is "."
-const uint8_t  FL_IS_RELATIVE_PARENT         =  (1 <<  4);        // only for dirs; strParticle is ".."
-const uint8_t  FL_DELETED                    =  (1 <<  5);        // After Unlink() has been called.
 
 
 /***************************************************************************
@@ -161,8 +208,10 @@ class FSFile : public FSModelBase
     }
 
 protected:
-    FSFile(Glib::RefPtr<Gio::File> pGioFile);
-    static PFSFile Create(Glib::RefPtr<Gio::File> pGioFile);
+    FSFile(Glib::RefPtr<Gio::File> pGioFile,
+           uint64_t cbSize);
+    static PFSFile Create(Glib::RefPtr<Gio::File> pGioFile,
+                          uint64_t cbSize);
 };
 
 
@@ -189,17 +238,15 @@ public:
         return FSTypeResolved::DIRECTORY;
     }
 
-    size_t getContents(FSList &llFiles, Get getContents);
+    bool isPopulatedWithDirectories();
 
-    bool isPopulatedWithDirectories()
-    {
-        return !!(_flFile & FL_POPULATED_WITH_DIRECTORIES);
-    }
+    bool isCompletelyPopulated();
 
-    bool isCompletelyPopulated()
-    {
-        return !!(_flFile & FL_POPULATED_WITH_ALL);
-    }
+    size_t getContents(FSList &llFiles,
+                       Get getContents,
+                       StopFlag *pStopFlag);
+
+    void unsetPopulated();
 
     PFSModelBase find(const std::string &strParticle);
 
