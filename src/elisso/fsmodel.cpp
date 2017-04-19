@@ -90,7 +90,6 @@ PFSModelBase FSModelBase::FindPath(const std::string &strPath)
 
     string strForStat;
     uint c = 0;
-//     bool fPreviousWasNamed = false;
     PFSModelBase pCurrent;
     for (auto const &strParticle : aParticles)
     {
@@ -121,16 +120,13 @@ PFSModelBase FSModelBase::FindPath(const std::string &strPath)
             {
                 // Later particles:
 
-                if (    (strParticle == "..")
-//                      && (fPreviousWasNamed)
-                   )
+                if (strParticle == "..")
                 {
                     // Avoid things like ./../subdir1/../subdir2/
                     //                                ^ we would create pChild here
                     //                        ^ this is pCurrent at this time
                     //           =>      ./../subdir2/
                     fCollapsing = true;
-//                     fPreviousWasNamed = false;
 
                     auto pPrev = pCurrent;
 
@@ -147,32 +143,8 @@ PFSModelBase FSModelBase::FindPath(const std::string &strPath)
             if (!fCollapsing)
             {
                 strForStat += "/" + strParticle;
-                PFSModelBase pChild;
-
-                if ((pChild = pDir->isAwake(strParticle)))
-                    Debug::Log(FILE_LOW, "Loop " + to_string(c) + ": particle \"" + strParticle + "\" is already awake: " + pChild->describe());
-                else
-                {
-                    Debug::Log(FILE_LOW, "Loop " + to_string(c) + ": particle \"" + strParticle + "\" => stat(\"" + strForStat + ")\"");
-                    auto pGioFile = Gio::File::create_for_path(strForStat);
-                    // The above never fails. To find out whether the path is valid we need to query the type, which does blocking I/O.
-                    if (!(pChild = MakeAwake(pGioFile)))
-                    {
-                        Debug::Log(FILE_LOW, "  could not make awake");
-                        pCurrent.reset();
-                        break;
-                    }
-
-                    pChild->setParent(pDir);
-
-                    if (!pDir->isAwake(strParticle))
-                        throw FSException("error: particle \"" + strParticle + "\" is not in parent map");
-                }
-
-//                 if (strParticle != "..")
-//                     fPreviousWasNamed = true;
-
-                pCurrent = pChild;
+                if (!(pCurrent = pDir->find(strParticle)))
+                    break;
             }
             ++c;
         }
@@ -367,6 +339,27 @@ FSModelBase::getParent()
         ;       // return NULL;
 
     return _pParent;
+}
+
+/**
+ *  Returns true if this is located under the given directory, either directly
+ *  or somewhere more deeply.
+ *
+ *  Does NOT return true if this and pDir are the same; you need to test for that
+ *  manually.
+ */
+bool
+FSModelBase::isUnder(PFSDirectory pDir)
+{
+    auto p = getParent();
+    while (p)
+    {
+        if (p == pDir)
+            return true;
+        p = p->getParent();
+    }
+
+    return false;
 }
 
 const std::string g_strFile("file");
@@ -665,11 +658,16 @@ FSDirectory::getContents(FSList &llFiles,
                                 )
                            )
                         {
-                            llFiles.push_back(p);
-                            ++c;
+                            if (    (getContents != Get::FIRST_FOLDER_ONLY)
+                                 || (!p->isHidden())
+                               )
+                            {
+                                llFiles.push_back(p);
+                                ++c;
 
-                            if (getContents == Get::FIRST_FOLDER_ONLY)
-                                break;
+                                if (getContents == Get::FIRST_FOLDER_ONLY)
+                                    break;
+                            }
                         }
                     }
 
@@ -721,7 +719,6 @@ FSDirectory::unsetPopulated()
     _flFile.reset(FSFlags::POPULATED_WITH_DIRECTORIES);
 }
 
-/*static */
 PFSModelBase
 FSDirectory::find(const string &strParticle)
 {

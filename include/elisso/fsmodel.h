@@ -167,6 +167,8 @@ public:
 
     PFSDirectory getParent();
 
+    bool isUnder(PFSDirectory pDir);
+
     const std::string& describeType();
     std::string describe(bool fLong = false);
 

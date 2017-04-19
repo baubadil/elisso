@@ -265,7 +265,7 @@ ElissoApplication::on_open(const type_vec_files &files,
 int
 main(int argc, char *argv[])
 {
-    g_flDebugSet = 0; // FOLDER_POPULATE;
+    g_flDebugSet = FOLDER_POPULATE_HIGH;
 
     auto app = ElissoApplication::create(argc,
                                          argv);

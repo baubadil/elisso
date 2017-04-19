@@ -498,10 +498,12 @@ ElissoApplicationWindow::onFolderViewLoaded(ElissoFolderView &view,
     PFSModelBase pDir = view.getDirectory();
 
     Glib::ustring strTitle = pDir->getRelativePath();
-    Debug::Log(FOLDER_POPULATE, string(__func__) + "(\"" + pDir->getRelativePath() + "\")");
+    Debug::Log(FOLDER_POPULATE_HIGH, string(__func__) + "(\"" + pDir->getRelativePath() + "\")");
 
     this->setWindowTitle(strTitle);
     this->enableViewActions(true);
+
+    _treeViewLeft.select(pDir);
 }
 
 void

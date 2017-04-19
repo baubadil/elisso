@@ -296,10 +296,10 @@ ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
             // stop the populate thread
             if (_pImpl->pPopulateData)
             {
-                Debug::Log(FOLDER_POPULATE, "already populating, stopping other populate thread");
+                Debug::Log(FOLDER_POPULATE_HIGH, "already populating, stopping other populate thread");
                 _pImpl->pPopulateData->stopFlag.set();
                 _pImpl->pPopulateData->pThread->join();
-                Debug::Log(FOLDER_POPULATE, "OK, stopped");
+                Debug::Log(FOLDER_POPULATE_LOW, "OK, stopped");
             }
         break;
     }
@@ -343,7 +343,7 @@ ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
                 this->setError("Invalid directory");
             else
             {
-                Debug::Log(FOLDER_POPULATE, "POPULATING - ElissoFolderView::spawnPopulate(\"" + _pDir->getRelativePath() + "\")");
+                Debug::Log(FOLDER_POPULATE_HIGH, "POPULATING LIST \"" + _pDir->getRelativePath() + "\"");
 
                 PPopulateData pPopulateData = std::make_shared<PopulateData>(pDir,
                                                                              this->_pImpl->dispatcherPopulateDone,
@@ -746,7 +746,7 @@ ElissoFolderView::onPopulateDone()
     {
         const FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
 
-        Debug::Log(FOLDER_POPULATE, "ElissoFolderView::onPopulateDone(\"" + _pDir->getRelativePath() + "\")");
+        Debug::Log(FOLDER_POPULATE_LOW, "ElissoFolderView::onPopulateDone(\"" + _pDir->getRelativePath() + "\")");
 
         for (auto &pFS : _pImpl->llFolderContents)
             if (!pFS->isHidden())
@@ -997,7 +997,7 @@ ElissoFolderView::onPathActivated(const Gtk::TreeModel::Path &path)
     PFSModelBase pFS = getFSObject(iter);
     if (pFS)
     {
-        Debug::Log(FOLDER_POPULATE, string(__func__) + "(\"" + pFS->getRelativePath() + "\")");
+        Debug::Log(FOLDER_POPULATE_HIGH, string(__func__) + "(\"" + pFS->getRelativePath() + "\")");
         this->openFile(pFS);
     }
 }

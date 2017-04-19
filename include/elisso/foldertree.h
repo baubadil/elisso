@@ -42,9 +42,15 @@ public:
     void addTreeRoot(const Glib::ustring &strName,
                      PFSDirectory pDir);
 
+    void select(PFSModelBase pDir);
+
 private:
     bool spawnPopulate(const Gtk::TreeModel::iterator &it);
     void onPopulateDone();
+
+    Gtk::TreeModel::iterator insertNode(const Glib::ustring &strName,
+                                        PFSModelBase pFS,
+                                        const Gtk::TreeNodeChildren &children);
 
     void spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst);
     void onAddAnotherFirst();
