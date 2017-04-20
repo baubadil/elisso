@@ -154,45 +154,61 @@ ElissoApplication::on_startup() /* override */
 
     auto pMenuBar = Gio::Menu::create();
 
-    auto pMenuFile = Gio::Menu::create();
-    pMenuBar->append_submenu("_File", pMenuFile);
-    auto pFileSection1 = addMenuSection(pMenuFile);
-    addMenuItem(pFileSection1, "New _tab", ACTION_FILE_NEW_TAB, "<Primary>t");
-    addMenuItem(pFileSection1, "New _window", ACTION_FILE_NEW_WINDOW, "<Primary>n");
-    auto pFileSection2 = addMenuSection(pMenuFile);
-    addMenuItem(pFileSection2, "_Quit", ACTION_FILE_QUIT, "<Primary>q");
-    addMenuItem(pFileSection2, "Close tab", ACTION_FILE_CLOSE_TAB, "<Primary>w");
+    auto pSubmenu = Gio::Menu::create();
+    pMenuBar->append_submenu("_File", pSubmenu);
+    auto pSubSection = addMenuSection(pSubmenu);
+    addMenuItem(pSubSection, "New _tab", ACTION_FILE_NEW_TAB, "<Primary>t");
+    addMenuItem(pSubSection, "New _window", ACTION_FILE_NEW_WINDOW, "<Primary>n");
+    addMenuItem(pSubSection, "Open current folder in ter_minal", ACTION_FILE_OPEN_IN_TERMINAL, "<Primary>m");
 
-    auto pMenuEdit = Gio::Menu::create();
-    pMenuBar->append_submenu("_Edit", pMenuEdit);
-    auto pEditSection1 = addMenuSection(pMenuEdit);
-    addMenuItem(pEditSection1, "_Copy", ACTION_EDIT_COPY, "<Primary>c");
-    addMenuItem(pEditSection1, "Cu_t", ACTION_EDIT_CUT, "<Primary>x");
-    addMenuItem(pEditSection1, "_Paste", ACTION_EDIT_PASTE, "<Primary>v");
-    auto pEditSection2 = addMenuSection(pMenuEdit);
-    addMenuItem(pEditSection2, "_Open", ACTION_EDIT_OPEN);
-    addMenuItem(pEditSection2, "Open in new ta_b", ACTION_EDIT_OPEN_IN_TAB);
-    addMenuItem(pEditSection2, "Open in _terminal", ACTION_EDIT_OPEN_IN_TERMINAL);
+    pSubSection = addMenuSection(pSubmenu);
+    addMenuItem(pSubSection, "Create new folder", ACTION_FILE_CREATE_FOLDER, "<Primary><Shift>n");
+    addMenuItem(pSubSection, "Create empty document", ACTION_FILE_CREATE_DOCUMENT);
 
-    auto pMenuView = Gio::Menu::create();
-    pMenuBar->append_submenu("_View", pMenuView);
-    auto pViewSection = addMenuSection(pMenuView);
-    addMenuItem(pViewSection, "Icons", ACTION_VIEW_ICONS, "<Primary>1");
-    addMenuItem(pViewSection, "List", ACTION_VIEW_LIST, "<Primary>2");
-    addMenuItem(pViewSection, "Compact", ACTION_VIEW_COMPACT, "<Primary>3");
-    auto pViewSection2 = addMenuSection(pMenuView);
-    addMenuItem(pViewSection2, "Refresh", ACTION_VIEW_REFRESH, "<Primary>r");
+    pSubSection = addMenuSection(pSubmenu);
+    addMenuItem(pSubSection, "Current folder properties", ACTION_FILE_PROPERTIES);
 
-    auto pMenuGo = Gio::Menu::create();
-    pMenuBar->append_submenu("_Go", pMenuGo);
-    addMenuItem(pMenuGo, "Parent", ACTION_GO_PARENT, "<Alt>Up");
-    addMenuItem(pMenuGo, "Back", ACTION_GO_BACK, "<Alt>Left");
-    addMenuItem(pMenuGo, "Forward", ACTION_GO_FORWARD, "<Alt>Right");
-    addMenuItem(pMenuGo, "Home", ACTION_GO_HOME, "<Alt>Home");
+    pSubSection = addMenuSection(pSubmenu);
+    addMenuItem(pSubSection, "_Quit", ACTION_FILE_QUIT, "<Primary>q");
+    addMenuItem(pSubSection, "Close current tab", ACTION_FILE_CLOSE_TAB, "<Primary>w");
 
-    auto pMenuHelp = Gio::Menu::create();
-    pMenuBar->append_submenu("_Help", pMenuHelp);
-    addMenuItem(pMenuHelp, "About", ACTION_ABOUT);
+    pSubmenu = Gio::Menu::create();
+    pMenuBar->append_submenu("_Edit", pSubmenu);
+    pSubSection = addMenuSection(pSubmenu);
+    addMenuItem(pSubSection, "_Copy", ACTION_EDIT_COPY, "<Primary>c");
+    addMenuItem(pSubSection, "Cu_t", ACTION_EDIT_CUT, "<Primary>x");
+    addMenuItem(pSubSection, "_Paste", ACTION_EDIT_PASTE, "<Primary>v");
+    pSubSection = addMenuSection(pSubmenu);
+    addMenuItem(pSubSection, "Select _all", ACTION_EDIT_SELECT_ALL, "<Primary>a");
+    pSubSection = addMenuSection(pSubmenu);
+    addMenuItem(pSubSection, "_Open selected", ACTION_EDIT_OPEN_SELECTED);
+    addMenuItem(pSubSection, "Open selected in new ta_b", ACTION_EDIT_OPEN_SELECTED_IN_TAB);
+    addMenuItem(pSubSection, "Open selected in ter_minal", ACTION_EDIT_OPEN_SELECTED_IN_TERMINAL);
+
+    pSubmenu = Gio::Menu::create();
+    pMenuBar->append_submenu("_View", pSubmenu);
+    pSubSection = addMenuSection(pSubmenu);
+    addMenuItem(pSubSection, "Next tab", ACTION_VIEW_NEXT_TAB, "<Primary>Page_Down");
+    addMenuItem(pSubSection, "Previous tab", ACTION_VIEW_PREVIOUS_TAB, "<Primary>Page_Up");
+    pSubSection = addMenuSection(pSubmenu);
+    addMenuItem(pSubSection, "Icons", ACTION_VIEW_ICONS, "<Primary>1");
+    addMenuItem(pSubSection, "List", ACTION_VIEW_LIST, "<Primary>2");
+    addMenuItem(pSubSection, "Compact", ACTION_VIEW_COMPACT, "<Primary>3");
+    pSubSection = addMenuSection(pSubmenu);
+    addMenuItem(pSubSection, "Refresh", ACTION_VIEW_REFRESH, "<Primary>r");
+
+    pSubmenu = Gio::Menu::create();
+    pMenuBar->append_submenu("_Go", pSubmenu);
+    pSubSection = addMenuSection(pSubmenu);
+    addMenuItem(pSubSection, "Parent", ACTION_GO_PARENT, "<Alt>Up");
+    addMenuItem(pSubSection, "Back", ACTION_GO_BACK, "<Alt>Left");
+    addMenuItem(pSubSection, "Forward", ACTION_GO_FORWARD, "<Alt>Right");
+    pSubSection = addMenuSection(pSubmenu);
+    addMenuItem(pSubSection, "Home", ACTION_GO_HOME, "<Alt>Home");
+
+    pSubmenu = Gio::Menu::create();
+    pMenuBar->append_submenu("_Help", pSubmenu);
+    addMenuItem(pSubmenu, "About", ACTION_ABOUT);
 
     this->set_menubar(pMenuBar);
 }
@@ -266,7 +282,7 @@ ElissoApplication::on_open(const type_vec_files &files,
 int
 main(int argc, char *argv[])
 {
-    g_flDebugSet = FOLDER_POPULATE_HIGH;
+    g_flDebugSet = FOLDER_POPULATE_HIGH; //  | FILE_LOW;
 
     auto app = ElissoApplication::create(argc,
                                          argv);

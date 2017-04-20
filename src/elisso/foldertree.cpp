@@ -312,7 +312,7 @@ ElissoFolderTree::ElissoFolderTree(ElissoApplicationWindow &mainWindow)
     this->show_all_children();
 
     this->addTreeRoot("Home", FSDirectory::GetHome());
-    this->addTreeRoot("File system", FSDirectory::GetRoot());
+//     this->addTreeRoot("File system", FSDirectory::GetRoot());
 //     this->addTreeRoot("File system", FSDirectory::GetRoot());
 }
 
@@ -525,7 +525,7 @@ ElissoFolderTree::onPopulateDone()
     // Fetch the Populated result from the queue.
     PPopulated pPopulated= this->_pImpl->workerPopulated.fetchResult();
 
-    Debug::Log(FOLDER_POPULATE_LOW, "TreeJob::onPopulateDone(\"" + pPopulated->_pDirOrSymlink->getRelativePath() + "\")");
+    Debug::Log(FOLDER_POPULATE_HIGH, "ElissoFolderTree::onPopulateDone(\"" + pPopulated->_pDirOrSymlink->getRelativePath() + "\")");
 
     // Turn of sorting before inserting a lot of items. This can really slow things down exponentially otherwise.
     _pImpl->pTreeStore->set_sort_column(Gtk::TreeSortable::DEFAULT_UNSORTED_COLUMN_ID,

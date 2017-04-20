@@ -303,7 +303,6 @@ FSModelBase::setParent(PFSModelBase pNewParent)
         if (!pMap)
             throw FSException("Cannot get contents map");
 
-
         pMap->m[strBasename] = shared_from_this();
     }
 }
@@ -316,11 +315,21 @@ FSModelBase::setParent(PFSModelBase pNewParent)
 bool
 FSModelBase::isHidden()
 {
-    auto len = _strBasename.length();
-    if (!len)
-        return true;
-    return     (_strBasename[0] == '.')
-            || (_strBasename[len - 1] == '~');
+    if (!_fl.test(FSFlags::HIDDEN_CHECKED))
+    {
+        auto len = _strBasename.length();
+        if (!len)
+            _fl |= FSFlags::HIDDEN;
+        else
+            if (    (_strBasename[0] == '.')
+                 || (_strBasename[len - 1] == '~')
+               )
+                _fl |= FSFlags::HIDDEN;
+
+        _fl |= FSFlags::HIDDEN_CHECKED;
+    }
+
+    return _fl.test(FSFlags::HIDDEN);
 
 //     auto pInfo = _pGioFile->query_info(G_FILE_ATTRIBUTE_STANDARD_IS_HIDDEN,
 //                                        Gio::FileQueryInfoFlags::FILE_QUERY_INFO_NOFOLLOW_SYMLINKS);
@@ -617,7 +626,9 @@ FSContainer::getContents(FSList &llFiles,
                             {
                                 pKeep->setParent(pSharedThis);
 
-                                if (getContents == Get::FIRST_FOLDER_ONLY)
+                                if (    (getContents == Get::FIRST_FOLDER_ONLY)
+                                     && (!pKeep->isHidden())
+                                   )
                                 {
                                     if (t == FSType::DIRECTORY)
                                         break;      // we're done
@@ -665,9 +676,7 @@ FSContainer::getContents(FSList &llFiles,
                     {
                         if (    (getContents == Get::ALL)
                              || (p->getType() == FSType::DIRECTORY)
-                             || (    (getContents == Get::FOLDERS_ONLY)
-                                  && (p->getResolvedType() == FSTypeResolved::SYMLINK_TO_DIRECTORY)
-                                )
+                             || (p->getResolvedType() == FSTypeResolved::SYMLINK_TO_DIRECTORY)
                            )
                         {
                             if (    (getContents != Get::FIRST_FOLDER_ONLY)

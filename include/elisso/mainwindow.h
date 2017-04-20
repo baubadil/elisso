@@ -100,11 +100,14 @@ public:
     void onLoadingFolderView(ElissoFolderView &view);
     void onFolderViewLoaded(ElissoFolderView &view, PFSModelBase pDirSelect);
 
+    void openFolderInTerminal(PFSModelBase pFS);
+
 protected:
     void initActionHandlers();
     void setSizeAndPosition();
     void setWindowTitle(Glib::ustring str);
-    void enableViewActions(bool f);
+    void enableViewTabActions();
+    void enableViewTypeActions(bool f);
 
     void handleViewAction(const std::string &strAction);
 
@@ -121,12 +124,13 @@ protected:
 
     ElissoApplication               &_app;
 
-    PSimpleAction                   _pActionEditOpen;
-    PSimpleAction                   _pActionEditOpenInTab;
-    PSimpleAction                   _pActionEditOpenInTerminal;
+    PSimpleAction                   _pActionEditOpenSelected;
+    PSimpleAction                   _pActionEditOpenSelectedInTab;
+    PSimpleAction                   _pActionEditOpenSelectedInTerminal;
     PSimpleAction                   _pActionEditCopy;
     PSimpleAction                   _pActionEditCut;
     PSimpleAction                   _pActionEditPaste;
+    PSimpleAction                   _pActionEditSelectAll;
     PSimpleAction                   _pActionEditRename;
     PSimpleAction                   _pActionEditTrash;
     PSimpleAction                   _pActionEditProperties;
@@ -139,6 +143,9 @@ protected:
     Gtk::ToolButton                 *_pButtonGoParent;
     PSimpleAction                   _pActionGoHome;
     Gtk::ToolButton                 *_pButtonGoHome;
+
+    PSimpleAction                   _pActionViewNextTab;
+    PSimpleAction                   _pActionViewPreviousTab;
     PSimpleAction                   _pActionViewIcons;
     Gtk::ToolButton                 *_pButtonViewIcons;
     PSimpleAction                   _pActionViewList;

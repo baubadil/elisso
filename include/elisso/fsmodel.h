@@ -111,7 +111,9 @@ enum class FSFlags : uint8_t
     POPULATED_WITH_ALL         =  (1 <<  1),        // only for dirs
     IS_ROOT_DIRECTORY          =  (1 <<  2),        // only for dirs; strParticle is ""
     IS_CURRENT_DIRECTORY       =  (1 <<  3),        // only for dirs; strParticle is "."
-    DIRTY                      =  (1 <<  4)         // only used during populate
+    DIRTY                      =  (1 <<  4),        // only used during populate
+    HIDDEN_CHECKED             =  (1 <<  5),
+    HIDDEN                     =  (1 <<  6),
 };
 
 typedef FlagSet<FSFlags> FSFlagSet;

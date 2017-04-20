@@ -108,6 +108,8 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app,
         {
             PFSModelBase pDir = p->getDirectory();
             this->onFolderViewLoaded(*p, pDir);
+
+            this->enableViewTabActions();
         }
     });
 }
@@ -157,6 +159,20 @@ ElissoApplicationWindow::initActionHandlers()
         }
     });
 
+    this->add_action(ACTION_FILE_OPEN_IN_TERMINAL, [this]()
+    {
+        this->handleViewAction(ACTION_FILE_OPEN_IN_TERMINAL);
+    });
+
+    this->add_action(ACTION_FILE_CREATE_FOLDER, [this]()
+    {
+        this->handleViewAction(ACTION_FILE_CREATE_FOLDER);
+    });
+
+    this->add_action(ACTION_FILE_CREATE_DOCUMENT, [this]()
+    {
+    });
+
     this->add_action(ACTION_FILE_QUIT, [this]()
     {
         getApplication().quit();
@@ -167,23 +183,24 @@ ElissoApplicationWindow::initActionHandlers()
         this->handleViewAction(ACTION_FILE_CLOSE_TAB);
     });
 
+
     /*
      *  Edit menu
      */
 
-    _pActionEditOpen = this->add_action(ACTION_EDIT_OPEN, [this]()
+    _pActionEditOpenSelected = this->add_action(ACTION_EDIT_OPEN_SELECTED, [this]()
     {
-        this->handleViewAction(ACTION_EDIT_OPEN);
+        this->handleViewAction(ACTION_EDIT_OPEN_SELECTED);
     });
 
-    _pActionEditOpenInTab = this->add_action(ACTION_EDIT_OPEN_IN_TAB, [this]()
+    _pActionEditOpenSelectedInTab = this->add_action(ACTION_EDIT_OPEN_SELECTED_IN_TAB, [this]()
     {
-        this->handleViewAction(ACTION_EDIT_OPEN_IN_TAB);
+        this->handleViewAction(ACTION_EDIT_OPEN_SELECTED_IN_TAB);
     });
 
-    _pActionEditOpenInTerminal = this->add_action(ACTION_EDIT_OPEN_IN_TERMINAL, [this]()
+    _pActionEditOpenSelectedInTerminal = this->add_action(ACTION_EDIT_OPEN_SELECTED_IN_TERMINAL, [this]()
     {
-        this->handleViewAction(ACTION_EDIT_OPEN_IN_TERMINAL);
+        this->handleViewAction(ACTION_EDIT_OPEN_SELECTED_IN_TERMINAL);
     });
 
     _pActionEditCopy = this->add_action(ACTION_EDIT_COPY, [this]()
@@ -196,6 +213,11 @@ ElissoApplicationWindow::initActionHandlers()
 
     _pActionEditPaste = this->add_action(ACTION_EDIT_PASTE, [this]()
     {
+    });
+
+    _pActionEditSelectAll = this->add_action(ACTION_EDIT_SELECT_ALL, [this]()
+    {
+        this->handleViewAction(ACTION_EDIT_SELECT_ALL);
     });
 
     _pActionEditRename = this->add_action(ACTION_EDIT_RENAME, [this]()
@@ -214,6 +236,20 @@ ElissoApplicationWindow::initActionHandlers()
     /*
      *  View menu
      */
+    _pActionViewNextTab = this->add_action(ACTION_VIEW_NEXT_TAB, [this]()
+    {
+        int i = _notebook.get_current_page();
+        if (i < _notebook.get_n_pages() - 1)
+            _notebook.set_current_page(i + 1);
+    });
+
+    _pActionViewPreviousTab = this->add_action(ACTION_VIEW_PREVIOUS_TAB, [this]()
+    {
+        int i = _notebook.get_current_page();
+        if (i > 0)
+            _notebook.set_current_page(i - 1);
+    });
+
     _pActionViewIcons = this->add_action(ACTION_VIEW_ICONS, [this]()
     {
         this->handleViewAction(ACTION_VIEW_ICONS);
@@ -233,6 +269,7 @@ ElissoApplicationWindow::initActionHandlers()
     {
         this->handleViewAction(ACTION_VIEW_REFRESH);
     });
+
 
     /*
      *  Go menu
@@ -256,6 +293,7 @@ ElissoApplicationWindow::initActionHandlers()
     {
         this->handleViewAction(ACTION_GO_HOME);
     });
+
 
     /*
      *  Help menu
@@ -451,6 +489,8 @@ ElissoApplicationWindow::getActiveFolderView()
 
 /**
  *  Called from ElissoFolderView::onSelectionChanged() whenever the selection changes.
+ *
+ *  If nothing is selected, then
  */
 void
 ElissoApplicationWindow::enableEditActions(size_t cFolders, size_t cOtherFiles)
@@ -458,9 +498,9 @@ ElissoApplicationWindow::enableEditActions(size_t cFolders, size_t cOtherFiles)
     Debug::Log(DEBUG_ALWAYS, "cFolders: " + to_string(cFolders) + ", cOtherFiles: " + to_string(cOtherFiles));
     size_t cTotal = cFolders + cOtherFiles;
     bool fSingleFolder = (cTotal == 1) && (cFolders == 1);
-    _pActionEditOpen->set_enabled(cTotal == 1);
-    _pActionEditOpenInTab->set_enabled(fSingleFolder);
-    _pActionEditOpenInTerminal->set_enabled(fSingleFolder);
+    _pActionEditOpenSelected->set_enabled(cTotal == 1);
+    _pActionEditOpenSelectedInTab->set_enabled(fSingleFolder);
+    _pActionEditOpenSelectedInTerminal->set_enabled(fSingleFolder);
     _pActionEditCopy->set_enabled(cTotal > 0);
     _pActionEditCut->set_enabled(cTotal > 0);
     _pActionEditPaste->set_enabled(false);
@@ -489,7 +529,9 @@ ElissoApplicationWindow::onLoadingFolderView(ElissoFolderView &view)
     PFSModelBase pDir = view.getDirectory();
 
     this->setWindowTitle("Loading " + pDir->getBasename() + "...");
-    this->enableViewActions(false);
+    this->enableViewTypeActions(false);
+    // Disable all edit actions; they will only get re-enabled when the "selected" signal comes in.
+    this->enableEditActions(0, 0);
 }
 
 /**
@@ -516,14 +558,31 @@ ElissoApplicationWindow::onFolderViewLoaded(ElissoFolderView &view,
     }
 
     this->setWindowTitle(strTitle);
-    this->enableViewActions(true);
+    this->enableViewTypeActions(true);
 
     if (pDirSelect)
         _treeViewLeft.select(pDirSelect);
 }
 
 void
-ElissoApplicationWindow::enableViewActions(bool f)
+ElissoApplicationWindow::openFolderInTerminal(PFSModelBase pFS)
+{
+    auto strPath = pFS->getRelativePath();
+    g_subprocess_new(G_SUBPROCESS_FLAGS_NONE,
+                     NULL,
+                     "open", "--screen", "auto", strPath.c_str(), nullptr);
+}
+
+void
+ElissoApplicationWindow::enableViewTabActions()
+{
+    int cCurrent = _notebook.get_current_page();
+    _pActionViewNextTab->set_enabled(cCurrent < _notebook.get_n_pages() - 1);
+    _pActionViewPreviousTab->set_enabled(cCurrent > 0);
+}
+
+void
+ElissoApplicationWindow::enableViewTypeActions(bool f)
 {
     _pActionViewIcons->set_enabled(f);
     _pActionViewList->set_enabled(f);
@@ -537,27 +596,28 @@ ElissoApplicationWindow::handleViewAction(const std::string &strAction)
     auto p = this->getActiveFolderView();
     if (p)
     {
-        if (strAction == ACTION_FILE_CLOSE_TAB)
+        if (strAction == ACTION_FILE_OPEN_IN_TERMINAL)
+            this->openFolderInTerminal(p->getDirectory());
+        else if (strAction == ACTION_FILE_CREATE_FOLDER)
+            p->createSubfolder();
+        else if (strAction == ACTION_FILE_CLOSE_TAB)
             this->closeFolderTab(*p);
-        else if (strAction == ACTION_EDIT_OPEN)
+        else if (strAction == ACTION_EDIT_OPEN_SELECTED)
             p->openFile(nullptr);
-        else if (strAction == ACTION_EDIT_OPEN_IN_TAB)
+        else if (strAction == ACTION_EDIT_OPEN_SELECTED_IN_TAB)
         {
             auto pFS = p->getSelectedFolder();
             if (pFS)
                 this->addFolderTab(pFS);
         }
-        else if (strAction == ACTION_EDIT_OPEN_IN_TERMINAL)
+        else if (strAction == ACTION_EDIT_OPEN_SELECTED_IN_TERMINAL)
         {
             auto pFS = p->getSelectedFolder();
             if (pFS)
-            {
-                auto strPath = pFS->getRelativePath();
-                g_subprocess_new(G_SUBPROCESS_FLAGS_NONE,
-                                 NULL,
-                                 "open", "--screen", "auto", strPath.c_str(), nullptr);
-            }
+                this->openFolderInTerminal(pFS);
         }
+        else if (strAction == ACTION_EDIT_SELECT_ALL)
+            p->selectAll();
         else if (strAction == ACTION_VIEW_ICONS)
             p->setViewMode(FolderViewMode::ICONS);
         else if (strAction == ACTION_VIEW_LIST)

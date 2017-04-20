@@ -11,35 +11,12 @@
 #ifndef ELISSO_FOLDERVIEW_H
 #define ELISSO_FOLDERVIEW_H
 
-#include <gtkmm.h>
-
 #include "elisso/fsmodel.h"
+#include "elisso/treeviewplus.h"
 
 #include "xwp/flagset.h"
 
 class ElissoFolderView;
-
-/***************************************************************************
- *
- *  TreeViewWithPopup
- *
- **************************************************************************/
-
-class TreeViewWithPopup : public Gtk::TreeView
-{
-    friend class ElissoFolderView;
-
-protected:
-    bool on_button_press_event(GdkEventButton* button_event) override;
-
-private:
-    void setParent(ElissoFolderView &view)
-    {
-        this->_pView = &view;
-    }
-
-    ElissoFolderView *_pView = NULL;
-};
 
 
 /***************************************************************************
@@ -86,8 +63,6 @@ typedef FlagSet<SetDirectoryFlags> SetDirectoryFlagSet;
  */
 class ElissoFolderView : public Gtk::ScrolledWindow
 {
-    friend class TreeViewWithPopup;
-
 public:
     ElissoFolderView(ElissoApplicationWindow &mainWindow);
     virtual ~ElissoFolderView();
@@ -120,8 +95,19 @@ public:
     void setViewMode(FolderViewMode m);
     void setError(Glib::ustring strError);
 
+    void selectAll();
+
     PFSModelBase getSelectedFolder();
     void openFile(PFSModelBase pFS);
+
+    PFSDirectory createSubfolder();
+
+    void onMouseButton3Pressed(GdkEventButton *pEvent, MouseButton3ClickType clickType);
+
+    ElissoApplicationWindow& getApplicationWindow()
+    {
+        return _mainWindow;
+    }
 
     struct PopulateData;
 
@@ -137,7 +123,6 @@ private:
 
     void onPathActivated(const Gtk::TreeModel::Path &path);
     void onSelectionChanged();
-    void onMouseButton3Pressed(GdkEventButton* event);
 
     size_t                      _id;
 
@@ -149,7 +134,7 @@ private:
     FolderViewMode              _modeBeforeError = FolderViewMode::UNDEFINED;
 
     Gtk::IconView               _iconView;
-    TreeViewWithPopup           _treeView;
+    TreeViewPlus                _treeView;
 //     Gtk::FlowBox                _compactView;
     Gtk::InfoBar                _infoBarError;
     Gtk::Label                  _infoBarLabel;

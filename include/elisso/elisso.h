@@ -37,19 +37,27 @@ DEF_STRING(APPLICATION_NAME, "elisso");
 
 DEF_STRING(ACTION_FILE_NEW_TAB, "file-new-tab");
 DEF_STRING(ACTION_FILE_NEW_WINDOW, "file-new-window");
+DEF_STRING(ACTION_FILE_OPEN_IN_TERMINAL, "file-open-in-terminal");
+DEF_STRING(ACTION_FILE_CREATE_FOLDER, "file-create-folder");
+DEF_STRING(ACTION_FILE_CREATE_DOCUMENT, "file-create-document");
+DEF_STRING(ACTION_FILE_PROPERTIES, "file-properties");
 DEF_STRING(ACTION_FILE_QUIT, "file-quit");
 DEF_STRING(ACTION_FILE_CLOSE_TAB, "file-close-tab");
 
-DEF_STRING(ACTION_EDIT_OPEN, "edit-open");
-DEF_STRING(ACTION_EDIT_OPEN_IN_TAB, "edit-open-in-tab");
-DEF_STRING(ACTION_EDIT_OPEN_IN_TERMINAL, "edit-open-in-terminal");
+// Items that operate on the selected rows.
+DEF_STRING(ACTION_EDIT_OPEN_SELECTED, "edit-open-selected");
+DEF_STRING(ACTION_EDIT_OPEN_SELECTED_IN_TAB, "edit-open-selected-in-tab");
+DEF_STRING(ACTION_EDIT_OPEN_SELECTED_IN_TERMINAL, "edit-open-selected-in-terminal");
 DEF_STRING(ACTION_EDIT_COPY, "edit-copy");
 DEF_STRING(ACTION_EDIT_CUT, "edit-cut");
 DEF_STRING(ACTION_EDIT_PASTE, "edit-paste");
+DEF_STRING(ACTION_EDIT_SELECT_ALL, "edit-select-all");
 DEF_STRING(ACTION_EDIT_RENAME, "edit-rename");
 DEF_STRING(ACTION_EDIT_TRASH, "edit-trash");
 DEF_STRING(ACTION_EDIT_PROPERTIES, "edit-properties");
 
+DEF_STRING(ACTION_VIEW_NEXT_TAB, "view-next-tab");
+DEF_STRING(ACTION_VIEW_PREVIOUS_TAB, "view-previous-tab");
 DEF_STRING(ACTION_VIEW_ICONS, "view-icons");
 DEF_STRING(ACTION_VIEW_LIST, "view-list");
 DEF_STRING(ACTION_VIEW_COMPACT, "view-compact");
