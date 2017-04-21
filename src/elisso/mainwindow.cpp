@@ -12,6 +12,8 @@
 
 #include "elisso/elisso.h"
 
+#include "xwp/except.h"
+
 ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app,
                                                  PFSModelBase pdirInitial)      //!< in: initial directory or nullptr for "home"
     : _app(app),
@@ -226,6 +228,12 @@ ElissoApplicationWindow::initActionHandlers()
 
     _pActionEditTrash = this->add_action(ACTION_EDIT_TRASH, [this]()
     {
+        this->handleViewAction(ACTION_EDIT_TRASH);
+    });
+
+    _pActionEditTestFileops = this->add_action(ACTION_EDIT_TEST_FILEOPS, [this]()
+    {
+        this->handleViewAction(ACTION_EDIT_TEST_FILEOPS);
     });
 
     _pActionEditProperties = this->add_action(ACTION_EDIT_PROPERTIES, [this]()
@@ -590,6 +598,11 @@ ElissoApplicationWindow::enableViewTypeActions(bool f)
     _pActionViewRefresh->set_enabled(f);
 }
 
+/**
+ *  Handles all actions that operate on the currently active folder view
+ *  in the notebook. This installs an exception handler so that methods
+ *  can freely throw FSException, whose message then gets shown in an errorBox().
+ */
 void
 ElissoApplicationWindow::handleViewAction(const std::string &strAction)
 {
@@ -598,12 +611,8 @@ ElissoApplicationWindow::handleViewAction(const std::string &strAction)
     {
         if (strAction == ACTION_FILE_OPEN_IN_TERMINAL)
             this->openFolderInTerminal(p->getDirectory());
-        else if (strAction == ACTION_FILE_CREATE_FOLDER)
-            p->createSubfolder();
         else if (strAction == ACTION_FILE_CLOSE_TAB)
             this->closeFolderTab(*p);
-        else if (strAction == ACTION_EDIT_OPEN_SELECTED)
-            p->openFile(nullptr);
         else if (strAction == ACTION_EDIT_OPEN_SELECTED_IN_TAB)
         {
             auto pFS = p->getSelectedFolder();
@@ -616,34 +625,9 @@ ElissoApplicationWindow::handleViewAction(const std::string &strAction)
             if (pFS)
                 this->openFolderInTerminal(pFS);
         }
-        else if (strAction == ACTION_EDIT_SELECT_ALL)
-            p->selectAll();
-        else if (strAction == ACTION_VIEW_ICONS)
-            p->setViewMode(FolderViewMode::ICONS);
-        else if (strAction == ACTION_VIEW_LIST)
-            p->setViewMode(FolderViewMode::LIST);
-        else if (strAction == ACTION_VIEW_COMPACT)
-            p->setViewMode(FolderViewMode::COMPACT);
-        else if (strAction == ACTION_VIEW_REFRESH)
-            p->refresh();
-        else if (strAction == ACTION_GO_BACK)
-            p->goBack();
-        else if (strAction == ACTION_GO_FORWARD)
-            p->goForward();
-        else if (strAction == ACTION_GO_PARENT)
-        {
-            Debug::Log(DEBUG_ALWAYS, "go parent");
-            PFSModelBase pDir;
-            if ((pDir = p->getDirectory()))
-                if ((pDir = pDir->getParent()))
-                    p->setDirectory(pDir, SetDirectoryFlags::PUSH_TO_HISTORY);
-        }
-        else if (strAction == ACTION_GO_HOME)
-        {
-            auto pHome = FSDirectory::GetHome();
-            if (pHome)
-                p->setDirectory(pHome, SetDirectoryFlags::PUSH_TO_HISTORY);
-        }
+        else
+            // Forward all others to currently active folder view.
+            p->handleAction(strAction);
     }
 }
 

@@ -67,9 +67,20 @@ public:
     ElissoFolderView(ElissoApplicationWindow &mainWindow);
     virtual ~ElissoFolderView();
 
+    /*
+     *  Public view methods
+     */
     size_t getID()
     {
         return _id;
+    }
+
+    /**
+     *  Returns the parent application window, properly cast.
+     */
+    ElissoApplicationWindow& getApplicationWindow()
+    {
+        return _mainWindow;
     }
 
     /**
@@ -95,29 +106,38 @@ public:
     void setViewMode(FolderViewMode m);
     void setError(Glib::ustring strError);
 
+    /*
+     *  Public selection methods
+     */
     void selectAll();
 
     PFSModelBase getSelectedFolder();
-    void openFile(PFSModelBase pFS);
-
-    PFSDirectory createSubfolder();
 
     void onMouseButton3Pressed(GdkEventButton *pEvent, MouseButton3ClickType clickType);
 
-    ElissoApplicationWindow& getApplicationWindow()
-    {
-        return _mainWindow;
-    }
+    /*
+     *  Public file action methods
+     */
+    void handleAction(const std::string &strAction);
 
-    struct PopulateData;
+    void openFile(PFSModelBase pFS);
+
+    PFSDirectory createSubfolderDialog();
+    void trashSelected();
+    void testFileopsSelected();
+
+    class PopulateThread;
 
 private:
+    friend class FolderViewMonitor;
+
     void dumpStack();
     void onPopulateDone();
+    void removeFile(PFSModelBase pFS);
+    void insertFile(PFSModelBase pFS);
     void connectModel(bool fConnect);
     void setListViewColumns();
 
-    PFSModelBase getFSObject(Gtk::TreeModel::iterator &iter);
     struct Selection;
     size_t getSelection(Selection &sel);
 
@@ -147,5 +167,27 @@ private:
     struct Impl;
     Impl                        *_pImpl;
 };
+
+/***************************************************************************
+ *
+ *  FolderViewMonitor
+ *
+ **************************************************************************/
+
+class FolderViewMonitor : public FSMonitorBase
+{
+public:
+    FolderViewMonitor(ElissoFolderView &view)
+        : FSMonitorBase(),
+          _view(view)
+    { };
+
+    virtual void onItemRemoved(PFSModelBase &pFS) override;
+    virtual void onDirectoryAdded(PFSDirectory &pDir) override;
+
+private:
+    ElissoFolderView &_view;
+};
+typedef shared_ptr<FolderViewMonitor> PFolderViewMonitor;
 
 #endif // ELISSO_FOLDERVIEW_H

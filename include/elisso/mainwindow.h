@@ -133,6 +133,7 @@ protected:
     PSimpleAction                   _pActionEditSelectAll;
     PSimpleAction                   _pActionEditRename;
     PSimpleAction                   _pActionEditTrash;
+    PSimpleAction                   _pActionEditTestFileops;
     PSimpleAction                   _pActionEditProperties;
 
     PSimpleAction                   _pActionGoBack;

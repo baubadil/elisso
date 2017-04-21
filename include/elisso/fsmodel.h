@@ -70,6 +70,65 @@ typedef std::shared_ptr<FSList> PFSList;
 class FSContainer;
 struct ContentsMap;
 
+
+/***************************************************************************
+ *
+ *  FSMonitorBase
+ *
+ **************************************************************************/
+
+/**
+ *  Monitor interface to allow clients to be notified when the contents of
+ *  a directory change. This happens both on programmatic changes (e.g.
+ *  createSubdirectory()) as well as background changes from file system
+ *  watches (TODO).
+ *
+ *  To use:
+ *
+ *   1) Derive your own subclass of this and implement the required pure
+ *      virtual methods.
+ *
+ *   2) Create a shared_ptr of this and store it in your GUI instance data.
+ *
+ *   3) Call startWatching() with a container. This stores the instance in
+ *      the container (and thus increases the refcount of the shared_ptr).
+ *      From now on the container will call the monitor methods when folder
+ *      contents change.
+ *
+ *   4) When you're done monitoring, call stopWatching(). You can keep the
+ *      instance around for another container.
+ *
+ *  There is an 1:N relation between containers and monitors: a monitor
+ *  can watch at most one container, but a folder (container) can have
+ *  multiple monitors.
+ */
+class FSMonitorBase : public ProhibitCopy, public enable_shared_from_this<FSMonitorBase>
+{
+    friend class FSContainer;
+
+public:
+    virtual void onItemRemoved(PFSModelBase &pFS) = 0;
+    virtual void onDirectoryAdded(PFSDirectory &pDir) = 0;
+
+    FSContainer* isWatching()
+    {
+        return _pContainer;
+    }
+
+    void startWatching(FSContainer &cnr);
+    void stopWatching(FSContainer &cnr);
+
+protected:
+    virtual ~FSMonitorBase() {}
+
+private:
+    FSContainer *_pContainer = nullptr;
+};
+
+typedef std::shared_ptr<FSMonitorBase> PFSMonitorBase;
+typedef std::list<PFSMonitorBase> FSMonitorsList;
+
+
 /***************************************************************************
  *
  *  StopFlag
@@ -139,6 +198,10 @@ public:
     static PFSModelBase FindPath(const std::string &strPath);
     static PFSDirectory FindDirectory(const std::string &strPath);
 
+    /*
+     *  Public Information methods
+     */
+
     Glib::RefPtr<Gio::File> getGioFile()
     {
         return _pGioFile;
@@ -162,6 +225,7 @@ public:
     }
 
     virtual FSTypeResolved getResolvedType() = 0;
+    bool isDirectoryOrSymlinkToDirectory();
     FSContainer* getContainer();
 
     bool isHidden();
@@ -177,7 +241,18 @@ public:
     const std::string& describeType();
     std::string describe(bool fLong = false);
 
+    /*
+     *  Public operation methods
+     */
+
+    void sendToTrash();
+    void testFileOps();
+
 protected:
+    /*
+     *  Protected methods
+     */
+
     friend class FSContainer;
 
     static PFSModelBase MakeAwake(Glib::RefPtr<Gio::File> pGioFile);
@@ -186,7 +261,7 @@ protected:
                 uint64_t cbSize);
     virtual ~FSModelBase() { };
 
-    ContentsMap* getContentsMap();
+    ContentsMap& getContentsMap();
     void setParent(PFSModelBase pNewParent);
 
     PFSModelBase getSharedFromThis()
@@ -282,6 +357,7 @@ public:
 
 protected:
     friend class FSModelBase;
+    friend class FSMonitorBase;
 
     FSContainer(FSModelBase &refBase);
     virtual ~FSContainer();
@@ -289,6 +365,7 @@ protected:
     ContentsMap         *_pMap;
 
     FSModelBase         &_refBase;
+    FSMonitorsList      _llMonitors;
 };
 
 /***************************************************************************
@@ -307,6 +384,7 @@ protected:
 class FSDirectory : public FSModelBase, public FSContainer
 {
     friend class FSModelBase;
+    friend class FSContainer;
 
 public:
     virtual FSTypeResolved getResolvedType() override
@@ -397,13 +475,14 @@ class FSSymlink : public FSModelBase, public FSContainer
 {
     friend class FSModelBase;
 
+public:
     virtual FSTypeResolved getResolvedType() override;
+
+    PFSModelBase getTarget();
 
 protected:
     FSSymlink(Glib::RefPtr<Gio::File> pGioFile);
     static PFSSymlink Create(Glib::RefPtr<Gio::File> pGioFile);
-
-    PFSModelBase getTarget();
 
     enum class State
     {

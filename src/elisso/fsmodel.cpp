@@ -15,6 +15,8 @@
 
 #include <mutex>
 #include <atomic>
+#include <chrono>
+#include <thread>
 
 #include <string.h>
 
@@ -64,6 +66,38 @@ struct ContentsMap
 
 /***************************************************************************
  *
+ *  FSMonitorBase
+ *
+ **************************************************************************/
+
+void
+FSMonitorBase::startWatching(FSContainer &cnr)
+{
+    FSLock lock;
+    if (_pContainer)
+        throw FSException("Monitor is already busy with another container");
+
+    cnr._llMonitors.push_back(shared_from_this());
+    _pContainer = &cnr;
+}
+
+void
+FSMonitorBase::stopWatching(FSContainer &cnr)
+{
+    FSLock lock;
+    if (_pContainer != &cnr)
+        throw FSException("Cannot remove monitor as it's not active for this container");
+
+    size_t c = cnr._llMonitors.size();
+    _pContainer = nullptr;
+    cnr._llMonitors.remove(shared_from_this());
+    if (cnr._llMonitors.size() != c - 1)
+        throw FSException("Couln't find monitor to remove in container's list");
+}
+
+
+/***************************************************************************
+ *
  *  FSModelBase
  *
  **************************************************************************/
@@ -72,7 +106,8 @@ struct ContentsMap
  *  Returns nullptr if the path is invalid.
  */
 /* static */
-PFSModelBase FSModelBase::FindPath(const std::string &strPath)
+PFSModelBase
+FSModelBase::FindPath(const std::string &strPath)
 {
     Debug::Enter(FILE_LOW, __func__ + string("(" + strPath + ")"));
 
@@ -159,6 +194,17 @@ PFSModelBase FSModelBase::FindPath(const std::string &strPath)
 }
 
 /**
+ *  Returns true if this is a directory or a symlink to one. Can cause I/O if this
+ *  is a symlink as this calls the virtual getResolvedType() method.
+ */
+bool
+FSModelBase::isDirectoryOrSymlinkToDirectory()
+{
+    auto t = getResolvedType();
+    return (t == FSTypeResolved::DIRECTORY) || (t == FSTypeResolved::SYMLINK_TO_DIRECTORY);
+}
+
+/**
  *  Returns the FSContainer component of this directory or symlink.
  *
  *  We use C++ multiple inheritance to be able to store directory contents for
@@ -182,45 +228,55 @@ FSModelBase::getContainer()
 }
 
 /**
- *  Creates a new FSModelBase instance, which is not yet related to a folder. You must call setParent()
- *  on the return value.
+ *  Creates a new FSModelBase instance around the given Gio::File. Note that creating a Gio::File
+ *  never fails because there is no I/O involved, but this function does perform blocking I/O
+ *  to test for the file's existence and dermine its type, so it can fail. If so, we throw an
+ *  FSException.
  *
- *  Returns nullptr if the given file is for an invalid path. (GIO creates File instances without
- *  testing I/O, so the given pGioFile could be for a non-existing file. We do the testing here.)
+ *  If this returns something, it is a dangling file object without an owner. You MUST call
+ *  setParent() on the return value.
  */
 /* static */
 PFSModelBase
 FSModelBase::MakeAwake(Glib::RefPtr<Gio::File> pGioFile)
 {
     PFSModelBase pReturn = nullptr;
-    auto type = pGioFile->query_file_type(Gio::FileQueryInfoFlags::FILE_QUERY_INFO_NOFOLLOW_SYMLINKS);
 
-    switch (type)
+    try
     {
-        case Gio::FileType::FILE_TYPE_NOT_KNOWN:       // File's type is unknown.
-        break;      // return nullptr
+        auto type = pGioFile->query_file_type(Gio::FileQueryInfoFlags::FILE_QUERY_INFO_NOFOLLOW_SYMLINKS);
 
-        case Gio::FileType::FILE_TYPE_REGULAR:         // File handle represents a regular file.
-            pReturn = FSFile::Create(pGioFile, pGioFile->query_info()->get_size());
-        break;
+        switch (type)
+        {
+            case Gio::FileType::FILE_TYPE_NOT_KNOWN:       // File's type is unknown.
+            break;      // return nullptr
 
-        case Gio::FileType::FILE_TYPE_DIRECTORY:       // File handle represents a directory.
-            Debug::Log(FILE_LOW, "  creating FSDirectory");
-            pReturn = FSDirectory::Create(pGioFile);
-        break;
+            case Gio::FileType::FILE_TYPE_REGULAR:         // File handle represents a regular file.
+                pReturn = FSFile::Create(pGioFile, pGioFile->query_info()->get_size());
+            break;
 
-        case Gio::FileType::FILE_TYPE_SYMBOLIC_LINK:   // File handle represents a symbolic link (Unix systems).
-        case Gio::FileType::FILE_TYPE_SHORTCUT:        // File is a shortcut (Windows systems).
-            pReturn = FSSymlink::Create(pGioFile);
-        break;
+            case Gio::FileType::FILE_TYPE_DIRECTORY:       // File handle represents a directory.
+                Debug::Log(FILE_LOW, "  creating FSDirectory");
+                pReturn = FSDirectory::Create(pGioFile);
+            break;
 
-        case Gio::FileType::FILE_TYPE_SPECIAL:         // File is a "special" file, such as a socket, fifo, block device, or character device.
-            pReturn = FSSpecial::Create(pGioFile);
-        break;
+            case Gio::FileType::FILE_TYPE_SYMBOLIC_LINK:   // File handle represents a symbolic link (Unix systems).
+            case Gio::FileType::FILE_TYPE_SHORTCUT:        // File is a shortcut (Windows systems).
+                pReturn = FSSymlink::Create(pGioFile);
+            break;
 
-        case Gio::FileType::FILE_TYPE_MOUNTABLE:       // File is a mountable location.
-            pReturn = FSMountable::Create(pGioFile);
-        break;
+            case Gio::FileType::FILE_TYPE_SPECIAL:         // File is a "special" file, such as a socket, fifo, block device, or character device.
+                pReturn = FSSpecial::Create(pGioFile);
+            break;
+
+            case Gio::FileType::FILE_TYPE_MOUNTABLE:       // File is a mountable location.
+                pReturn = FSMountable::Create(pGioFile);
+            break;
+        }
+    }
+    catch(Gio::Error &e)
+    {
+        throw FSException(e.what());
     }
 
     return pReturn;
@@ -254,20 +310,28 @@ FSModelBase::FSModelBase(FSType type,
 
 /**
  *  Returns the private ContentsMap structure for both directories and
- *  symlinks to directories. For other file types, this returns nullptr.
+ *  symlinks to directories. Otherwise it throws.
  */
-ContentsMap*
+ContentsMap&
 FSModelBase::getContentsMap()
 {
     if (getType() == FSType::DIRECTORY)
-        return (static_cast<FSDirectory*>(this))->_pMap;
+        return *((static_cast<FSDirectory*>(this))->_pMap);
 
     if (getResolvedType() == FSTypeResolved::SYMLINK_TO_DIRECTORY)
-        return (static_cast<FSSymlink*>(this))->_pMap;
+        return *((static_cast<FSSymlink*>(this))->_pMap);
 
-    return nullptr;
+    throw FSException("Cannot get contents map");
 }
 
+/**
+ *  Sets the parent container for this file-system object.
+ *
+ *  This is a protected internal method and must be called after an
+ *  object was instantiated via MakeAwake() to add it to a container.
+ *  This handles both directories and symlinks to directories correctly
+ *  by using getContentsMap().
+ */
 void
 FSModelBase::setParent(PFSModelBase pNewParent)
 {
@@ -277,15 +341,13 @@ FSModelBase::setParent(PFSModelBase pNewParent)
         if (_pParent)
         {
             // Unsetting previous parent:
-            ContentsMap *pMap = _pParent->getContentsMap();
-            if (!pMap)
-                throw FSException("Cannot get contents map");
+            ContentsMap &map = _pParent->getContentsMap();
 
-            auto it = pMap->m.find(getBasename());
-            if (it == pMap->m.end())
+            auto it = map.m.find(getBasename());
+            if (it == map.m.end())
                 throw FSException("internal: cannot find myself in parent");
 
-            pMap->m.erase(it);
+            map.m.erase(it);
             _pParent = nullptr;
         }
     }
@@ -299,11 +361,8 @@ FSModelBase::setParent(PFSModelBase pNewParent)
         std::string strBasename(getBasename());
         Debug::Log(FILE_LOW, "storing \"" + strBasename + "\" in parent map");
 
-        ContentsMap *pMap = pNewParent->getContentsMap();
-        if (!pMap)
-            throw FSException("Cannot get contents map");
-
-        pMap->m[strBasename] = shared_from_this();
+        ContentsMap &map = pNewParent->getContentsMap();
+        map.m[strBasename] = shared_from_this();
     }
 }
 
@@ -434,6 +493,43 @@ FSModelBase::describe(bool fLong /* = false */ )
     return  describeType() + " \"" + (fLong ? getRelativePath() : getBasename()) + "\" (#" + to_string(_uID) + ")";
 }
 
+/**
+ *  Attempts to send the file (or directory) to the desktop's trash can via the Gio methods. Throws an exception
+ *  if that fails, for example, if the underlying file system has no trash support, or if the object's
+ *  permissions are insufficient.
+ */
+void
+FSModelBase::sendToTrash()
+{
+    try
+    {
+        _pGioFile->trash();
+
+        // Notify the monitors.
+        auto pParent = getParent();
+        if (pParent)
+        {
+            auto pCnr = pParent->getContainer();
+            if (pCnr)
+            {
+                auto pThis = shared_from_this();
+                for (auto &p : pCnr->_llMonitors)
+                    p->onItemRemoved(pThis);
+            }
+        }
+    }
+    catch(Gio::Error &e)
+    {
+        throw FSException(e.what());
+    }
+}
+
+void
+FSModelBase::testFileOps()
+{
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+}
+
 
 /***************************************************************************
  *
@@ -449,6 +545,12 @@ FSFile::FSFile(Glib::RefPtr<Gio::File> pGioFile,
 {
 }
 
+/**
+ *  Factory method to create an instance and return a shared_ptr to it.
+ *  This normally gets called by FSModelBase::MakeAwake() only. This
+ *  does not add the new object to a container; you must call setParent()
+ *  on the result.
+ */
 /* static */
 PFSFile
 FSFile::Create(Glib::RefPtr<Gio::File> pGioFile, uint64_t cbSize)
@@ -818,6 +920,71 @@ FSContainer::getContents(FSList &llFiles,
     return c;
 }
 
+/**
+ *  Creates a new physical directory in this container (physical directory or symlink
+ *  pointing to one), which is returned.
+ *
+ *  Throws an FSException on I/O errors.
+ *
+ *  Otherwise, this calls onDirectoryAdded() with the new FSDirectory instance (which
+ *  is in the symlink target if the container is a symlink). The new instance is also
+ *  returned.
+ */
+PFSDirectory FSContainer::createSubdirectory(const std::string &strName)
+{
+    PFSDirectory pDirReturn;
+
+    PFSDirectory pDirParent;
+
+    // If this is a symlink, then create the directory in the symlink's target instead.
+    switch (_refBase.getResolvedType())
+    {
+        case FSTypeResolved::SYMLINK_TO_DIRECTORY:
+        {
+            FSSymlink *pSymlink = static_cast<FSSymlink*>(&_refBase);
+            pDirParent = static_pointer_cast<FSDirectory>(pSymlink->getTarget());
+        }
+        break;
+
+        case FSTypeResolved::DIRECTORY:
+            pDirParent = static_pointer_cast<FSDirectory>(_refBase.getSharedFromThis());
+        break;
+
+        default:
+        break;
+    }
+
+    if (!pDirParent)
+        throw FSException("Cannot create directory under " + _refBase.getRelativePath());
+
+    try
+    {
+        // To create a new subdirectory via Gio::File, create an empty Gio::File first
+        // and then invoke make_directory on it.
+        std::string strPath = pDirParent->getRelativePath() + "/" + strName;
+        Debug::Log(FILE_HIGH, string(__func__) + ": creating directory \"" + strPath + "\"");
+
+        // The follwing cannot fail.
+        Glib::RefPtr<Gio::File> pGioFileNew = Gio::File::create_for_path(strPath);
+        // But the following can throw.
+        pGioFileNew->make_directory();
+
+        // If we got here, we have a directory.
+        pDirReturn = FSDirectory::Create(pGioFileNew);
+        pDirReturn->setParent(_refBase.getSharedFromThis());
+
+        // Notify the monitors.
+        for (auto &p : _llMonitors)
+            p->onDirectoryAdded(pDirReturn);
+    }
+    catch(Gio::Error &e)
+    {
+        throw FSException(e.what());
+    }
+
+    return pDirReturn;
+}
+
 
 /***************************************************************************
  *
@@ -831,6 +998,12 @@ FSDirectory::FSDirectory(Glib::RefPtr<Gio::File> pGioFile)
 {
 }
 
+/**
+ *  Factory method to create an instance and return a shared_ptr to it.
+ *  This normally gets called by FSModelBase::MakeAwake() only. This
+ *  does not add the new object to a container; you must call setParent()
+ *  on the result.
+ */
 /* static */
 PFSDirectory
 FSDirectory::Create(Glib::RefPtr<Gio::File> pGioFile)
@@ -952,6 +1125,12 @@ FSSymlink::getResolvedType() /* override */
     return FSTypeResolved::SYMLINK_TO_DIRECTORY;
 }
 
+/**
+ *  Factory method to create an instance and return a shared_ptr to it.
+ *  This normally gets called by FSModelBase::MakeAwake() only. This
+ *  does not add the new object to a container; you must call setParent()
+ *  on the result.
+ */
 /* static */
 PFSSymlink
 FSSymlink::Create(Glib::RefPtr<Gio::File> pGioFile)
@@ -1037,6 +1216,12 @@ FSSpecial::FSSpecial(Glib::RefPtr<Gio::File> pGioFile)
 {
 }
 
+/**
+ *  Factory method to create an instance and return a shared_ptr to it.
+ *  This normally gets called by FSModelBase::MakeAwake() only. This
+ *  does not add the new object to a container; you must call setParent()
+ *  on the result.
+ */
 /* static */
 PFSSpecial
 FSSpecial::Create(Glib::RefPtr<Gio::File> pGioFile)
@@ -1063,6 +1248,12 @@ FSMountable::FSMountable(Glib::RefPtr<Gio::File> pGioFile)
 {
 }
 
+/**
+ *  Factory method to create an instance and return a shared_ptr to it.
+ *  This normally gets called by FSModelBase::MakeAwake() only. This
+ *  does not add the new object to a container; you must call setParent()
+ *  on the result.
+ */
 /* static */
 PFSMountable
 FSMountable::Create(Glib::RefPtr<Gio::File> pGioFile)
