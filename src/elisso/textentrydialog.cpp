@@ -24,13 +24,9 @@ TextEntryDialog::TextEntryDialog(Gtk::Window &wParent,
                                  const Glib::ustring &strIntro,
                                  const Glib::ustring &strButton)
     : Gtk::Dialog(strTitle,
-                  Gtk::DialogFlags::DIALOG_MODAL | Gtk::DialogFlags::DIALOG_USE_HEADER_BAR)
+                  (Gtk::DialogFlags::DIALOG_MODAL | Gtk::DialogFlags::DIALOG_USE_HEADER_BAR))
 {
     set_border_width(5);
-
-    _label.set_line_wrap(true);
-    _label.set_max_width_chars(100);
-    _label.set_markup(strIntro);
 
     _entry.set_activates_default(true);
     auto pBuffer = _entry.get_buffer();
@@ -41,15 +37,22 @@ TextEntryDialog::TextEntryDialog(Gtk::Window &wParent,
         this->enableButtons();
     });
 
-    auto pBox = get_content_area();
-    pBox->pack_start(_label, Gtk::PackOptions::PACK_SHRINK, 5);
-    pBox->pack_start(_entry, Gtk::PackOptions::PACK_SHRINK, 5);
-
     add_button("Cancel", Gtk::RESPONSE_CANCEL);
     _pCreateButton = add_button(strButton, Gtk::RESPONSE_OK);
     set_default_response(Gtk::RESPONSE_OK);
 
     enableButtons();
+
+    auto pBox = get_content_area();
+    pBox->pack_start(_label, false, true, 5);
+    pBox->pack_start(_entry, false, true, 5);
+
+//     _label.set_line_wrap(true);      TODO can't get this to format properly in the packing box
+    _label.set_width_chars(50);
+    _label.set_max_width_chars(200);
+    _label.set_markup(strIntro);
+
+    set_size_request(50, -1);
 
     set_transient_for(wParent);
 
