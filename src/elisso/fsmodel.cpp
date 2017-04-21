@@ -470,18 +470,32 @@ FSFile::Create(Glib::RefPtr<Gio::File> pGioFile, uint64_t cbSize)
  *
  **************************************************************************/
 
+/**
+ *  Constructor. This is protected because an FSContainer only ever gets created through
+ *  multiple inheritance.
+ */
 FSContainer::FSContainer(FSModelBase &refBase)
     : _pMap(new ContentsMap),
       _refBase(refBase)
 {
 }
 
+/**
+ *  Constructor. This is protected because an FSContainer only ever gets created through
+ *  multiple inheritance.
+ */
 /* virtual */
 FSContainer::~FSContainer()
 {
     delete _pMap;
 }
 
+/**
+ *  Tests if a file-system object with the given name has already been instantiated in this
+ *  container. If so, it is returned. If this returns nullptr instead, that doesn't mean
+ *  that the file doesn't exist: the container might not be fully populated, or directory
+ *  contents may have changed since.
+ */
 PFSModelBase
 FSContainer::isAwake(const string &strParticle)
 {
@@ -493,6 +507,44 @@ FSContainer::isAwake(const string &strParticle)
     return nullptr;
 }
 
+/**
+ *  Attempts to find a file-system object in the current container (directory or symlink
+ *  to a directory). This first calls isAwake() to check if the object has already been
+ *  instantiated in memory; if not, we try to find it on disk and instantiate it.
+ *  Returns nullptr if the file definitely doesn't exist or cannot be read.
+ *
+ *  This calls into the Gio backend and may throw.
+ */
+PFSModelBase
+FSContainer::find(const string &strParticle)
+{
+    FSLock lock;
+
+    PFSModelBase pReturn;
+    if ((pReturn = isAwake(strParticle)))
+        Debug::Log(FILE_MID, "Directory::find(\"" + strParticle + "\") => already awake " + pReturn->describe());
+    else
+    {
+        const string strPath(_refBase.getRelativePath() + "/" + strParticle);
+        Debug::Enter(FILE_MID, "Directory::find(\"" + strPath + "\")");
+
+        auto pGioFile = Gio::File::create_for_path(strPath);
+        // The above never fails. To find out whether the path is valid we need to query the type, which does blocking I/O.
+        if (!(pReturn = FSModelBase::MakeAwake(pGioFile)))
+            Debug::Log(FILE_LOW, "  could not make awake");
+        else
+            pReturn->setParent(static_pointer_cast<FSDirectory>(_refBase.getSharedFromThis()));
+
+        Debug::Leave();
+    }
+
+    return pReturn;
+}
+
+/**
+ *  Returns true if the container has the "populated with directories" flag set.
+ *  See getContents() for what that means.
+ */
 bool
 FSContainer::isPopulatedWithDirectories()
 {
@@ -500,6 +552,10 @@ FSContainer::isPopulatedWithDirectories()
     return _refBase._fl.test(FSFlags::POPULATED_WITH_DIRECTORIES);
 }
 
+/**
+ *  Returns true if the container has the "populated with all" flag set.
+ *  See getContents() for what that means.
+ */
 bool
 FSContainer::isCompletelyPopulated()
 {
@@ -508,29 +564,60 @@ FSContainer::isCompletelyPopulated()
 }
 
 /**
- *  Returns the directory's contents by copying them into the given list.
+ *  Unsets both the "populated with all" and "populated with directories" flags for this
+ *  directory, which will cause getContents() to refresh the contents list from disk on
+ *  the next call.
+ */
+void
+FSContainer::unsetPopulated()
+{
+    FSLock lock;
+    _refBase._fl.reset(FSFlags::POPULATED_WITH_ALL);
+    _refBase._fl.reset(FSFlags::POPULATED_WITH_DIRECTORIES);
+}
+
+/**
+ *  Returns the container's contents by copying them into the given list.
  *
- *  If this is called for the first time on this directory, this performs blocking I/O
- *  and can take several seconds to complete, depending on the size of the directory
- *  contents and the medium.
+ *  This will perform blocking I/O and can take several seconds to complete, depending on
+ *  the size of the directory contents and the medium, unless this is not the first
+ *  call on this container and the container contents have been cached before. Caching
+ *  depends on the given getContents flag:
  *
- *  You can pass the address of an atomic bool with pfStopFlag, which is useful if you
- *  run this on a secondary thread and you want this function to be interruptible: if
- *  the stop flag is not nullptr, it is checked periodically, and the functions returns
- *  early once the stop flag is true.
+ *   -- If getContents == Get::ALL, this will return all files and direct subdirectories
+ *      of the container, and all these objects will be cached, and the "populated with all"
+ *      flag is set on the container. When called for a second time on the same container,
+ *      contents can then be returned without blocking I/O again regardless of the getContents
+ *      flag, since all objects are already awake.
  *
- *  After completely populating the directory, an internal flag is set so that no blocking
- *  I/O is performed when this gets called again. To clear that flag and force a refresh,
- *  call unsetPopulated() before calling this.
+ *   -- If getContents == Get::FOLDERS_ONLY, this only wakes up directories and symlinks
+ *      to directories in the container, which might be slightly faster. (Probably not
+ *      a lot since we still have to enumerate the entire directory contents and wake
+ *      up all symlinks to test for whether they point to subdirectories.) This will
+ *      only copy directories and symlinks to directories to the given list and then set
+ *      the "populated with directories" flag on the container. If this mode is called
+ *      on a container with the "populated with all" or "populated with directories"
+ *      flag already set, this can return without blocking disk I/O.
  *
- *  The refresh algorithm is simple. For every file returned from the Gio backend,
- *  we check if it's already in the contents map; if not, it is added. This adds missing
- *  files.
+ *   -- If getContents == Get::FIRST_FOLDER_ONLY, this will only enumerate directory
+ *      contents until the first directory or symlink to a directory is encountered.
+ *      This has the potential to be a lot faster. This can be useful for a directory
+ *      tree view where an expander ("+" sign) needs to be shown for folders that
+ *      have at least one subfolder, but a full populate with folders only needs to
+ *      happen once the folder is actually expanded. Note that this will not return the
+ *      first folder in a strictly alphabetical sense, but simply the first directory
+ *      or symlink pointing to a directory that happens to be returned by the Gio
+ *      backend. Unfortunately even this cannot be faster than Get::FOLDERS_ONLY if
+ *      the container happens to contain only files but no subdirectories, since in
+ *      that case, the code will have to enumerate the entire directory contents.
  *
- *  To remove files that have been removed on disk, every file returned by the Gio backend
- *  that was either already awake or has been added in the above loop is marked with a
- *  "dirty" flag. A final loop then removes all objects from the contents map that do not
- *  have the "dirty" flag set.
+ *  For all modes, you can optionally pass the address of an atomic bool with pfStopFlag,
+ *  which is useful if you run this on a secondary thread and you want this function to be
+ *  interruptible: if pfStopFlag is not nullptr, it is checked periodically, and the functions
+ *  returns early once the stop flag is set.
+ *
+ *  To clear all "populated" flags and force a refresh from disk, call unsetPopulated()
+ *  before calling this.
  */
 size_t
 FSContainer::getContents(FSList &llFiles,
@@ -551,8 +638,12 @@ FSContainer::getContents(FSList &llFiles,
         {
             PFSModelBase pSharedThis = _refBase.getSharedFromThis();
 
-            // To be able to remove outdated file objects that no longer exist on disk, set the
-            // dirty flag on all of them. We are holding the lock so we're good.
+            /* The refresh algorithm is simple. For every file returned from the Gio backend,
+             * we check if it's already in the contents map; if not, it is added. This adds
+             * missing files. To remove awake files that have been removed on disk, every file
+             * returned by the Gio backend that was either already awake or has been added in
+             * the above loop is marked with  a "dirty" flag. A final loop then removes all
+             * objects from the contents map that do not have the "dirty" flag set. */
             if (getContents == Get::ALL)
                 for (auto it : _pMap->m)
                 {
@@ -725,45 +816,6 @@ FSContainer::getContents(FSList &llFiles,
     Debug::Leave();
 
     return c;
-}
-
-/**
- *  Unsets both the "populated with all" and "populated with directories" flags for this
- *  directory, which will cause getContents() to refresh the contents list from disk on
- *  the next call.
- */
-void
-FSContainer::unsetPopulated()
-{
-    FSLock lock;
-    _refBase._fl.reset(FSFlags::POPULATED_WITH_ALL);
-    _refBase._fl.reset(FSFlags::POPULATED_WITH_DIRECTORIES);
-}
-
-PFSModelBase
-FSContainer::find(const string &strParticle)
-{
-    FSLock lock;
-
-    PFSModelBase pReturn;
-    if ((pReturn = isAwake(strParticle)))
-        Debug::Log(FILE_MID, "Directory::find(\"" + strParticle + "\") => already awake " + pReturn->describe());
-    else
-    {
-        const string strPath(_refBase.getRelativePath() + "/" + strParticle);
-        Debug::Enter(FILE_MID, "Directory::find(\"" + strPath + "\")");
-
-        auto pGioFile = Gio::File::create_for_path(strPath);
-        // The above never fails. To find out whether the path is valid we need to query the type, which does blocking I/O.
-        if (!(pReturn = FSModelBase::MakeAwake(pGioFile)))
-            Debug::Log(FILE_LOW, "  could not make awake");
-        else
-            pReturn->setParent(static_pointer_cast<FSDirectory>(_refBase.getSharedFromThis()));
-
-        Debug::Leave();
-    }
-
-    return pReturn;
 }
 
 

@@ -264,19 +264,21 @@ public:
         FIRST_FOLDER_ONLY
     };
 
+    PFSModelBase isAwake(const std::string &strParticle);
+
+    PFSModelBase find(const std::string &strParticle);
+
     bool isPopulatedWithDirectories();
 
     bool isCompletelyPopulated();
+
+    void unsetPopulated();
 
     size_t getContents(FSList &llFiles,
                        Get getContents,
                        StopFlag *pStopFlag);
 
-    void unsetPopulated();
-
-    PFSModelBase find(const std::string &strParticle);
-
-    PFSModelBase isAwake(const std::string &strParticle);
+    PFSDirectory createSubdirectory(const std::string &strName);
 
 protected:
     friend class FSModelBase;
