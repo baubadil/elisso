@@ -13,8 +13,12 @@
 
 #define ELISSO_VERSION "0.1.0"
 
+#include <gtkmm.h>
+
 #include "xwp/stringhelp.h"
 #include "xwp/debug.h"
+
+typedef Glib::RefPtr<Gdk::Pixbuf> PPixBuf;
 
 // const DebugFlag DEBUG_ALWAYS          = 0;
 
@@ -30,6 +34,9 @@
 const DebugFlag FOLDER_POPULATE_HIGH    = (1 << 21);
 const DebugFlag FOLDER_POPULATE_LOW     = (1 << 22);
 const DebugFlag FOLDER_STACK            = (1 << 23);
+
+#define ICON_SIZE_SMALL     16
+#define ICON_SIZE_BIG       64
 
 using namespace XWP;
 

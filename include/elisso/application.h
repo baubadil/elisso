@@ -11,13 +11,13 @@
 #ifndef ELISSO_APPLICATION_H
 #define ELISSO_APPLICATION_H
 
-#include <gtkmm.h>
+#include "elisso/elisso.h"
 
 #include "xwp/basetypes.h"
 
-typedef Glib::RefPtr<Gdk::Pixbuf> PPixBuf;
 class ElissoApplication;
 typedef Glib::RefPtr<ElissoApplication> PElissoApplication;
+
 
 /***************************************************************************
  *

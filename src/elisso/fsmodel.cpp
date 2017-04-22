@@ -172,7 +172,9 @@ FSModelBase::FindPath(const std::string &strPath)
                     Debug::Log(FILE_LOW, "Loop " + to_string(c) + ": collapsed \"" + pPrev->getRelativePath() + "/" + strParticle + "\" to " + quote(pCurrent->getRelativePath()));
                 }
                 else if (!(pDir = pCurrent->getContainer()))
-                    throw FSException("path particle \"" + pCurrent->getBasename() + "\" cannot have contents");
+                    // Particle is a broken symlink.
+                    break;
+//                     throw FSException("path particle \"" + pCurrent->getRelativePath() + "\" cannot have contents");
             }
 
             if (!fCollapsing)
@@ -191,17 +193,6 @@ FSModelBase::FindPath(const std::string &strPath)
     Debug::Log(FILE_LOW, "Result: " + (pCurrent ? pCurrent->describe() : "NULL"));
 
     return pCurrent;
-}
-
-/**
- *  Returns true if this is a directory or a symlink to one. Can cause I/O if this
- *  is a symlink as this calls the virtual getResolvedType() method.
- */
-bool
-FSModelBase::isDirectoryOrSymlinkToDirectory()
-{
-    auto t = getResolvedType();
-    return (t == FSTypeResolved::DIRECTORY) || (t == FSTypeResolved::SYMLINK_TO_DIRECTORY);
 }
 
 /**
@@ -497,6 +488,9 @@ FSModelBase::describe(bool fLong /* = false */ )
  *  Attempts to send the file (or directory) to the desktop's trash can via the Gio methods. Throws an exception
  *  if that fails, for example, if the underlying file system has no trash support, or if the object's
  *  permissions are insufficient.
+ *
+ *  This does not notify file monitors since we can't be sure which thread we're running on. Call this->notifyFileRemoved()
+ *  either afterwards if you call this on thread one, or have a GUI dispatcher which calls it instead.
  */
 void
 FSModelBase::sendToTrash()
@@ -504,19 +498,6 @@ FSModelBase::sendToTrash()
     try
     {
         _pGioFile->trash();
-
-        // Notify the monitors.
-        auto pParent = getParent();
-        if (pParent)
-        {
-            auto pCnr = pParent->getContainer();
-            if (pCnr)
-            {
-                auto pThis = shared_from_this();
-                for (auto &p : pCnr->_llMonitors)
-                    p->onItemRemoved(pThis);
-            }
-        }
     }
     catch(Gio::Error &e)
     {
@@ -527,7 +508,29 @@ FSModelBase::sendToTrash()
 void
 FSModelBase::testFileOps()
 {
-    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+}
+
+/**
+ *  Notifies all monitors attached to this file's container that this file
+ *  has been removed.
+ *
+ *  Call this on the GUI thread after calling sendToTrash().
+ */
+void
+FSModelBase::notifyFileRemoved()
+{
+    auto pParent = getParent();
+    if (pParent)
+    {
+        auto pCnr = pParent->getContainer();
+        if (pCnr)
+        {
+            auto pThis = shared_from_this();
+            for (auto &p : pCnr->_llMonitors)
+                p->onItemRemoved(pThis);
+        }
+    }
 }
 
 
@@ -1185,6 +1188,7 @@ FSSymlink::follow(FSLock &lock)
                     strTarget = strParentDir + "/";
                 strTarget += strContents;
             }
+
             if ((_pTarget = FindPath(strTarget)))
             {
                 if (_pTarget->getType() == FSType::DIRECTORY)

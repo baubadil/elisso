@@ -4,8 +4,10 @@ SUB_DEPTH = ../..
 elisso_SOURCES += \
 	src/elisso/main.cpp \
 	src/elisso/mainwindow.cpp \
+	src/elisso/fileops.cpp \
 	src/elisso/folderview.cpp \
 	src/elisso/foldertree.cpp \
 	src/elisso/fsmodel.cpp \
+	src/elisso/progressdialog.cpp \
 	src/elisso/textentrydialog.cpp \
 	src/elisso/treeviewplus.cpp

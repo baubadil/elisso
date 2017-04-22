@@ -11,12 +11,14 @@
 #ifndef ELISSO_FOLDERVIEW_H
 #define ELISSO_FOLDERVIEW_H
 
+#include "elisso/elisso.h"
 #include "elisso/fsmodel.h"
 #include "elisso/treeviewplus.h"
 
 #include "xwp/flagset.h"
 
 class ElissoFolderView;
+class FileSelection;
 
 
 /***************************************************************************
@@ -50,7 +52,7 @@ class ElissoApplicationWindow;
 enum class SetDirectoryFlags : uint8_t
 {
     PUSH_TO_HISTORY         = (1 << 0),         // If set, the directory is added to the back/forward history stack.
-    SCROLL_TO_PREVIOUS      = (1 << 1),         // If set, the previous directory is selected in the new contents list (useful for go back/parent).
+    SELECT_PREVIOUS         = (1 << 1),         // If set, the previous directory is selected in the new contents list (useful for go back/parent).
     CLICK_FROM_TREE         = (1 << 2)          // If set, the contents are shown as a result of a click on the tree view, and we can spare the effort of finding the node in the tree.
 };
 
@@ -134,12 +136,17 @@ private:
     void dumpStack();
     void onPopulateDone();
     void removeFile(PFSModelBase pFS);
-    void insertFile(PFSModelBase pFS);
+    Gtk::ListStore::iterator insertFile(PFSModelBase pFS);
     void connectModel(bool fConnect);
+
+    Glib::RefPtr<Gdk::Pixbuf> loadIcon(PFSModelBase pFS, int size);
+    void cellDataFunc(const Gtk::TreeModel::iterator& it,
+                      Gtk::TreeModelColumn<PPixBuf> &column,
+                      int iconSize);
+    void setIconViewColumns();
     void setListViewColumns();
 
-    struct Selection;
-    size_t getSelection(Selection &sel);
+    size_t getSelection(FileSelection &sel);
 
     void onPathActivated(const Gtk::TreeModel::Path &path);
     void onSelectionChanged();
@@ -159,6 +166,7 @@ private:
     Gtk::InfoBar                _infoBarError;
     Gtk::Label                  _infoBarLabel;
     Gtk::CellRendererPixbuf     _cellRendererIconSmall;
+    Gtk::CellRendererPixbuf     _cellRendererIconBig;
 
     PFSModelBase                _pDir;
     std::vector<std::string>    _aPathHistory;

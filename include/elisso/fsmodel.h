@@ -12,7 +12,6 @@
 #define ELISSO_FSMODEL_H
 
 #include <memory>
-#include <atomic>
 #include <type_traits>
 
 #include "glibmm.h"
@@ -131,35 +130,6 @@ typedef std::list<PFSMonitorBase> FSMonitorsList;
 
 /***************************************************************************
  *
- *  StopFlag
- *
- **************************************************************************/
-
-class StopFlag
-{
-public:
-    StopFlag()
-    {
-        f = ATOMIC_VAR_INIT(false);
-    }
-
-    operator bool()
-    {
-        return f.load();
-    }
-
-    void set()
-    {
-        f = true;
-    }
-
-private:
-    std::atomic_bool    f;
-};
-
-
-/***************************************************************************
- *
  *  FSModelBase
  *
  **************************************************************************/
@@ -225,7 +195,16 @@ public:
     }
 
     virtual FSTypeResolved getResolvedType() = 0;
-    bool isDirectoryOrSymlinkToDirectory();
+
+    /**
+     *  Returns true if this is a directory or a symlink to one. Can cause I/O if this
+     *  is a symlink as this calls the virtual getResolvedType() method.
+     */
+    bool isDirectoryOrSymlinkToDirectory()
+    {
+        return (_type == FSType::DIRECTORY) || (getResolvedType() == FSTypeResolved::SYMLINK_TO_DIRECTORY);
+    }
+
     FSContainer* getContainer();
 
     bool isHidden();
@@ -247,6 +226,8 @@ public:
 
     void sendToTrash();
     void testFileOps();
+
+    void notifyFileRemoved();
 
 protected:
     /*

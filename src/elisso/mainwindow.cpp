@@ -114,6 +114,15 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app,
             this->enableViewTabActions();
         }
     });
+
+
+    Glib::ustring data = ".file-ops-success {background-image: radial-gradient(ellipse at center, green 0%, transparent 100%);}";
+    auto css = Gtk::CssProvider::create();
+    if (!css->load_from_data(data))
+      throw FSException("CSS parsing error");
+    auto screen = Gdk::Screen::get_default();
+    auto ctx = this->get_style_context();
+    ctx->add_provider_for_screen(screen, css, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
 }
 
 /**
@@ -630,4 +639,3 @@ ElissoApplicationWindow::handleViewAction(const std::string &strAction)
             p->handleAction(strAction);
     }
 }
-

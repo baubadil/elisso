@@ -10,12 +10,11 @@
 
 #define DEF_STRING_IMPLEMENTATION
 
-#include "elisso/elisso.h"
+#include "elisso/application.h"
 
 #include "xwp/except.h"
 #include "xwp/exec.h"
 
-#include "elisso/application.h"
 #include "elisso/mainwindow.h"
 
 
@@ -243,26 +242,41 @@ ElissoApplication::on_open(const type_vec_files &files,
     Debug::Log(DEBUG_ALWAYS, __FUNCTION__);
 
     ElissoApplicationWindow *pWindow = nullptr;
-    for (auto &pFile : files)
+
+    try
     {
-        std::string strPath = pFile->get_path();
-        PFSModelBase pFSBase = FSModelBase::FindPath(strPath);
-        if (!pFSBase)
-            throw FSException("Command-line argument \"" + strPath + "\" is not a file");
-
-        Debug::Log(DEBUG_ALWAYS, std::string(__FUNCTION__) + ": handling " + strPath);
-
-        if (!pWindow)
-            // first file: new window
-            pWindow = new ElissoApplicationWindow(*this, pFSBase);
-        else
+        for (auto &pFile : files)
         {
-            // additional tabs in existing window
-            Glib::signal_idle().connect_once([pWindow, pFSBase]()
+            std::string strPath = pFile->get_path();
+            PFSModelBase pFSBase = FSModelBase::FindPath(strPath);
+            if (!pFSBase)
+                throw FSException("Command-line argument \"" + strPath + "\" is not a file");
+
+            Debug::Log(DEBUG_ALWAYS, std::string(__FUNCTION__) + ": handling " + strPath);
+
+            if (!pWindow)
+                // first file: new window
+                pWindow = new ElissoApplicationWindow(*this, pFSBase);
+            else
             {
-                pWindow->addFolderTab(pFSBase);
-            });
+                // additional tabs in existing window
+                Glib::signal_idle().connect_once([pWindow, pFSBase]()
+                {
+                    pWindow->addFolderTab(pFSBase);
+                });
+            }
         }
+    }
+    catch(exception &e)
+    {
+        if (pWindow)
+            pWindow->errorBox(e.what());
+        else
+            Gtk::MessageDialog dialog(e.what(),
+                                      false /* use_markup */,
+                                      Gtk::MESSAGE_QUESTION,
+                                      Gtk::BUTTONS_CANCEL);
+
     }
 
     if (pWindow)

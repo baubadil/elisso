@@ -14,6 +14,7 @@
 
 #include "elisso/elisso.h"
 #include "elisso/mainwindow.h"
+#include "elisso/worker.h"
 
 
 /***************************************************************************
@@ -59,85 +60,6 @@ private:
 };
 
 FolderTreeModelColumns* FolderTreeModelColumns::s_p = nullptr;
-
-
-/***************************************************************************
- *
- *  WorkerResult class template
- *
- **************************************************************************/
-
-/**
- *  A worker result structure combines a Glib::Dispatcher with an STL double-ended queue
- *  to implement a "producer-consumer" model for a worker thread and the GTK main thread.
- *
- *  The worker thread is not part of this structure.
- *
- *  The P template argument is assumed to be a queable structure, best as a shared_ptr
- *  to something.
- *
- *  After creating an instance of this, you must manually call connect() with a callback
- *  that gets connected to the Glib dispatcher. This will then handle arrival of data.
- *
- *  The worker thread should create instances of P and call addResult(), which will add
- *  the P to the queue and fire the dispatcher, which will then call the callback given
- *  to connect() on the GUI thread.
- *
- *  The queue is properly protected by a mutex.
- *
- *  Something like this:
-
-
-            WorkerResult<PMyStruct> w;
-            workerResult.connect([&w]()
-            {
-                // Getting the result on the GUI thread.
-                PMyStruct p = w.fetchResult();
-                ...
-            });
-
-            new std::thread([&w]()
-            {
-                PMyStruct p = std::make_shared<MyStruct>(...);
-                w.addResult(p);
-            }
- */
-template<class P>
-class WorkerResult : public ProhibitCopy
-{
-public:
-    void connect(std::function<void ()> fn)
-    {
-        dispatcher.connect(fn);
-    }
-
-    void addResult(P pResult)
-    {
-        // Do not hold the mutex while messing with the dispatcher -> that could deadlock.
-        {
-            Lock lock(mutex);
-            deque.push_back(pResult);
-        }
-        dispatcher.emit();
-    }
-
-    P fetchResult()
-    {
-        Lock lock(mutex);
-        P p;
-        if (deque.size())
-        {
-            p = deque.at(0);
-            deque.pop_front();
-        }
-        return p;
-    }
-
-protected:
-    std::recursive_mutex    mutex;
-    Glib::Dispatcher        dispatcher;
-    std::deque<P>           deque;
-};
 
 
 /***************************************************************************
@@ -499,9 +421,15 @@ ElissoFolderTree::spawnPopulate(const Gtk::TreeModel::iterator &it)
                 // Create an FSList on the thread's stack and have it filled by the back-end.
                 PPopulated pResult = std::make_shared<Populated>(pDir, pRowRefPopulating);
 
-                pDir2->getContents(pResult->_llContents,
-                                   FSDirectory::Get::FOLDERS_ONLY,
-                                   nullptr);        // ptr to stop flag
+                try
+                {
+                    pDir2->getContents(pResult->_llContents,
+                                       FSDirectory::Get::FOLDERS_ONLY,
+                                       nullptr);        // ptr to stop flag
+                }
+                catch(exception &e)
+                {
+                }
 
                 // Hand the results over to the instance: add it to the queue, signal the dispatcher.
                 this->_pImpl->workerPopulated.addResult(pResult);
