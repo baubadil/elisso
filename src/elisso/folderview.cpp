@@ -10,15 +10,15 @@
 
 #include "elisso/folderview.h"
 
-#include <thread>
-#include <iostream>
-
-#include "xwp/except.h"
-
 #include "elisso/elisso.h"
 #include "elisso/fileops.h"
 #include "elisso/mainwindow.h"
 #include "elisso/textentrydialog.h"
+#include "elisso/thumbnailer.h"
+#include "xwp/except.h"
+#include <thread>
+#include <iostream>
+#include <iomanip>
 
 
 /***************************************************************************
@@ -245,6 +245,8 @@ struct ElissoFolderView::Impl : public ProhibitCopy
     FileOperationsList              llFileOperations;
     PProgressDialog                 pProgressDialog;
 
+    Thumbnailer                     thumbnailer;
+
     // This is a map which allows us to look up rows quickly for efficient removal of items by name.
     std::map<std::string, Gtk::TreeRowReference> mapRowReferences;
 
@@ -263,7 +265,7 @@ struct ElissoFolderView::Impl : public ProhibitCopy
 /**
  *
  */
-ElissoFolderView::ElissoFolderView(ElissoApplicationWindow &mainWindow)
+ElissoFolderView::ElissoFolderView(ElissoApplicationWindow &mainWindow, int &iPageInserted)
     : Gtk::ScrolledWindow(),
       _id(g_uViewID++),
       _mainWindow(mainWindow),
@@ -273,6 +275,10 @@ ElissoFolderView::ElissoFolderView(ElissoApplicationWindow &mainWindow)
       _infoBarLabel(),
       _pImpl(new ElissoFolderView::Impl())
 {
+    iPageInserted = _mainWindow.getNotebook().append_page(*this,
+                                                          _labelNotebookPage,
+                                                          _labelNotebookMenu);
+
     _treeView.setParent(*this);
 
     // Create the monitor. We need the this pointer so we can't do it in the Impl constructor.
@@ -351,6 +357,14 @@ ElissoFolderView::ElissoFolderView(ElissoApplicationWindow &mainWindow)
                                                     Gtk::TreeViewColumn *pColumn)
     {
         this->onPathActivated(path);
+    });
+
+    /*
+     *  Connect to the thumbnailer.
+     */
+    _pImpl->thumbnailer.connect([this]()
+    {
+        this->onThumbnailReady();
     });
 }
 
@@ -431,6 +445,8 @@ ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
         // Remove all old data, if any.
         _pImpl->pListStore->clear();
         _pImpl->llFolderContents.clear();
+
+        _pImpl->thumbnailer.stop();
 
         auto pWatching = _pImpl->pMonitor->isWatching();
         if (pWatching)
@@ -671,10 +687,9 @@ ElissoFolderView::setState(ViewState s)
             {
                 // Disconnect model, disable sorting to speed up inserting lots of rows.
                 this->connectModel(false);
-                Gtk::Spinner *pSpinner = new Gtk::Spinner();
-                _mainWindow.getNotebook().set_tab_label(*this, *pSpinner);
-                pSpinner->show();
-                pSpinner->start();
+                _mainWindow.getNotebook().set_tab_label(*this, _spinnerNotebookPage);
+                _spinnerNotebookPage.show();
+                _spinnerNotebookPage.start();
 
                 _mainWindow.onLoadingFolderView(*this);
             }
@@ -685,13 +700,24 @@ ElissoFolderView::setState(ViewState s)
                 // Connect model again, set sort.
                 this->connectModel(true);
 
+                _spinnerNotebookPage.stop();
+
                 Glib::ustring strTitle("Error");
                 if (_pDir)
                 {
-                    std::string str = _pDir->getRelativePath();
-                    strTitle = str;
-                    _mainWindow.getNotebook().set_tab_label_text(*this,
-                                                                 _pDir->getBasename());
+                    strTitle = _pDir->getBasename();
+                    // set_max_width_chars doesn't work with ELLIPSIZE_MIDDLE so do it like this.
+                    uint maxChars = strTitle.length();
+                    if (maxChars < 20)
+                        maxChars = 20;
+                    else if (maxChars > 50)
+                        maxChars = 50;
+                    _labelNotebookPage.set_width_chars(maxChars);
+                    _labelNotebookPage.set_ellipsize(Pango::EllipsizeMode::ELLIPSIZE_MIDDLE);
+                    _labelNotebookPage.set_text(strTitle);
+                    _mainWindow.getNotebook().set_tab_label(*this,
+                                                            _labelNotebookPage);
+                    _labelNotebookMenu.set_text(strTitle);
                 }
 
                 // Notify the tree that this folder has been populated.
@@ -752,7 +778,7 @@ ElissoFolderView::setViewMode(FolderViewMode m)
                 this->remove();
             break;
 
-            default:
+            case FolderViewMode::UNDEFINED:
             break;
         }
 
@@ -771,9 +797,18 @@ ElissoFolderView::setViewMode(FolderViewMode m)
                     _iconView.set_item_orientation(Gtk::Orientation::ORIENTATION_VERTICAL);
                     _iconView.set_pixbuf_column(cols._colIconBig);
                     _iconView.set_text_column(cols._colFilename);
-                    _iconView.set_item_width(-1);
+                    _iconView.set_item_width(ICON_SIZE_BIG / 2);
+
+                    // Margin around the entire view.
                     _iconView.set_margin(5);
+
+                    // Spacings between items.
                     _iconView.set_row_spacing(5);
+                    _iconView.set_column_spacing(5);
+
+                    // Spacing between text and icon.
+                    _iconView.set_spacing(0);
+                    _iconView.set_item_padding(5);
                 }
                 else
                 {
@@ -785,6 +820,8 @@ ElissoFolderView::setViewMode(FolderViewMode m)
                     _iconView.set_item_padding(0);
                     _iconView.set_margin(0);
                     _iconView.set_row_spacing(1);
+                    _iconView.set_column_spacing(5);
+                    _iconView.set_item_padding(5);
                 }
             }
 
@@ -814,7 +851,7 @@ ElissoFolderView::setViewMode(FolderViewMode m)
             }
             break;
 
-            default:
+            case FolderViewMode::UNDEFINED:
             break;
         }
 
@@ -836,8 +873,21 @@ ElissoFolderView::setError(Glib::ustring strError)
 void
 ElissoFolderView::selectAll()
 {
-    if (this->_mode == FolderViewMode::LIST)
-        _treeView.get_selection()->select_all();
+    switch (this->_mode)
+    {
+        case FolderViewMode::ICONS:
+        case FolderViewMode::COMPACT:
+            _iconView.select_all();
+        break;
+
+        case FolderViewMode::LIST:
+            _treeView.get_selection()->select_all();
+        break;
+
+        case FolderViewMode::ERROR:
+        case FolderViewMode::UNDEFINED:
+        break;
+    }
 }
 
 /**
@@ -1172,9 +1222,22 @@ ElissoFolderView::connectModel(bool fConnect)
 
 /**
  *  Part of the lazy-loading implementation.
+ *
+ *  If the given file should have a stock icon, then it is returned immediately
+ *  and we're done.
+ *
+ *  If the given file has already been thumbnailed for the given size in this
+ *  session, then its pixbuf is returned.
+ *
+ *  If the given file can be thumbnailed but has not yet been, then a stock icon
+ *  is returned and it is handed over to the thumbnailer worker threads which
+ *  will create a thumbnail in the background and call a dispatcher when the
+ *  thumbnail is done.
  */
-Glib::RefPtr<Gdk::Pixbuf>
-ElissoFolderView::loadIcon(PFSModelBase pFS, int size)
+PPixBuf
+ElissoFolderView::loadIcon(const Gtk::TreeModel::iterator& it,
+                           PFSModelBase pFS,
+                           int size)
 {
     Glib::RefPtr<Gdk::Pixbuf> pReturn;
 
@@ -1194,13 +1257,43 @@ ElissoFolderView::loadIcon(PFSModelBase pFS, int size)
     if (i)
         pReturn = i.load_icon();
 
+    PFSFile pFile = pFS->getFile();
+    if (pFile)
+    {
+        const std::string &strBasename = pFile->getBasename();
+        if (    endsWith(strBasename, ".jpg")
+             || endsWith(strBasename, ".JPG")
+             || endsWith(strBasename, ".png")
+             || endsWith(strBasename, ".PNG")
+           )
+        {
+            Gtk::TreePath path(it);
+            auto pRowRef = std::make_shared<Gtk::TreeRowReference>(_pImpl->pListStore, path);
+            _pImpl->thumbnailer.enqueue(pFile, pRowRef);
+        }
+    }
+
     return pReturn;
 }
 
 void
-ElissoFolderView::cellDataFunc(const Gtk::TreeModel::iterator& it,
-                               Gtk::TreeModelColumn<PPixBuf> &column,
-                               int iconSize)
+ElissoFolderView::onThumbnailReady()
+{
+    FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
+
+    auto pThumbnail = _pImpl->thumbnailer.fetchResult();
+    Gtk::TreePath path = pThumbnail->pRowRef->get_path();
+    auto it = _pImpl->pListStore->get_iter(path);
+    Gtk::TreeModel::Row row = *it;
+    row[cols._colIconSmall] = pThumbnail->ppbIconSmall;
+    row[cols._colIconBig] = pThumbnail->ppbIconBig;
+
+}
+
+PPixBuf
+ElissoFolderView::cellDataFuncIcon(const Gtk::TreeModel::iterator& it,
+                                   Gtk::TreeModelColumn<PPixBuf> &column,
+                                   int iconSize)
 {
     FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
 
@@ -1209,8 +1302,63 @@ ElissoFolderView::cellDataFunc(const Gtk::TreeModel::iterator& it,
     if (!pb1)
     {
         PFSModelBase pFS = row[cols._colPFile];
-        row[column] = loadIcon(pFS, iconSize);
+        row[column] = loadIcon(it, pFS, iconSize);
     }
+
+    return pb1;
+}
+
+const std::string
+    strSuffixEB = " EB",
+    strSuffixPB = " PB",
+    strSuffixTB = " TB",
+    strSuffixGB = " GB",
+    strSuffixMB = " MB",
+    strSuffixKB = " KB",
+    strSuffixB = " bytes";
+
+Glib::ustring formatBytes(uint64_t u)
+{
+    const std::string *pSuffix = &strSuffixB;
+    double readable;
+    if (u >= 0x1000000000000000) // Exabyte
+    {
+        pSuffix = &strSuffixEB;
+        readable = (u >> 50);
+    }
+    else if (u >= 0x4000000000000) // Petabyte
+    {
+        pSuffix = &strSuffixPB;
+        readable = (u >> 40);
+    }
+    else if (u >= 0x10000000000) // Terabyte
+    {
+        pSuffix = &strSuffixTB;
+        readable = (u >> 30);
+    }
+    else if (u >= 0x40000000) // Gigabyte
+    {
+        pSuffix = &strSuffixGB;
+        readable = (u >> 20);
+    }
+    else if (u >= 0x100000) // Megabyte
+    {
+        pSuffix = &strSuffixMB;
+        readable = (u >> 10);
+    }
+    else if (u >= 0x400) // Kilobyte
+    {
+        pSuffix = &strSuffixKB;
+        readable = u;
+    }
+    else
+    {
+        return to_string(u) + strSuffixB;
+    }
+    // Divide by 1024 to get fractional value.
+    readable = (readable / 1024);
+    // Return formatted number with suffix
+    return Glib::ustring::format(std::fixed, std::setprecision(2), readable) + *pSuffix;
 }
 
 void
@@ -1221,13 +1369,13 @@ ElissoFolderView::setIconViewColumns()
     _iconView.set_cell_data_func(_cellRendererIconSmall,
                                  [this, &cols](const Gtk::TreeModel::iterator& it)
     {
-        this->cellDataFunc(it, cols._colIconSmall, ICON_SIZE_SMALL);
+        this->cellDataFuncIcon(it, cols._colIconSmall, ICON_SIZE_SMALL);
     });
 
     _iconView.set_cell_data_func(_cellRendererIconBig,
                                  [this, &cols](const Gtk::TreeModel::iterator& it)
     {
-        this->cellDataFunc(it, cols._colIconBig, ICON_SIZE_BIG);
+        this->cellDataFuncIcon(it, cols._colIconBig, ICON_SIZE_BIG);
     });
 }
 
@@ -1254,7 +1402,9 @@ ElissoFolderView::setListViewColumns()
 
     FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
 
-    i = _treeView.append_column("Icon", cols._colIconSmall);
+    // "Icon" column with our own cell renderer. Do not use the overload with a column
+    // number since that would create a cell renderer automatically.
+    i = _treeView.append_column("Icon", _cellRendererIconSmall);
     if ((pColumn = _treeView.get_column(i - 1)))
     {
         pColumn->set_sizing(Gtk::TREE_VIEW_COLUMN_FIXED);
@@ -1263,7 +1413,8 @@ ElissoFolderView::setListViewColumns()
                                     [this, &cols](Gtk::CellRenderer*,
                                                   const Gtk::TreeModel::iterator& it)
         {
-            this->cellDataFunc(it, cols._colIconSmall, ICON_SIZE_SMALL);
+            auto pPixbuf = this->cellDataFuncIcon(it, cols._colIconSmall, ICON_SIZE_SMALL);
+            _cellRendererIconSmall.property_pixbuf() = pPixbuf;
         });
     }
 
@@ -1276,13 +1427,28 @@ ElissoFolderView::setListViewColumns()
         pColumn->set_sort_column(cols._colFilename);
     }
 
-    i = _treeView.append_column("Size", cols._colSize);
+    // "Size" column with our own cell renderer.
+    i = _treeView.append_column("Size", _cellRendererSize);
     if ((pColumn = _treeView.get_column(i - 1)))
     {
         pColumn->set_sizing(Gtk::TREE_VIEW_COLUMN_FIXED);
         pColumn->set_fixed_width(aSizes[i - 1]);
         pColumn->set_resizable(true);
         pColumn->set_sort_column(cols._colSize);
+        pColumn->set_cell_data_func(_cellRendererSize,
+                                    [this, &cols](Gtk::CellRenderer* pRend,
+                                                  const Gtk::TreeModel::iterator& it)
+        {
+            Gtk::TreeModel::Row row = *it;
+            PFSModelBase pFS = row[cols._colPFile];
+            Glib::ustring str;
+            if (pFS->getType() == FSType::FILE)
+            {
+                str = formatBytes(row[cols._colSize]);
+                (static_cast<Gtk::CellRendererText*>(pRend))->property_xalign() = 1.0;
+            }
+            (static_cast<Gtk::CellRendererText*>(pRend))->property_text() = str;
+        });
     }
 
     i = _treeView.append_column("Type", cols._colTypeString);

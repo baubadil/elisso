@@ -11,7 +11,6 @@
 #include "elisso/mainwindow.h"
 
 #include "elisso/elisso.h"
-
 #include "xwp/except.h"
 
 ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app,
@@ -96,6 +95,7 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app,
     });
 
     _notebook.set_scrollable(true);
+    _notebook.popup_enable();
     _notebook.show_all();
 
     /*
@@ -135,16 +135,16 @@ void
 ElissoApplicationWindow::addFolderTab(PFSModelBase pDirOrSymlink)       //!< in: directory to open, or nullptr for "home"
 {
     // Create a new view and add it to the notebook, which then owns it.
-    auto pView = new ElissoFolderView(*this);
+    int iPageInserted;
+    auto pView = new ElissoFolderView(*this, iPageInserted);
     auto p2 = pDirOrSymlink;
 
     if (!p2)
         p2 = FSDirectory::GetHome();
 
-    int n = _notebook.append_page(*pView,
-                                  p2->getBasename());
     pView->show();
-    _notebook.set_current_page(n);
+
+    _notebook.set_current_page(iPageInserted);
     _notebook.set_tab_reorderable(*pView, true);
 
     pView->setDirectory(p2,

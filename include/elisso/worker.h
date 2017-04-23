@@ -56,7 +56,7 @@
             new std::thread([&w]()
             {
                 PMyStruct p = std::make_shared<MyStruct>(...);
-                w.addResult(p);
+                w.postResultToGUI(p);
             }
  */
 template<class P>
@@ -68,7 +68,7 @@ public:
         return dispatcher.connect(fn);
     }
 
-    void addResult(P pResult)
+    void postResultToGUI(P pResult)
     {
         // Do not hold the mutex while messing with the dispatcher -> that could deadlock.
         {

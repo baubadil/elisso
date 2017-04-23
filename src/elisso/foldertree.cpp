@@ -432,7 +432,7 @@ ElissoFolderTree::spawnPopulate(const Gtk::TreeModel::iterator &it)
                 }
 
                 // Hand the results over to the instance: add it to the queue, signal the dispatcher.
-                this->_pImpl->workerPopulated.addResult(pResult);
+                this->_pImpl->workerPopulated.postResultToGUI(pResult);
                 // This triggers onPopulateDone().
             });
 
@@ -536,7 +536,7 @@ ElissoFolderTree::spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst)
                         if (!pFS->isHidden())
                         {
                             pAddOneFirst->_pFirstSubfolder = pFS;
-                            _pImpl->workerAddOneFirst.addResult(pAddOneFirst);
+                            _pImpl->workerAddOneFirst.postResultToGUI(pAddOneFirst);
                             break;
                         }
                 }
@@ -544,7 +544,7 @@ ElissoFolderTree::spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst)
             catch (exception &e)
             {
                 pAddOneFirst->setError(e);
-                _pImpl->workerAddOneFirst.addResult(pAddOneFirst);
+                _pImpl->workerAddOneFirst.postResultToGUI(pAddOneFirst);
             }
         }
     });

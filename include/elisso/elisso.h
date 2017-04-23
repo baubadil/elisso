@@ -19,6 +19,7 @@
 #include "xwp/debug.h"
 
 typedef Glib::RefPtr<Gdk::Pixbuf> PPixBuf;
+typedef std::shared_ptr<Gtk::TreeRowReference> PRowReference;
 
 // const DebugFlag DEBUG_ALWAYS          = 0;
 
@@ -34,9 +35,10 @@ typedef Glib::RefPtr<Gdk::Pixbuf> PPixBuf;
 const DebugFlag FOLDER_POPULATE_HIGH    = (1 << 21);
 const DebugFlag FOLDER_POPULATE_LOW     = (1 << 22);
 const DebugFlag FOLDER_STACK            = (1 << 23);
+const DebugFlag THUMBNAILER             = (1 << 24);
 
 #define ICON_SIZE_SMALL     16
-#define ICON_SIZE_BIG       64
+#define ICON_SIZE_BIG       128
 
 using namespace XWP;
 

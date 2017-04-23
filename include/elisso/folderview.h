@@ -19,7 +19,10 @@
 
 class ElissoFolderView;
 class FileSelection;
+class Thumbnailer;
 
+struct Thumbnail;
+typedef std::shared_ptr<Thumbnail> PThumbnail;
 
 /***************************************************************************
  *
@@ -66,7 +69,7 @@ typedef FlagSet<SetDirectoryFlags> SetDirectoryFlagSet;
 class ElissoFolderView : public Gtk::ScrolledWindow
 {
 public:
-    ElissoFolderView(ElissoApplicationWindow &mainWindow);
+    ElissoFolderView(ElissoApplicationWindow &mainWindow, int &iPageInserted);
     virtual ~ElissoFolderView();
 
     /*
@@ -139,10 +142,13 @@ private:
     Gtk::ListStore::iterator insertFile(PFSModelBase pFS);
     void connectModel(bool fConnect);
 
-    Glib::RefPtr<Gdk::Pixbuf> loadIcon(PFSModelBase pFS, int size);
-    void cellDataFunc(const Gtk::TreeModel::iterator& it,
-                      Gtk::TreeModelColumn<PPixBuf> &column,
-                      int iconSize);
+    PPixBuf loadIcon(const Gtk::TreeModel::iterator& it,
+                     PFSModelBase pFS,
+                     int size);
+    void onThumbnailReady();
+    PPixBuf cellDataFuncIcon(const Gtk::TreeModel::iterator& it,
+                             Gtk::TreeModelColumn<PPixBuf> &column,
+                             int iconSize);
     void setIconViewColumns();
     void setListViewColumns();
 
@@ -160,6 +166,10 @@ private:
     FolderViewMode              _mode = FolderViewMode::UNDEFINED;
     FolderViewMode              _modeBeforeError = FolderViewMode::UNDEFINED;
 
+    Gtk::Spinner                _spinnerNotebookPage;
+    Gtk::Label                  _labelNotebookPage;
+    Gtk::Label                  _labelNotebookMenu;
+
     Gtk::IconView               _iconView;
     TreeViewPlus                _treeView;
 //     Gtk::FlowBox                _compactView;
@@ -167,6 +177,7 @@ private:
     Gtk::Label                  _infoBarLabel;
     Gtk::CellRendererPixbuf     _cellRendererIconSmall;
     Gtk::CellRendererPixbuf     _cellRendererIconBig;
+    Gtk::CellRendererText       _cellRendererSize;
 
     PFSModelBase                _pDir;
     std::vector<std::string>    _aPathHistory;

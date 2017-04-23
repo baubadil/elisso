@@ -144,7 +144,8 @@ FileOperation::threadFunc()
         size_t cCurrent = 0;
         for (auto &pFS : _llFiles)
         {
-            addResult(pFS);     // Temporarily requests the lock.
+            postResultToGUI(pFS);     // Temporarily requests the lock.
+
             {
                 // Request the lock again.
                 Lock lock(mutex);
@@ -175,7 +176,7 @@ FileOperation::threadFunc()
     }
 
     // Report "finished" by pushing a nullptr.
-    addResult(nullptr);
+    postResultToGUI(nullptr);
 }
 
 /**

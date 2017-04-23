@@ -134,7 +134,7 @@ typedef std::list<PFSMonitorBase> FSMonitorsList;
  *
  **************************************************************************/
 
-enum class FSFlags : uint8_t
+enum class FSFlag : uint8_t
 {
     POPULATED_WITH_DIRECTORIES =  (1 <<  0),        // only for dirs
     POPULATED_WITH_ALL         =  (1 <<  1),        // only for dirs
@@ -143,9 +143,10 @@ enum class FSFlags : uint8_t
     DIRTY                      =  (1 <<  4),        // only used during populate
     HIDDEN_CHECKED             =  (1 <<  5),
     HIDDEN                     =  (1 <<  6),
+    LAZY_LOADING_ICON          =  (1 <<  7),
 };
 
-typedef FlagSet<FSFlags> FSFlagSet;
+typedef FlagSet<FSFlag> FSFlagSet;
 
 /**
  *  Base class for all file-system objects (files, directories, symlinks, specials).
@@ -195,6 +196,18 @@ public:
     }
 
     virtual FSTypeResolved getResolvedType() = 0;
+
+    bool hasFlag(FSFlag f)
+    {
+        return _fl.test(f);
+    }
+
+    void setFlag(FSFlag f)
+    {
+        _fl |= f;
+    }
+
+    PFSFile getFile();
 
     /**
      *  Returns true if this is a directory or a symlink to one. Can cause I/O if this

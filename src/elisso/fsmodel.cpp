@@ -9,16 +9,14 @@
  */
 
 #include "elisso/fsmodel.h"
+
 #include "xwp/debug.h"
 #include "xwp/stringhelp.h"
 #include "xwp/except.h"
-
 #include <mutex>
 #include <atomic>
 #include <chrono>
 #include <thread>
-
-#include <string.h>
 
 
 /***************************************************************************
@@ -365,21 +363,21 @@ FSModelBase::setParent(PFSModelBase pNewParent)
 bool
 FSModelBase::isHidden()
 {
-    if (!_fl.test(FSFlags::HIDDEN_CHECKED))
+    if (!_fl.test(FSFlag::HIDDEN_CHECKED))
     {
         auto len = _strBasename.length();
         if (!len)
-            _fl |= FSFlags::HIDDEN;
+            _fl |= FSFlag::HIDDEN;
         else
             if (    (_strBasename[0] == '.')
                  || (_strBasename[len - 1] == '~')
                )
-                _fl |= FSFlags::HIDDEN;
+                _fl |= FSFlag::HIDDEN;
 
-        _fl |= FSFlags::HIDDEN_CHECKED;
+        _fl |= FSFlag::HIDDEN_CHECKED;
     }
 
-    return _fl.test(FSFlags::HIDDEN);
+    return _fl.test(FSFlag::HIDDEN);
 
 //     auto pInfo = _pGioFile->query_info(G_FILE_ATTRIBUTE_STANDARD_IS_HIDDEN,
 //                                        Gio::FileQueryInfoFlags::FILE_QUERY_INFO_NOFOLLOW_SYMLINKS);
@@ -414,6 +412,17 @@ FSModelBase::getIcon()
     return _pIcon->to_string();
 }
 
+PFSFile
+FSModelBase::getFile()
+{
+    if (_type == FSType::FILE)
+        return static_pointer_cast<FSFile>(shared_from_this());
+    if (getResolvedType() == FSTypeResolved::SYMLINK_TO_FILE)
+        return static_pointer_cast<FSFile>((static_cast<FSSymlink*>(this))->getTarget());
+
+    return nullptr;
+}
+
 /**
  *  Returns the parent directory of this filesystem object. Note that this
  *  can be either a FSDirectory or a FSSymlink that points to one.
@@ -423,7 +432,7 @@ FSModelBase::getParent()
 {
     if (_pParent)
         ;
-    else if (_fl.test(FSFlags::IS_ROOT_DIRECTORY))
+    else if (_fl.test(FSFlag::IS_ROOT_DIRECTORY))
         ;       // return NULL;
 
     return _pParent;
@@ -654,7 +663,7 @@ bool
 FSContainer::isPopulatedWithDirectories()
 {
     FSLock lock;
-    return _refBase._fl.test(FSFlags::POPULATED_WITH_DIRECTORIES);
+    return _refBase._fl.test(FSFlag::POPULATED_WITH_DIRECTORIES);
 }
 
 /**
@@ -665,7 +674,7 @@ bool
 FSContainer::isCompletelyPopulated()
 {
     FSLock lock;
-    return _refBase._fl.test(FSFlags::POPULATED_WITH_ALL);
+    return _refBase._fl.test(FSFlag::POPULATED_WITH_ALL);
 }
 
 /**
@@ -677,8 +686,8 @@ void
 FSContainer::unsetPopulated()
 {
     FSLock lock;
-    _refBase._fl.reset(FSFlags::POPULATED_WITH_ALL);
-    _refBase._fl.reset(FSFlags::POPULATED_WITH_DIRECTORIES);
+    _refBase._fl.reset(FSFlag::POPULATED_WITH_ALL);
+    _refBase._fl.reset(FSFlag::POPULATED_WITH_DIRECTORIES);
 }
 
 /**
@@ -753,7 +762,7 @@ FSContainer::getContents(FSList &llFiles,
                 for (auto it : _pMap->m)
                 {
                     auto &p = it.second;
-                    p->_fl |= FSFlags::DIRTY;
+                    p->_fl |= FSFlag::DIRTY;
                 }
 
             Glib::RefPtr<Gio::FileEnumerator> en;
@@ -775,7 +784,7 @@ FSContainer::getContents(FSList &llFiles,
                         auto pAwake = isAwake(strThis);
                         if (pAwake)
                             // Clear the dirty flag.
-                            pAwake->_fl.reset(FSFlags::DIRTY);
+                            pAwake->_fl.reset(FSFlag::DIRTY);
                         else
                         {
                             if (pStopFlag)
@@ -841,11 +850,11 @@ FSContainer::getContents(FSList &llFiles,
                 if (!fStopped)
                 {
                     if (getContents == Get::FOLDERS_ONLY)
-                        _refBase._fl |= FSFlags::POPULATED_WITH_DIRECTORIES;
+                        _refBase._fl |= FSFlag::POPULATED_WITH_DIRECTORIES;
                     else if (getContents == Get::ALL)
                     {
-                        _refBase._fl |= FSFlags::POPULATED_WITH_DIRECTORIES;
-                        _refBase._fl |= FSFlags::POPULATED_WITH_ALL;
+                        _refBase._fl |= FSFlag::POPULATED_WITH_DIRECTORIES;
+                        _refBase._fl |= FSFlag::POPULATED_WITH_ALL;
                     }
                 }
             }
@@ -859,7 +868,7 @@ FSContainer::getContents(FSList &llFiles,
             {
                 auto &p = it->second;
                 if (    (getContents == Get::ALL)
-                     && (p->_fl & FSFlags::DIRTY)
+                     && (p->_fl & FSFlag::DIRTY)
                    )
                 {
                     // Note the post increment. http://stackoverflow.com/questions/180516/how-to-filter-items-from-a-stdmap/180616#180616
@@ -1043,7 +1052,7 @@ FSDirectory::GetRoot()
 RootDirectory::RootDirectory()
     : FSDirectory(Gio::File::create_for_path("/"))
 {
-    _fl = FSFlags::IS_ROOT_DIRECTORY;
+    _fl = FSFlag::IS_ROOT_DIRECTORY;
 }
 
 /*static */
@@ -1067,7 +1076,7 @@ RootDirectory::GetImpl()
 CurrentDirectory::CurrentDirectory()
     : FSDirectory(Gio::File::create_for_path("."))
 {
-    _fl = FSFlags::IS_CURRENT_DIRECTORY;
+    _fl = FSFlag::IS_CURRENT_DIRECTORY;
 }
 
 /*static */

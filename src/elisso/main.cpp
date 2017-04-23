@@ -12,10 +12,10 @@
 
 #include "elisso/application.h"
 
+#include "elisso/mainwindow.h"
+
 #include "xwp/except.h"
 #include "xwp/exec.h"
-
-#include "elisso/mainwindow.h"
 
 
 /***************************************************************************
@@ -296,7 +296,7 @@ ElissoApplication::on_open(const type_vec_files &files,
 int
 main(int argc, char *argv[])
 {
-    g_flDebugSet = FOLDER_POPULATE_HIGH | FILE_HIGH; //  | FILE_LOW;
+    g_flDebugSet = FOLDER_POPULATE_HIGH | FILE_HIGH | THUMBNAILER; //  | FILE_LOW;
 
     auto app = ElissoApplication::create(argc,
                                          argv);

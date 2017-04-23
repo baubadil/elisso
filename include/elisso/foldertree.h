@@ -13,6 +13,7 @@
 
 #include <gtkmm.h>
 
+#include "elisso/elisso.h"
 #include "elisso/fsmodel.h"
 
 class ElissoApplicationWindow;
@@ -22,8 +23,6 @@ struct AddOneFirst;
 typedef std::shared_ptr<AddOneFirst> PAddOneFirst;
 typedef std::list<PAddOneFirst> AddOneFirstsList;
 typedef std::shared_ptr<AddOneFirstsList> PAddOneFirstsList;
-
-typedef std::shared_ptr<Gtk::TreeRowReference> PRowReference;
 
 
 /***************************************************************************

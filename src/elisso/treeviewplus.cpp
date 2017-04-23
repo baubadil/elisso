@@ -55,32 +55,37 @@ TreeViewPlus::on_button_press_event(GdkEventButton *pEvent) /* override */
                 {
                     auto pSel = this->get_selection();
                     MouseButton3ClickType clickType = MouseButton3ClickType::WHITESPACE;
-                    Gtk::TreeModel::Path path;
                     // Figure out if the click was on a row or whitespace, and which row if any.
                     // There are two variants for this call -- but the more verbose one with a column returns
                     // a column always even if the user clicks on the whitespace to the right of the column
                     // so there's no point.
-                    if (!get_path_at_pos((int)pEvent->x, (int)pEvent->y, path))
+                    // if (!get_path_at_pos((int)pEvent->x, (int)pEvent->y, path))
+                    if (is_blank_at_pos((int)pEvent->x, (int)pEvent->y))
                         // Click on whitespace always deselects everything, with both MB1 and MB3.
                         pSel->unselect_all();
-                    else if (pEvent->button == 3)
+                    else
                     {
-                        // Click on a row: with mouse button 3, figure out if it's selected.
-                        if (pSel->is_selected(path))
-                        {
-                            Debug::Log(DEBUG_ALWAYS, "row is selected");
-                            if (pSel->count_selected_rows() == 1)
-                                clickType = MouseButton3ClickType::SINGLE_ROW_SELECTED;
-                            else
-                                clickType = MouseButton3ClickType::MULTIPLE_ROWS_SELECTED;
-                        }
-                        else
-                        {
-                            Debug::Log(DEBUG_ALWAYS, "row is NOT selected");
-                            pSel->unselect_all();
-                            pSel->select(path);
-                            clickType = MouseButton3ClickType::SINGLE_ROW_SELECTED;
-                        }
+                        Gtk::TreeModel::Path path;
+                        if (get_path_at_pos((int)pEvent->x, (int)pEvent->y, path))
+                            if (pEvent->button == 3)
+                            {
+                                // Click on a row: with mouse button 3, figure out if it's selected.
+                                if (pSel->is_selected(path))
+                                {
+                                    Debug::Log(DEBUG_ALWAYS, "row is selected");
+                                    if (pSel->count_selected_rows() == 1)
+                                        clickType = MouseButton3ClickType::SINGLE_ROW_SELECTED;
+                                    else
+                                        clickType = MouseButton3ClickType::MULTIPLE_ROWS_SELECTED;
+                                }
+                                else
+                                {
+                                    Debug::Log(DEBUG_ALWAYS, "row is NOT selected");
+                                    pSel->unselect_all();
+                                    pSel->select(path);
+                                    clickType = MouseButton3ClickType::SINGLE_ROW_SELECTED;
+                                }
+                            }
                     }
 
                     // On right-click, open a pop-up menu.

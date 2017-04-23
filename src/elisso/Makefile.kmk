@@ -10,4 +10,5 @@ elisso_SOURCES += \
 	src/elisso/fsmodel.cpp \
 	src/elisso/progressdialog.cpp \
 	src/elisso/textentrydialog.cpp \
+	src/elisso/thumbnailer.cpp \
 	src/elisso/treeviewplus.cpp
