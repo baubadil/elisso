@@ -18,7 +18,6 @@
 #include "xwp/stringhelp.h"
 #include "xwp/debug.h"
 
-typedef Glib::RefPtr<Gdk::Pixbuf> PPixBuf;
 typedef std::shared_ptr<Gtk::TreeRowReference> PRowReference;
 
 // const DebugFlag DEBUG_ALWAYS          = 0;
@@ -43,6 +42,15 @@ const DebugFlag THUMBNAILER             = (1 << 24);
 using namespace XWP;
 
 DEF_STRING(APPLICATION_NAME, "elisso");
+
+DEF_STRING(TYPE_FILE, "File");
+DEF_STRING(TYPE_FOLDER, "Folder");
+DEF_STRING(TYPE_LINK_TO_FOLDER, "Link to folder");
+DEF_STRING(TYPE_LINK_TO_FILE, "Link to file");
+DEF_STRING(TYPE_LINK_TO, "Link to ");
+DEF_STRING(TYPE_BROKEN_LINK, "Broken link");
+DEF_STRING(TYPE_SPECIAL, "Special file");
+DEF_STRING(TYPE_MOUNTABLE, "Mountable");
 
 DEF_STRING(ACTION_FILE_NEW_TAB, "file-new-tab");
 DEF_STRING(ACTION_FILE_NEW_WINDOW, "file-new-window");

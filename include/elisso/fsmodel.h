@@ -66,6 +66,9 @@ typedef std::shared_ptr<FSMountable> PFSMountable;
 typedef std::list<PFSModelBase> FSList;
 typedef std::shared_ptr<FSList> PFSList;
 
+namespace Gdk { class Pixbuf; }
+typedef Glib::RefPtr<Gdk::Pixbuf> PPixbuf;
+
 class FSContainer;
 struct ContentsMap;
 
@@ -288,16 +291,24 @@ class FSFile : public FSModelBase
 {
     friend class FSModelBase;
 
+public:
     virtual FSTypeResolved getResolvedType() override
     {
         return FSTypeResolved::FILE;
     }
 
+    void setThumbnail(uint32_t thumbsize, PPixbuf ppb);
+    PPixbuf getThumbnail(uint32_t thumbsize);
+
 protected:
-    FSFile(Glib::RefPtr<Gio::File> pGioFile,
-           uint64_t cbSize);
     static PFSFile Create(Glib::RefPtr<Gio::File> pGioFile,
                           uint64_t cbSize);
+    FSFile(Glib::RefPtr<Gio::File> pGioFile,
+           uint64_t cbSize);
+    virtual ~FSFile();
+
+    struct ThumbData;
+    ThumbData   *_pThumbData = nullptr;
 };
 
 

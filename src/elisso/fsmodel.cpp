@@ -10,6 +10,7 @@
 
 #include "elisso/fsmodel.h"
 
+#include "elisso/thumbnailer.h"
 #include "xwp/debug.h"
 #include "xwp/stringhelp.h"
 #include "xwp/except.h"
@@ -549,13 +550,10 @@ FSModelBase::notifyFileRemoved()
  *
  **************************************************************************/
 
-FSFile::FSFile(Glib::RefPtr<Gio::File> pGioFile,
-               uint64_t cbSize)
-    : FSModelBase(FSType::FILE,
-                  pGioFile,
-                  cbSize)
+struct FSFile::ThumbData
 {
-}
+    map<uint32_t, PPixbuf> mapThumbnails;
+};
 
 /**
  *  Factory method to create an instance and return a shared_ptr to it.
@@ -575,6 +573,58 @@ FSFile::Create(Glib::RefPtr<Gio::File> pGioFile, uint64_t cbSize)
     };
 
     return std::make_shared<Derived>(pGioFile, cbSize);
+}
+
+FSFile::FSFile(Glib::RefPtr<Gio::File> pGioFile,
+               uint64_t cbSize)
+    : FSModelBase(FSType::FILE,
+                  pGioFile,
+                  cbSize)
+{
+}
+
+/* virtual */
+FSFile::~FSFile()
+{
+    FSLock lock;
+    if (_pThumbData)
+        delete _pThumbData;
+}
+
+void
+FSFile::setThumbnail(uint32_t thumbsize, PPixbuf ppb)
+{
+    FSLock lock;
+    if (ppb)
+    {
+        if (!_pThumbData)
+            _pThumbData = new ThumbData;
+
+        _pThumbData->mapThumbnails[thumbsize] = ppb;
+    }
+    else
+        // nullptr:
+        if (_pThumbData)
+        {
+            auto it = _pThumbData->mapThumbnails.find(thumbsize);
+            if (it != _pThumbData->mapThumbnails.end())
+                _pThumbData->mapThumbnails.erase(it);
+        }
+}
+
+PPixbuf
+FSFile::getThumbnail(uint32_t thumbsize)
+{
+    PPixbuf ppb;
+
+    if (_pThumbData)
+    {
+        auto it = _pThumbData->mapThumbnails.find(thumbsize);
+        if (it != _pThumbData->mapThumbnails.end())
+            ppb = it->second;
+    }
+
+    return ppb;
 }
 
 

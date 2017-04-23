@@ -13,6 +13,7 @@
 
 #include "elisso/elisso.h"
 
+#include "elisso/fsmodel.h"
 #include "xwp/basetypes.h"
 
 class ElissoApplication;
@@ -35,7 +36,7 @@ public:
     static PElissoApplication create(int argc,
                                      char *argv[]);
 
-    PPixBuf getIcon();
+    PPixbuf getIcon();
 
     Glib::ustring getSettingsString(const std::string &strKey);
 
@@ -60,7 +61,7 @@ protected:
 
     void on_open(const type_vec_files &files, const Glib::ustring &hint) override;
 
-    PPixBuf                     _pIcon;
+    PPixbuf                     _pIcon;
     Glib::RefPtr<Gio::Settings> _pSettings;
 };
 

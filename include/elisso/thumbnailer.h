@@ -16,12 +16,12 @@
 
 struct Thumbnail
 {
-    PFSModelBase    pFile;
+    PFSFile         pFile;
     PRowReference   pRowRef;
-    PPixBuf         ppbIconSmall;
-    PPixBuf         ppbIconBig;
+    PPixbuf         ppbIconSmall;
+    PPixbuf         ppbIconBig;
 
-    Thumbnail(PFSModelBase pFile_, PRowReference pRowRef_)
+    Thumbnail(PFSFile pFile_, PRowReference pRowRef_)
         : pFile(pFile_), pRowRef(pRowRef_)
     { }
 };
@@ -75,7 +75,7 @@ private:
 
     void fileReaderThread();
 
-    PPixBuf scale(PPixBuf ppbIn, size_t size);
+    PPixbuf scale(PFSFile pFS, PPixbuf ppbIn, size_t size);
 
     void scalerSmallThread();
     void scalerBigThread();

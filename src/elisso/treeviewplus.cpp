@@ -32,8 +32,9 @@
  *      which is a bit different from that of the GTK TreeView:
  *
  *       -- With Nautilus/Nemo, if the user right-clicks on a row and the row is selected, a
- *          popup menu opens with actions that apply to all selected rows. (If the user clicks on a row that is NOT
- *          selected however, everything is deselected and the selection switches to that row.
+ *          popup menu opens with actions that apply to all selected rows. (If the user clicks
+ *          on a row that is NOT selected however, everything is deselected and the selection
+ *          switches to that row.
  *
  *       -- With Nautilus/Nemo, clicking on whitespace with MB1 deselects everything.
  *
@@ -59,33 +60,32 @@ TreeViewPlus::on_button_press_event(GdkEventButton *pEvent) /* override */
                     // There are two variants for this call -- but the more verbose one with a column returns
                     // a column always even if the user clicks on the whitespace to the right of the column
                     // so there's no point.
-                    // if (!get_path_at_pos((int)pEvent->x, (int)pEvent->y, path))
-                    if (is_blank_at_pos((int)pEvent->x, (int)pEvent->y))
-                        // Click on whitespace always deselects everything, with both MB1 and MB3.
-                        pSel->unselect_all();
-                    else
+                    Gtk::TreeModel::Path path;
+                    if (get_path_at_pos((int)pEvent->x, (int)pEvent->y, path))
                     {
-                        Gtk::TreeModel::Path path;
-                        if (get_path_at_pos((int)pEvent->x, (int)pEvent->y, path))
-                            if (pEvent->button == 3)
+                        if (pEvent->button == 3)
+                        {
+                            // Click on a row: with mouse button 3, figure out if it's selected.
+                            if (pSel->is_selected(path))
                             {
-                                // Click on a row: with mouse button 3, figure out if it's selected.
-                                if (pSel->is_selected(path))
-                                {
-                                    Debug::Log(DEBUG_ALWAYS, "row is selected");
-                                    if (pSel->count_selected_rows() == 1)
-                                        clickType = MouseButton3ClickType::SINGLE_ROW_SELECTED;
-                                    else
-                                        clickType = MouseButton3ClickType::MULTIPLE_ROWS_SELECTED;
-                                }
+                                // Click on row that's selected: then show context even if it's whitespace.
+                                Debug::Log(DEBUG_ALWAYS, "row is selected");
+                                if (pSel->count_selected_rows() == 1)
+                                    clickType = MouseButton3ClickType::SINGLE_ROW_SELECTED;
                                 else
+                                    clickType = MouseButton3ClickType::MULTIPLE_ROWS_SELECTED;
+                            }
+                            else
+                            {
+                                Debug::Log(DEBUG_ALWAYS, "row is NOT selected");
+                                if (!is_blank_at_pos((int)pEvent->x, (int)pEvent->y))
                                 {
-                                    Debug::Log(DEBUG_ALWAYS, "row is NOT selected");
                                     pSel->unselect_all();
                                     pSel->select(path);
                                     clickType = MouseButton3ClickType::SINGLE_ROW_SELECTED;
                                 }
                             }
+                        }
                     }
 
                     // On right-click, open a pop-up menu.

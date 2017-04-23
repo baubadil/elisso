@@ -22,9 +22,9 @@
 struct ThumbnailTemp
 {
     PThumbnail      pThumb;
-    PPixBuf         ppbOrig;
+    PPixbuf         ppbOrig;
 
-    ThumbnailTemp(PThumbnail pThumb_, PPixBuf ppbOrig_)
+    ThumbnailTemp(PThumbnail pThumb_, PPixbuf ppbOrig_)
         : pThumb(pThumb_),
           ppbOrig(ppbOrig_)
     { }
@@ -218,7 +218,7 @@ void Thumbnailer::fileReaderThread()
         using namespace std::chrono;
         steady_clock::time_point t1 = steady_clock::now();
 
-        PPixBuf ppb = Gdk::Pixbuf::create_from_file(pThumbnailIn->pFile->getRelativePath());
+        PPixbuf ppb = Gdk::Pixbuf::create_from_file(pThumbnailIn->pFile->getRelativePath());
         if (ppb)
         {
             milliseconds time_span = duration_cast<milliseconds>(steady_clock::now() - t1);
@@ -232,7 +232,7 @@ void Thumbnailer::fileReaderThread()
     }
 }
 
-PPixBuf Thumbnailer::scale(PPixBuf ppbIn, size_t thumbsize)
+PPixbuf Thumbnailer::scale(PFSFile pFS, PPixbuf ppbIn, size_t thumbsize)
 {
     size_t
         cxSrc = ppbIn->get_width(),
@@ -245,14 +245,17 @@ PPixBuf Thumbnailer::scale(PPixBuf ppbIn, size_t thumbsize)
         cxThumb = thumbsize * cxSrc / cySrc;
 
     auto ppbOut = ppbIn->scale_simple(cxThumb,
-                               cyThumb,
-                               Gdk::InterpType::INTERP_TILES);
-                               // Gdk::InterpType::INTERP_BILINEAR);
+                                      cyThumb,
+                                      Gdk::InterpType::INTERP_BILINEAR);
 
-    Glib::ustring strOrientation = ppbIn->get_option("orientation");
-    if (strOrientation == "8")
-        ppbOut = ppbOut->rotate_simple(Gdk::PixbufRotation::PIXBUF_ROTATE_COUNTERCLOCKWISE);
-//     Debug::Log(THUMBNAILER, "orientation: " + strOrientation);
+    if (ppbOut)
+    {
+        Glib::ustring strOrientation = ppbIn->get_option("orientation");
+        if (strOrientation == "8")
+            ppbOut = ppbOut->rotate_simple(Gdk::PixbufRotation::PIXBUF_ROTATE_COUNTERCLOCKWISE);
+    }
+
+    pFS->setThumbnail(thumbsize, ppbOut);
 
     return ppbOut;
 }
@@ -270,7 +273,7 @@ void Thumbnailer::scalerSmallThread()
         using namespace std::chrono;
         steady_clock::time_point t1 = steady_clock::now();
 
-        PPixBuf ppb = scale(pTemp->ppbOrig, ICON_SIZE_SMALL);
+        PPixbuf ppb = scale(pTemp->pThumb->pFile, pTemp->ppbOrig, ICON_SIZE_SMALL);
 
         bool fBothThumbnailsReady = false;
         if (ppb)
@@ -303,7 +306,7 @@ void Thumbnailer::scalerBigThread()
         using namespace std::chrono;
         steady_clock::time_point t1 = steady_clock::now();
 
-        PPixBuf ppb = scale(pTemp->ppbOrig, ICON_SIZE_BIG);
+        PPixbuf ppb = scale(pTemp->pThumb->pFile, pTemp->ppbOrig, ICON_SIZE_BIG);
 
         bool fBothThumbnailsReady = false;
         if (ppb)

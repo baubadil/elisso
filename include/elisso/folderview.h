@@ -142,12 +142,12 @@ private:
     Gtk::ListStore::iterator insertFile(PFSModelBase pFS);
     void connectModel(bool fConnect);
 
-    PPixBuf loadIcon(const Gtk::TreeModel::iterator& it,
+    PPixbuf loadIcon(const Gtk::TreeModel::iterator& it,
                      PFSModelBase pFS,
                      int size);
     void onThumbnailReady();
-    PPixBuf cellDataFuncIcon(const Gtk::TreeModel::iterator& it,
-                             Gtk::TreeModelColumn<PPixBuf> &column,
+    PPixbuf cellDataFuncIcon(const Gtk::TreeModel::iterator& it,
+                             Gtk::TreeModelColumn<PPixbuf> &column,
                              int iconSize);
     void setIconViewColumns();
     void setListViewColumns();
