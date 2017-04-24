@@ -44,15 +44,15 @@
 bool
 TreeViewPlus::on_button_press_event(GdkEventButton *pEvent) /* override */
 {
-    if (this->_pView)
-        if (pEvent->type == GDK_BUTTON_PRESS)
-        {
-            Debug::Log(DEBUG_ALWAYS, "button " + to_string(pEvent->button) + " pressed");
+    if (pEvent->type == GDK_BUTTON_PRESS)
+    {
+        Debug::Log(DEBUG_ALWAYS, "button " + to_string(pEvent->button) + " pressed");
 
-            switch (pEvent->button)
-            {
-                case 1:
-                case 3:
+        switch (pEvent->button)
+        {
+            case 1:
+            case 3:
+                if (this->_pView)
                 {
                     auto pSel = this->get_selection();
                     MouseButton3ClickType clickType = MouseButton3ClickType::WHITESPACE;
@@ -95,22 +95,22 @@ TreeViewPlus::on_button_press_event(GdkEventButton *pEvent) /* override */
                         return true;        // do not propagate
                     }
                 }
-                break;
+            break;
 
-                // GTK+ routes mouse button 8 to the "back" event.
-                case 8:
-                    this->getToplevelWindow().activate_action(ACTION_GO_BACK);
-                break;
+            // GTK+ routes mouse button 8 to the "back" event.
+            case 8:
+                this->getToplevelWindow().activate_action(ACTION_GO_BACK);
+            break;
 
-                // GTK+ routes mouse button 9 to the "forward" event.
-                case 9:
-                    this->getToplevelWindow().activate_action(ACTION_GO_FORWARD);
-                break;
+            // GTK+ routes mouse button 9 to the "forward" event.
+            case 9:
+                this->getToplevelWindow().activate_action(ACTION_GO_FORWARD);
+            break;
 
-                default:
-                break;
-            }
+            default:
+            break;
         }
+    }
 
     return Gtk::TreeView::on_button_press_event(pEvent);
 }

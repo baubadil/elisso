@@ -41,8 +41,15 @@ ContentType::ContentType(const char *pcszName, const char *pcszDescription, cons
 PAppInfo
 ContentType::getDefaultAppInfo() const
 {
-    PAppInfo pAppInfo = Glib::wrap(g_app_info_get_default_for_type(_strName.c_str(), FALSE));
+    PAppInfo pAppInfo = Gio::AppInfo::get_default_for_type(_strName, false);
     return pAppInfo;
+}
+
+AppInfoList
+ContentType::getAllAppInfos() const
+{
+    AppInfoList pList = Gio::AppInfo::get_all_for_type(_strName);
+    return pList;
 }
 
 /**

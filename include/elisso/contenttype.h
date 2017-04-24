@@ -18,6 +18,7 @@ class FSFile;
 typedef std::shared_ptr<FSFile> PFSFile;
 
 typedef Glib::RefPtr<Gio::AppInfo> PAppInfo;
+typedef std::list<PAppInfo> AppInfoList;
 
 class ContentType
 {
@@ -30,6 +31,7 @@ public:
     }
 
     PAppInfo getDefaultAppInfo() const;
+    AppInfoList getAllAppInfos() const;
 
 private:
     ContentType(const char *pcszName, const char *pcszDescription, const char *pcszMimeType);

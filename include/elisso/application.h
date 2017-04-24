@@ -19,6 +19,9 @@
 class ElissoApplication;
 typedef Glib::RefPtr<ElissoApplication> PElissoApplication;
 
+typedef Glib::RefPtr<Gio::Menu> PMenu;
+typedef Glib::RefPtr<Gio::MenuItem> PMenuItem;
+
 
 /***************************************************************************
  *
@@ -45,11 +48,11 @@ public:
     void setSettingsString(const std::string &strKey,
                            const Glib::ustring &strData);
 
-    Glib::RefPtr<Gio::Menu> addMenuSection(Glib::RefPtr<Gio::Menu> pMenu);
-    void addMenuItem(Glib::RefPtr<Gio::Menu> pMenu,
-                     const Glib::ustring &strName,
-                     const Glib::ustring &strAction,
-                     const Glib::ustring &strAccelerator = "");
+    PMenu addMenuSection(PMenu pMenu);
+    PMenuItem addMenuItem(PMenu pMenu,
+                          const Glib::ustring &strName,
+                          const Glib::ustring &strAction,
+                          const Glib::ustring &strAccelerator = "");
 
 protected:
     ElissoApplication(int argc,

@@ -24,6 +24,9 @@ class Thumbnailer;
 struct Thumbnail;
 typedef std::shared_ptr<Thumbnail> PThumbnail;
 
+typedef Glib::RefPtr<Gio::AppInfo> PAppInfo;
+
+
 /***************************************************************************
  *
  *  ElissoFolderView
@@ -125,7 +128,8 @@ public:
      */
     void handleAction(const std::string &strAction);
 
-    void openFile(PFSModelBase pFS);
+    void openFile(PFSModelBase pFS,
+                  PAppInfo pAppInfo);
 
     PFSDirectory createSubfolderDialog();
     void trashSelected();

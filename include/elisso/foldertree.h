@@ -15,6 +15,7 @@
 
 #include "elisso/elisso.h"
 #include "elisso/fsmodel.h"
+#include "elisso/treeviewplus.h"
 
 class ElissoApplicationWindow;
 class ElissoFolderView;
@@ -62,7 +63,7 @@ private:
     PRowReference getRowReference(const Gtk::TreeModel::iterator &it);
 
     ElissoApplicationWindow     &_mainWindow;
-    Gtk::TreeView               _treeView;
+    TreeViewPlus                _treeView;
 
     struct Impl;
     Impl                        *_pImpl;

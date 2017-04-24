@@ -43,6 +43,8 @@ using namespace XWP;
 
 DEF_STRING(APPLICATION_NAME, "elisso");
 
+DEF_STRING(EMPTY_STRING, "");
+
 DEF_STRING(TYPE_FILE, "File");
 DEF_STRING(TYPE_FOLDER, "Folder");
 DEF_STRING(TYPE_LINK_TO_FOLDER, "Link to folder");

@@ -471,6 +471,19 @@ ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
     return rc;
 }
 
+bool isImageFile(PFSModelBase pFile)
+{
+    const std::string &strBasename = pFile->getBasename();
+    if (    endsWith(strBasename, ".jpg")
+         || endsWith(strBasename, ".JPG")
+         || endsWith(strBasename, ".png")
+         || endsWith(strBasename, ".PNG")
+       )
+        return true;
+
+    return false;
+}
+
 /**
  *  Gets called when the populate thread within setDirectory() has finished. We must now
  *  inspect the PopulateThread in the implementation struct for the results.
@@ -479,7 +492,7 @@ void
 ElissoFolderView::onPopulateDone()
 {
     if (!_pImpl->pPopulateThread)
-        throw FSException("PopulateThread is nullptr");
+        return; // throw FSException("PopulateThread is nullptr");
 
     if (_pImpl->pPopulateThread->getError().size())
         this->setError(_pImpl->pPopulateThread->getError());
@@ -489,8 +502,12 @@ ElissoFolderView::onPopulateDone()
 
         Gtk::ListStore::iterator itSelect;
 
+        size_t  cFolders = 0,
+                cFiles = 0,
+                cImageFiles = 0;
+
         /*
-         * Insert all the files!
+         * Insert all the files and collect some statistics.
          */
         for (auto &pFS : _pImpl->llFolderContents)
         {
@@ -498,11 +515,38 @@ ElissoFolderView::onPopulateDone()
 
             if (_pImpl->pPopulateThread->shouldBeSelected(pFS))
                 itSelect = it;
+
+            switch (pFS->getResolvedType())
+            {
+                case FSTypeResolved::DIRECTORY:
+                case FSTypeResolved::SYMLINK_TO_DIRECTORY:
+                    ++cFolders;
+                break;
+
+                case FSTypeResolved::FILE:
+                case FSTypeResolved::SYMLINK_TO_FILE:
+                    ++cFiles;
+                    if (isImageFile(pFS))
+                        ++cImageFiles;
+                break;
+
+                default:
+
+                break;
+            }
         }
 
-        // This connects the model.
+        // This does not yet connect the model, since we haven't set the state to populated yet.
+        if (cImageFiles)
+            this->setViewMode(FolderViewMode::ICONS);
+        else
+            this->setViewMode(FolderViewMode::LIST);
+
+        // This connects the model and also calls onFolderViewLoaded(),
+        // which in turn selects the item in the tree on the left.
         this->setState(ViewState::POPULATED);
 
+        // Select and scroll an item in the list if necessary.
         if (itSelect)
         {
             Gtk::TreeModel::Path path(itSelect);
@@ -512,11 +556,17 @@ ElissoFolderView::onPopulateDone()
                 case FolderViewMode::COMPACT:
                     _iconView.select_path(path);
                     _iconView.scroll_to_path(path, true, 0.5, 0.5);
+                    // Grab focus (this is useful for "back" and "forward").
+                    if (!_pImpl->pPopulateThread->hadClickFromTree())
+                        _iconView.grab_focus();
                 break;
 
                 case FolderViewMode::LIST:
                     _treeView.get_selection()->select(path);
                     _treeView.scroll_to_row(path, 0.5);
+                    // Grab focus (this is useful for "back" and "forward").
+                    if (!_pImpl->pPopulateThread->hadClickFromTree())
+                        _treeView.grab_focus();
                 break;
 
                 case FolderViewMode::UNDEFINED:
@@ -568,6 +618,8 @@ ElissoFolderView::insertFile(PFSModelBase pFS)
         const std::string &strBasename = pFS->getBasename();
         row[cols._colFilename] = strBasename;
         row[cols._colSize] = pFS->getFileSize();
+        row[cols._colIconSmall] = loadIcon(it, pFS, ICON_SIZE_SMALL);
+        row[cols._colIconBig] = loadIcon(it, pFS, ICON_SIZE_BIG);
 
         auto t = pFS->getResolvedType();
 //                 row[cols._colTypeResolved] = t;
@@ -953,6 +1005,8 @@ ElissoFolderView::onMouseButton3Pressed(GdkEventButton *pEvent,
 
     auto pMenu = Gio::Menu::create();
 
+    std::map<std::string, PAppInfo> mapAppInfosForTempMenuItems;
+
     switch (clickType)
     {
         case MouseButton3ClickType::SINGLE_ROW_SELECTED:
@@ -980,9 +1034,28 @@ ElissoFolderView::onMouseButton3Pressed(GdkEventButton *pEvent,
                             auto pContentType = ContentType::Guess(pFile);
                             if (pContentType)
                             {
-                                auto pAppInfo = pContentType->getDefaultAppInfo();
-                                if (pAppInfo)
-                                    app.addMenuItem(pMenu, "Open with " + pAppInfo->get_name(), ACTION_EDIT_OPEN_SELECTED);
+                                auto pDefaultAppInfo = pContentType->getDefaultAppInfo();
+                                if (pDefaultAppInfo)
+                                {
+                                    // The menu item for the default application is easy, it has a a compile-time action.
+                                    app.addMenuItem(pMenu, "Open with " + pDefaultAppInfo->get_name(), ACTION_EDIT_OPEN_SELECTED);
+
+                                    // The menu items for the non-default application items are difficult because they have
+                                    // no compile-time actions, and we cannot add signals to the Gio::Menu items we are creating
+                                    // here. So make a list of them and override the signals below when we create the Gtk::Menu.
+                                    AppInfoList llInfos = pContentType->getAllAppInfos();
+                                    if (llInfos.size() > 1)
+                                        for (auto &pInfo : llInfos)
+                                            if (pInfo->get_id() != pDefaultAppInfo->get_id())
+                                            {
+                                                std::string strLabel("Open with " + pInfo->get_name());
+                                                auto pMenuItem = Gio::MenuItem::create(strLabel,
+                                                                                       EMPTY_STRING);   // empty action
+                                                // Remember the application info for the signal handlers below.
+                                                mapAppInfosForTempMenuItems[strLabel] = pInfo;
+                                                pMenu->append_item(pMenuItem);
+                                            }
+                                }
                             }
                         }
                     }
@@ -1017,6 +1090,32 @@ ElissoFolderView::onMouseButton3Pressed(GdkEventButton *pEvent,
     }
 
     _pImpl->pPopupMenu = std::make_shared<Gtk::Menu>(pMenu);
+
+    // Now fix up the menu items for non-default applications.
+    for (Gtk::Widget *pChild : _pImpl->pPopupMenu->get_children())
+    {
+        // Skip the separators.
+        Gtk::SeparatorMenuItem *pSep = dynamic_cast<Gtk::SeparatorMenuItem*>(pChild);
+        if (!pSep)
+        {
+            Gtk::MenuItem *pMenuItem = dynamic_cast<Gtk::MenuItem*>(pChild);
+            if (pMenuItem)
+            {
+                std::string strLabel(pMenuItem->get_label());
+                auto it = mapAppInfosForTempMenuItems.find(strLabel);
+                if (it != mapAppInfosForTempMenuItems.end())
+                {
+                    PAppInfo pAppInfo = it->second;
+                    pMenuItem->signal_activate().connect([this, pMenuItem, pAppInfo]()
+                    {
+                        Debug::Log(DEBUG_ALWAYS, pMenuItem->get_label());
+                        this->openFile(nullptr, pAppInfo);
+                    });
+                }
+            }
+        }
+    }
+
     _pImpl->pPopupMenu->attach_to_widget(*this);
     _pImpl->pPopupMenu->popup(pEvent->button, pEvent->time);
 }
@@ -1036,7 +1135,7 @@ ElissoFolderView::handleAction(const std::string &strAction)
         if (strAction == ACTION_FILE_CREATE_FOLDER)
             createSubfolderDialog();
         else if (strAction == ACTION_EDIT_OPEN_SELECTED)
-            openFile(nullptr);
+            openFile(nullptr, {});
         else if (strAction == ACTION_EDIT_SELECT_ALL)
             selectAll();
         else if (strAction == ACTION_EDIT_TRASH)
@@ -1084,11 +1183,11 @@ ElissoFolderView::handleAction(const std::string &strAction)
  *  but will take it only if exactly one object is selected.
  *
  *  If the object is a directory or a symlink to one, we call setDirectory().
- *  Otherwise we open the file with the default application as reported by
- *  Gio::AppInfo.
+ *  Otherwise we open the file with the
  */
 void
-ElissoFolderView::openFile(PFSModelBase pFS)
+ElissoFolderView::openFile(PFSModelBase pFS,        //!< in: file or folder to open; if nullptr, get single file from selection
+                           PAppInfo pAppInfo)       //!< in: application to open file with; if nullptr, use file type's default
 {
     if (!pFS)
     {
@@ -1121,36 +1220,18 @@ ElissoFolderView::openFile(PFSModelBase pFS)
             PFSFile pFile = pFS->getFile();
             if (pFile)
             {
-                const ContentType *pType = ContentType::Guess(pFile);
-                if (pType)
+                PAppInfo pAppInfo2(pAppInfo);
+                if (!pAppInfo2)
                 {
-                    auto pAppInfo = pType->getDefaultAppInfo();
-                    if (pAppInfo)
-                        pAppInfo->launch(pFS->getGioFile());
-                    else
-                        _mainWindow.errorBox("Cannot determine default application for file \"" + pFS->getRelativePath() + "\"");
+                    const ContentType *pType = ContentType::Guess(pFile);
+                    if (pType)
+                        pAppInfo2 = pType->getDefaultAppInfo();
                 }
 
-    //             std::string strPath = pFS->getRelativePath();
-    //             char *pContentType = g_content_type_guess(strPath.c_str(),
-    //                                                       nullptr,
-    //                                                       0,
-    //                                                       NULL);            // image/jpeg
-    //             if (pContentType)
-    //             {
-    //                 bool fExecutable = false;       // g_content_type_can_be_executable(pContentType) returns true for all text files, dummy
-    //                 if (fExecutable)
-    //                     _mainWindow.errorBox("Opening executables it not implemented yet.");
-    //                 else
-    //                 {
-    //                     Glib::RefPtr<Gio::AppInfo> pAppInfo = Glib::wrap(g_app_info_get_default_for_type(pContentType, FALSE));
-    //                     if (pAppInfo)
-    //                         pAppInfo->launch(pFS->getGioFile());
-    //                     else
-    //                         _mainWindow.errorBox("Cannot determine default application for file \"" + pFS->getRelativePath() + "\"");
-    //                 }
-    //                 g_free(pContentType);
-    //             }
+                if (pAppInfo2)
+                    pAppInfo2->launch(pFS->getGioFile());
+                else
+                    _mainWindow.errorBox("Cannot determine default application for file \"" + pFS->getRelativePath() + "\"");
             }
         }
         break;
@@ -1333,12 +1414,7 @@ ElissoFolderView::loadIcon(const Gtk::TreeModel::iterator& it,
         // the thumbnailer to process in the background.
         if (pFile)
         {
-            const std::string &strBasename = pFile->getBasename();
-            if (    endsWith(strBasename, ".jpg")
-                 || endsWith(strBasename, ".JPG")
-                 || endsWith(strBasename, ".png")
-                 || endsWith(strBasename, ".PNG")
-               )
+            if (isImageFile(pFile))
             {
                 Gtk::TreePath path(it);
                 auto pRowRef = std::make_shared<Gtk::TreeRowReference>(_pImpl->pListStore, path);
@@ -1364,23 +1440,23 @@ ElissoFolderView::onThumbnailReady()
 
 }
 
-PPixbuf
-ElissoFolderView::cellDataFuncIcon(const Gtk::TreeModel::iterator& it,
-                                   Gtk::TreeModelColumn<PPixbuf> &column,
-                                   int iconSize)
-{
-    FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
-
-    Gtk::TreeModel::Row row = *it;
-    PPixbuf pb1 = row[column];
-    if (!pb1)
-    {
-        PFSModelBase pFS = row[cols._colPFile];
-        row[column] = loadIcon(it, pFS, iconSize);
-    }
-
-    return pb1;
-}
+// PPixbuf
+// ElissoFolderView::cellDataFuncIcon(const Gtk::TreeModel::iterator& it,
+//                                    Gtk::TreeModelColumn<PPixbuf> &column,
+//                                    int iconSize)
+// {
+//     FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
+//
+//     Gtk::TreeModel::Row row = *it;
+//     PPixbuf pb1 = row[column];
+//     if (!pb1)
+//     {
+//         PFSModelBase pFS = row[cols._colPFile];
+//         row[column] = loadIcon(it, pFS, iconSize);
+//     }
+//
+//     return pb1;
+// }
 
 const std::string
     strSuffixEB = " EB",
@@ -1438,19 +1514,19 @@ Glib::ustring formatBytes(uint64_t u)
 void
 ElissoFolderView::setIconViewColumns()
 {
-    FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
+//     FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
 
-    _iconView.set_cell_data_func(_cellRendererIconSmall,
-                                 [this, &cols](const Gtk::TreeModel::iterator& it)
-    {
-        this->cellDataFuncIcon(it, cols._colIconSmall, ICON_SIZE_SMALL);
-    });
-
-    _iconView.set_cell_data_func(_cellRendererIconBig,
-                                 [this, &cols](const Gtk::TreeModel::iterator& it)
-    {
-        this->cellDataFuncIcon(it, cols._colIconBig, ICON_SIZE_BIG);
-    });
+//     _iconView.set_cell_data_func(_cellRendererIconSmall,
+//                                  [this, &cols](const Gtk::TreeModel::iterator& it)
+//     {
+//         this->cellDataFuncIcon(it, cols._colIconSmall, ICON_SIZE_SMALL);
+//     });
+//
+//     _iconView.set_cell_data_func(_cellRendererIconBig,
+//                                  [this, &cols](const Gtk::TreeModel::iterator& it)
+//     {
+//         this->cellDataFuncIcon(it, cols._colIconBig, ICON_SIZE_BIG);
+//     });
 }
 
 void
@@ -1479,6 +1555,7 @@ ElissoFolderView::setListViewColumns()
     // "Icon" column with our own cell renderer. Do not use the overload with a column
     // number since that would create a cell renderer automatically.
     i = _treeView.append_column("Icon", _cellRendererIconSmall);
+//     i = _treeView.append_column("Icon", cols._colIconSmall);
     if ((pColumn = _treeView.get_column(i - 1)))
     {
         pColumn->set_sizing(Gtk::TREE_VIEW_COLUMN_FIXED);
@@ -1487,8 +1564,10 @@ ElissoFolderView::setListViewColumns()
                                     [this, &cols](Gtk::CellRenderer*,
                                                   const Gtk::TreeModel::iterator& it)
         {
-            auto pPixbuf = this->cellDataFuncIcon(it, cols._colIconSmall, ICON_SIZE_SMALL);
-            _cellRendererIconSmall.property_pixbuf() = pPixbuf;
+            Gtk::TreeModel::Row row = *it;
+            PPixbuf pb1 = row[cols._colIconSmall];
+//             auto pPixbuf = this->cellDataFuncIcon(it, cols._colIconSmall, ICON_SIZE_SMALL);
+            _cellRendererIconSmall.property_pixbuf() = pb1;
         });
     }
 
@@ -1589,7 +1668,7 @@ ElissoFolderView::onPathActivated(const Gtk::TreeModel::Path &path)
     if (pFS)
     {
         Debug::Log(FOLDER_POPULATE_HIGH, string(__func__) + "(\"" + pFS->getRelativePath() + "\")");
-        this->openFile(pFS);
+        this->openFile(pFS, {});
     }
 }
 

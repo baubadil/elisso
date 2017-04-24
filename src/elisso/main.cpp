@@ -77,16 +77,16 @@ void ElissoApplication::setSettingsString(const std::string &strKey, const Glib:
     _pSettings->set_string(strKey, strData);
 }
 
-Glib::RefPtr<Gio::Menu>
-ElissoApplication::addMenuSection(Glib::RefPtr<Gio::Menu> pMenu)
+PMenu
+ElissoApplication::addMenuSection(PMenu pMenu)
 {
     auto pSection = Gio::Menu::create();
     pMenu->append_section(pSection);
     return pSection;
 }
 
-void
-ElissoApplication::addMenuItem(Glib::RefPtr<Gio::Menu> pMenu,
+PMenuItem
+ElissoApplication::addMenuItem(PMenu pMenu,
                                const Glib::ustring &strName,
                                const Glib::ustring &strAction,          //!< in: will be prefixed with "win."
                                const Glib::ustring &strAccelerator /* = ""*/ )
@@ -99,6 +99,8 @@ ElissoApplication::addMenuItem(Glib::RefPtr<Gio::Menu> pMenu,
         std::vector<Glib::ustring> sv = { strAccelerator };
         this->set_accels_for_action(strActionLong, sv);
     }
+
+    return pMenuItem;
 }
 
 
@@ -158,7 +160,7 @@ ElissoApplication::on_startup() /* override */
     auto pSubSection = addMenuSection(pSubmenu);
     addMenuItem(pSubSection, "New _tab", ACTION_FILE_NEW_TAB, "<Primary>t");
     addMenuItem(pSubSection, "New _window", ACTION_FILE_NEW_WINDOW, "<Primary>n");
-    addMenuItem(pSubSection, "Open current folder in ter_minal", ACTION_FILE_OPEN_IN_TERMINAL, "<Primary>m");
+    addMenuItem(pSubSection, "Open current folder in ter_minal", ACTION_FILE_OPEN_IN_TERMINAL, "<Primary><Shift>m");
 
     pSubSection = addMenuSection(pSubmenu);
     addMenuItem(pSubSection, "Create new folder", ACTION_FILE_CREATE_FOLDER, "<Primary><Shift>n");
