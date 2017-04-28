@@ -18,7 +18,7 @@
 #include "xwp/flagset.h"
 
 class ElissoFolderView;
-class FileSelection;
+struct FileSelection;
 class Thumbnailer;
 
 struct Thumbnail;
@@ -69,7 +69,7 @@ typedef FlagSet<SetDirectoryFlags> SetDirectoryFlagSet;
  *  ScrolledWindow. It contains either a  TreeView or IconView child, depending
  *  on which view is selected.
  */
-class ElissoFolderView : public Gtk::ScrolledWindow
+class ElissoFolderView : public Gtk::Overlay
 {
 public:
     ElissoFolderView(ElissoApplicationWindow &mainWindow, int &iPageInserted);
@@ -132,6 +132,7 @@ public:
                   PAppInfo pAppInfo);
 
     PFSDirectory createSubfolderDialog();
+    PFSFile createEmptyFileDialog();
     void trashSelected();
     void testFileopsSelected();
 
@@ -139,12 +140,15 @@ public:
 
 private:
     friend class FolderViewMonitor;
+    friend class TreeViewPlus;
 
     void dumpStack();
     void onPopulateDone();
     void removeFile(PFSModelBase pFS);
     Gtk::ListStore::iterator insertFile(PFSModelBase pFS);
     void connectModel(bool fConnect);
+
+    void setNotebookTabTitle();
 
     PPixbuf loadIcon(const Gtk::TreeModel::iterator& it,
                      PFSModelBase pFS,
@@ -153,6 +157,13 @@ private:
     PPixbuf cellDataFuncIcon(const Gtk::TreeModel::iterator& it,
                              Gtk::TreeModelColumn<PPixbuf> &column,
                              int iconSize);
+
+    bool isSelected(Gtk::TreeModel::Path &path);
+    bool getPathAtPos(int x, int y, Gtk::TreeModel::Path &path);
+    int countSelectedRows();
+    void selectExactlyOne(Gtk::TreeModel::Path &path);
+
+    bool onButtonPressedEvent(GdkEventButton *pEvent);
     void setIconViewColumns();
     void setListViewColumns();
 
@@ -164,15 +175,18 @@ private:
     size_t                      _id;
 
     ElissoApplicationWindow     &_mainWindow;
+    struct Impl;
+    Impl                        *_pImpl;
 
     ViewState                   _state = ViewState::UNDEFINED;
     Glib::ustring               _strError;          // only with ViewState::ERROR, use setError() to set
     FolderViewMode              _mode = FolderViewMode::UNDEFINED;
     FolderViewMode              _modeBeforeError = FolderViewMode::UNDEFINED;
 
-    Gtk::Spinner                _spinnerNotebookPage;
     Gtk::Label                  _labelNotebookPage;
     Gtk::Label                  _labelNotebookMenu;
+
+    Gtk::ScrolledWindow         _scrolledWindow;        // Parent of both icon and tree view.
 
     Gtk::IconView               _iconView;
     TreeViewPlus                _treeView;
@@ -183,12 +197,11 @@ private:
     Gtk::CellRendererPixbuf     _cellRendererIconBig;
     Gtk::CellRendererText       _cellRendererSize;
 
+    Gtk::EventBox               *_pLoading = nullptr;
+
     PFSModelBase                _pDir;
     std::vector<std::string>    _aPathHistory;
     uint32_t                    _uPreviousOffset = 0;
-
-    struct Impl;
-    Impl                        *_pImpl;
 };
 
 /***************************************************************************
@@ -205,8 +218,8 @@ public:
           _view(view)
     { };
 
+    virtual void onItemAdded(PFSModelBase &pFS) override;
     virtual void onItemRemoved(PFSModelBase &pFS) override;
-    virtual void onDirectoryAdded(PFSDirectory &pDir) override;
 
 private:
     ElissoFolderView &_view;

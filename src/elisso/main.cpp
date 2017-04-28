@@ -149,7 +149,7 @@ ElissoApplication::ElissoApplication(int argc,
 void
 ElissoApplication::on_startup() /* override */
 {
-    Debug::Log(DEBUG_ALWAYS, __FUNCTION__);
+    Debug::Enter(CMD_TOP, __func__);
 
     Gtk::Application::on_startup();
 
@@ -212,6 +212,8 @@ ElissoApplication::on_startup() /* override */
     addMenuItem(pSubmenu, "About", ACTION_ABOUT);
 
     this->set_menubar(pMenuBar);
+
+    Debug::Leave();
 }
 
 /**
@@ -225,10 +227,12 @@ ElissoApplication::on_startup() /* override */
 void
 ElissoApplication::on_activate() /* override */
 {
-    Debug::Log(DEBUG_ALWAYS, __FUNCTION__);
-    auto p = new ElissoApplicationWindow(*this, nullptr);
+    Debug::Enter(CMD_TOP, __func__);
+    auto p = new ElissoApplicationWindow(*this);
+    p->addFolderTab(FSDirectory::GetHome());
     this->add_window(*p);
     p->show();
+    Debug::Leave();
 }
 
 /**
@@ -241,51 +245,36 @@ void
 ElissoApplication::on_open(const type_vec_files &files,
                            const Glib::ustring &hint) /* override */
 {
-    Debug::Log(DEBUG_ALWAYS, __FUNCTION__);
+    Debug::Enter(DEBUG_ALWAYS, __func__);
 
-    ElissoApplicationWindow *pWindow = nullptr;
+    ElissoApplicationWindow *pWindow = new ElissoApplicationWindow(*this);
+    this->add_window(*pWindow);
+    pWindow->present();
 
-    try
+    for (auto &pFile : files)
     {
-        for (auto &pFile : files)
+        std::string strPath = pFile->get_path();
+        PFSModelBase pFSBase;
+        std::string strError;
+
+        try
         {
-            std::string strPath = pFile->get_path();
-            PFSModelBase pFSBase = FSModelBase::FindPath(strPath);
-            if (!pFSBase)
-                throw FSException("Command-line argument \"" + strPath + "\" is not a file");
-
-            Debug::Log(DEBUG_ALWAYS, std::string(__FUNCTION__) + ": handling " + strPath);
-
-            if (!pWindow)
-                // first file: new window
-                pWindow = new ElissoApplicationWindow(*this, pFSBase);
-            else
-            {
-                // additional tabs in existing window
-                Glib::signal_idle().connect_once([pWindow, pFSBase]()
-                {
-                    pWindow->addFolderTab(pFSBase);
-                });
-            }
+            Debug::Log(CMD_TOP, std::string(__FUNCTION__) + ": handling " + strPath);
+            pFSBase = FSModelBase::FindPath(strPath);
         }
-    }
-    catch(exception &e)
-    {
-        if (pWindow)
-            pWindow->errorBox(e.what());
+        catch(std::exception &e)
+        {
+            Debug::Log(CMD_TOP, std::string(__FUNCTION__) + ": error " + e.what());
+            strError = e.what();
+        }
+
+        if (strError.empty())
+            pWindow->addFolderTab(pFSBase);
         else
-            Gtk::MessageDialog dialog(e.what(),
-                                      false /* use_markup */,
-                                      Gtk::MESSAGE_QUESTION,
-                                      Gtk::BUTTONS_CANCEL);
-
+            pWindow->addFolderTab(strError);
     }
 
-    if (pWindow)
-    {
-        this->add_window(*pWindow);
-        pWindow->show();
-    }
+    Debug::Leave();
 }
 
 
@@ -298,7 +287,12 @@ ElissoApplication::on_open(const type_vec_files &files,
 int
 main(int argc, char *argv[])
 {
-    g_flDebugSet = FOLDER_POPULATE_HIGH | FILE_HIGH; // | THUMBNAILER; //  | FILE_LOW;
+    g_flDebugSet =  CMD_TOP
+                  | FOLDER_POPULATE_HIGH
+//                   | FILE_HIGH
+//                   | THUMBNAILER
+//                   | FILE_LOW
+                  ;
 
     auto app = ElissoApplication::create(argc,
                                          argv);

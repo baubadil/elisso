@@ -15,6 +15,7 @@
 #include "xwp/stringhelp.h"
 #include "xwp/except.h"
 #include <mutex>
+#include <condition_variable>
 #include <atomic>
 #include <chrono>
 #include <thread>
@@ -34,23 +35,6 @@ PCurrentDirectory CurrentDirectory::s_theCWD = NULL;
 
 /***************************************************************************
  *
- *  FSLock
- *
- **************************************************************************/
-
-std::recursive_mutex g_mutexFiles;
-
-class FSLock : public XWP::Lock
-{
-public:
-    FSLock()
-        : Lock(g_mutexFiles)
-    { }
-};
-
-
-/***************************************************************************
- *
  *  FSContainer::Impl definition
  *
  **************************************************************************/
@@ -59,7 +43,72 @@ typedef map<const std::string, PFSModelBase> FilesMap;
 
 struct ContentsMap
 {
+    Mutex       contentsMutex;
     FilesMap    m;
+};
+
+
+/***************************************************************************
+ *
+ *  FSLock
+ *
+ **************************************************************************/
+
+Mutex g_mutexFiles;
+
+/**
+ *  Global lock for the whole file-system model. This is used to protect
+ *  instance data of FSModelBase and the derived classes. Since the
+ *  file-system model is designed to be thread-safe, this lock must always
+ *  be held when reading or modifying instance data.
+ *
+ *  This is a global lock so it must only ever be held for a very short
+ *  amount of time, say, a few instructions.
+ *
+ *  The one exception is ContentsLock, see below.
+ *
+ *  To avoid deadlocks, never hold FSLock when requesting a ContentsLock.
+ *
+ *  Again, do not hold this for a long time since this will block all
+ *  file operations. If you have something that takes longer but needs
+ *  to be atomic, use a mechanism like in FSSymlink::follow(), which
+ *  introduces a per-object state flag (which is protected by FSLock)
+ *  together with a condition variable.
+ */
+class FSLock : public XWP::Lock
+{
+public:
+    FSLock()
+        : Lock(g_mutexFiles)
+    { }
+};
+
+/**
+ *  ContentsLock is a more specialized lock to protect the list of
+ *  children in a FSContainer. Since iterating over the contents
+ *  list can take longer than we want to hold FSLock, this is
+ *  a) more specialized and b) not global, but an instance of this
+ *  exists in every FSContainer::ContentsMap.
+ *
+ *  This must be held when reading or modifying the following two
+ *  items:
+ *
+ *   a) anything in a container's ContentsMap;
+ *
+ *   b) the _pParent pointer of any child of a container.
+ *
+ *  To reiterate, the FSModelBase::_pParent pointer is NOT protected
+ *  by FSLock, but by the parent's ContentsLock since the two always
+ *  get modified together.
+ *
+ *  To avoid deadlocks, never hold FSLock when requesting a ContentsLock.
+ */
+class ContentsLock : public XWP::Lock
+{
+public:
+    ContentsLock(ContentsMap& map)
+        : Lock(map.contentsMutex)
+    { }
 };
 
 
@@ -102,7 +151,18 @@ FSMonitorBase::stopWatching(FSContainer &cnr)
  **************************************************************************/
 
 /**
- *  Returns nullptr if the path is invalid.
+ *  Finds the FSModelBase for the given file system path, waking up all parent
+ *  objects as necessary.
+ *
+ *  For example, if you call this on "/home/user/subdir/file.txt", this will
+ *  wake up every one of the parent directories from left to right, if they
+ *  have not been woken up yet, and finally file.txt, setting parent items
+ *  as necessary.
+ *
+ *  This is the most common entry point into the file-system model. From here
+ *  on up, you can iterate over folder contents or find more files.
+ *
+ *  This is thread-safe. This throws FSException if the path is invalid.
  */
 /* static */
 PFSModelBase
@@ -120,7 +180,8 @@ FSModelBase::FindPath(const std::string &strPath)
     StringVector aParticles = explodeVector(strPathSplit, "/");
     Debug::Log(FILE_LOW, to_string(aParticles.size()) + " particle(s) given");
 
-    FSLock lock;
+    // Do not hold any locks in this method. We iterate over the path on the stack
+    // and call into FSContainer::find(), which has proper locking.
 
     string strForStat;
     uint c = 0;
@@ -180,8 +241,12 @@ FSModelBase::FindPath(const std::string &strPath)
             {
                 strForStat += "/" + strParticle;
 
+                // The following can throw.
                 if (!(pCurrent = pDir->find(strParticle)))
+                {
+                    Debug::Log(FILE_LOW, "Directory::find() returned nullptr");
                     break;
+                }
             }
             ++c;
         }
@@ -218,31 +283,33 @@ FSModelBase::getContainer()
 }
 
 /**
- *  Creates a new FSModelBase instance around the given Gio::File. Note that creating a Gio::File
- *  never fails because there is no I/O involved, but this function does perform blocking I/O
- *  to test for the file's existence and dermine its type, so it can fail. If so, we throw an
- *  FSException.
+ *  Protected internal method to creates a new FSModelBase instance around the given Gio::File,
+ *  picking the correct FSModelBase subclass depending on the file's type.
+ *
+ *  Note that creating a Gio::File never fails because there is no I/O involved, but this
+ *  function does perform blocking I/O to test for the file's existence and dermine its type,
+ *  so it can fail. If it does fail, e.g. because the file does not exist, then we throw FSException.
  *
  *  If this returns something, it is a dangling file object without an owner. You MUST call
- *  setParent() on the return value.
+ *  FSContainer::addChild() with the return value.
  */
 /* static */
 PFSModelBase
 FSModelBase::MakeAwake(Glib::RefPtr<Gio::File> pGioFile)
 {
     PFSModelBase pReturn = nullptr;
+    static std::string star("*");
 
     try
     {
-        auto type = pGioFile->query_file_type(Gio::FileQueryInfoFlags::FILE_QUERY_INFO_NOFOLLOW_SYMLINKS);
+        // The following can throw Gio::Error.
+        auto pInfo = pGioFile->query_info(star, Gio::FileQueryInfoFlags::FILE_QUERY_INFO_NOFOLLOW_SYMLINKS);
+//         auto type = pGioFile->query_file_type(Gio::FileQueryInfoFlags::FILE_QUERY_INFO_NOFOLLOW_SYMLINKS);
 
-        switch (type)
+        switch (pInfo->get_file_type())
         {
-            case Gio::FileType::FILE_TYPE_NOT_KNOWN:       // File's type is unknown.
-            break;      // return nullptr
-
             case Gio::FileType::FILE_TYPE_REGULAR:         // File handle represents a regular file.
-                pReturn = FSFile::Create(pGioFile, pGioFile->query_info()->get_size());
+                pReturn = FSFile::Create(pGioFile, pInfo->get_size());
             break;
 
             case Gio::FileType::FILE_TYPE_DIRECTORY:       // File handle represents a directory.
@@ -262,10 +329,15 @@ FSModelBase::MakeAwake(Glib::RefPtr<Gio::File> pGioFile)
             case Gio::FileType::FILE_TYPE_MOUNTABLE:       // File is a mountable location.
                 pReturn = FSMountable::Create(pGioFile);
             break;
+
+            case Gio::FileType::FILE_TYPE_NOT_KNOWN:       // File's type is unknown. This is what we get if the file does not exist.
+                Debug::Log(FILE_HIGH, "file type not known");
+            break;      // return nullptr
         }
     }
     catch(Gio::Error &e)
     {
+        Debug::Log(FILE_HIGH, "FSModelBase::MakeAwake(): got Gio::Error: " + e.what());
         throw FSException(e.what());
     }
 
@@ -299,64 +371,6 @@ FSModelBase::FSModelBase(FSType type,
 }
 
 /**
- *  Returns the private ContentsMap structure for both directories and
- *  symlinks to directories. Otherwise it throws.
- */
-ContentsMap&
-FSModelBase::getContentsMap()
-{
-    if (getType() == FSType::DIRECTORY)
-        return *((static_cast<FSDirectory*>(this))->_pMap);
-
-    if (getResolvedType() == FSTypeResolved::SYMLINK_TO_DIRECTORY)
-        return *((static_cast<FSSymlink*>(this))->_pMap);
-
-    throw FSException("Cannot get contents map");
-}
-
-/**
- *  Sets the parent container for this file-system object.
- *
- *  This is a protected internal method and must be called after an
- *  object was instantiated via MakeAwake() to add it to a container.
- *  This handles both directories and symlinks to directories correctly
- *  by using getContentsMap().
- */
-void
-FSModelBase::setParent(PFSModelBase pNewParent)
-{
-    FSLock lock;
-    if (!pNewParent)
-    {
-        if (_pParent)
-        {
-            // Unsetting previous parent:
-            ContentsMap &map = _pParent->getContentsMap();
-
-            auto it = map.m.find(getBasename());
-            if (it == map.m.end())
-                throw FSException("internal: cannot find myself in parent");
-
-            map.m.erase(it);
-            _pParent = nullptr;
-        }
-    }
-    else
-    {
-        if (_pParent)
-            throw FSException("setParent called twice");
-
-        // Setting initial parent:
-        _pParent = pNewParent;
-        std::string strBasename(getBasename());
-        Debug::Log(FILE_LOW, "storing \"" + strBasename + "\" in parent map");
-
-        ContentsMap &map = pNewParent->getContentsMap();
-        map.m[strBasename] = shared_from_this();
-    }
-}
-
-/**
  *  Returns true if the file-system object has the "hidden" attribute, according to however Gio defines it.
  *
  *  Overridden for symlinks!
@@ -364,6 +378,7 @@ FSModelBase::setParent(PFSModelBase pNewParent)
 bool
 FSModelBase::isHidden()
 {
+    FSLock lock;
     if (!_fl.test(FSFlag::HIDDEN_CHECKED))
     {
         auto len = _strBasename.length();
@@ -413,6 +428,10 @@ FSModelBase::getIcon()
     return _pIcon->to_string();
 }
 
+/**
+ *  Returns an FSFile if *this is a file or a symlink to a file; otherwise, this returns
+ *  nullptr.
+ */
 PFSFile
 FSModelBase::getFile()
 {
@@ -507,6 +526,18 @@ FSModelBase::sendToTrash()
 {
     try
     {
+        auto pParent = getParent();
+        if (!pParent)
+            throw FSException("cannot get parent for trashing");
+        auto pParentCnr = pParent->getContainer();
+        if (!pParentCnr)
+            throw FSException("cannot get parent container for trashing");
+
+        {
+            ContentsLock cLock(*pParentCnr->_pMap);
+            pParentCnr->removeChild(cLock, shared_from_this());
+        }
+
         _pGioFile->trash();
     }
     catch(Gio::Error &e)
@@ -519,28 +550,6 @@ void
 FSModelBase::testFileOps()
 {
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
-}
-
-/**
- *  Notifies all monitors attached to this file's container that this file
- *  has been removed.
- *
- *  Call this on the GUI thread after calling sendToTrash().
- */
-void
-FSModelBase::notifyFileRemoved()
-{
-    auto pParent = getParent();
-    if (pParent)
-    {
-        auto pCnr = pParent->getContainer();
-        if (pCnr)
-        {
-            auto pThis = shared_from_this();
-            for (auto &p : pCnr->_llMonitors)
-                p->onItemRemoved(pThis);
-        }
-    }
 }
 
 
@@ -586,11 +595,13 @@ FSFile::FSFile(Glib::RefPtr<Gio::File> pGioFile,
 /* virtual */
 FSFile::~FSFile()
 {
-    FSLock lock;
     if (_pThumbData)
         delete _pThumbData;
 }
 
+/**
+ *  Caches the given pixbuf for *this and the given thumbnail size.
+ */
 void
 FSFile::setThumbnail(uint32_t thumbsize, PPixbuf ppb)
 {
@@ -612,6 +623,10 @@ FSFile::setThumbnail(uint32_t thumbsize, PPixbuf ppb)
         }
 }
 
+/**
+ *  Returns a pixbuf for *this and the given thumbnail size if
+ *  setThumbnail() gave us one fore.
+ */
 PPixbuf
 FSFile::getThumbnail(uint32_t thumbsize)
 {
@@ -655,15 +670,71 @@ FSContainer::~FSContainer()
 }
 
 /**
+ *  Protected method to add the given child to this container's list of children, under
+ *  this container's ContentsLock. Also updates the parent pointer in the child.
+ *
+ *  This must be called after an object has been instantiated with FSModelBase::MakeAwake().
+ */
+void FSContainer::addChild(ContentsLock &lock, PFSModelBase p)
+{
+    std::string strBasename(p->getBasename());
+    Debug::Log(FILE_LOW, "storing \"" + strBasename + "\" in parent map");
+
+    if (p->_pParent)
+        throw FSException("addChild() called for a child who already has a parent");
+
+    _pMap->m[strBasename] = p;
+
+    p->_pParent = _refBase.getSharedFromThis();
+}
+
+/*
+ *  Inversely to addChild(), removes the given child from this container's list of
+ *  children.
+ */
+void
+FSContainer::removeChild(ContentsLock &lock, PFSModelBase p)
+{
+    auto it = _pMap->m.find(p->getBasename());
+    if (it == _pMap->m.end())
+        throw FSException("internal: cannot find myself in parent");
+
+    _pMap->m.erase(it);
+    p->_pParent = nullptr;
+}
+
+PFSDirectory
+FSContainer::resolveDirectory()
+{
+    switch (_refBase.getResolvedType())
+    {
+        case FSTypeResolved::SYMLINK_TO_DIRECTORY:
+        {
+            FSSymlink *pSymlink = static_cast<FSSymlink*>(&_refBase);
+            return static_pointer_cast<FSDirectory>(pSymlink->getTarget());
+        }
+        break;
+
+        case FSTypeResolved::DIRECTORY:
+            return static_pointer_cast<FSDirectory>(_refBase.getSharedFromThis());
+        break;
+
+        default:
+        break;
+    }
+
+    throw FSException("Cannot create directory under " + _refBase.getRelativePath());
+}
+
+/**
  *  Tests if a file-system object with the given name has already been instantiated in this
  *  container. If so, it is returned. If this returns nullptr instead, that doesn't mean
- *  that the file doesn't exist: the container might not be fully populated, or directory
- *  contents may have changed since.
+ *  that the file doesn't exist becuase the container might not be fully populated, or
+ *  directory contents may have changed since.
  */
 PFSModelBase
-FSContainer::isAwake(const string &strParticle)
+FSContainer::isAwake(ContentsLock &lock, const string &strParticle)
 {
-    FSLock lock;
     auto it = _pMap->m.find(strParticle);
     if (it != _pMap->m.end())
         return it->second;
@@ -682,10 +753,9 @@ FSContainer::isAwake(const string &strParticle)
 PFSModelBase
 FSContainer::find(const string &strParticle)
 {
-    FSLock lock;
-
     PFSModelBase pReturn;
-    if ((pReturn = isAwake(strParticle)))
+    ContentsLock cLock(*_pMap);
+    if ((pReturn = isAwake(cLock, strParticle)))
         Debug::Log(FILE_MID, "Directory::find(\"" + strParticle + "\") => already awake " + pReturn->describe());
     else
     {
@@ -697,7 +767,7 @@ FSContainer::find(const string &strParticle)
         if (!(pReturn = FSModelBase::MakeAwake(pGioFile)))
             Debug::Log(FILE_LOW, "  could not make awake");
         else
-            pReturn->setParent(static_pointer_cast<FSDirectory>(_refBase.getSharedFromThis()));
+            this->addChild(cLock, pReturn);
 
         Debug::Leave();
     }
@@ -739,6 +809,8 @@ FSContainer::unsetPopulated()
     _refBase._fl.reset(FSFlag::POPULATED_WITH_ALL);
     _refBase._fl.reset(FSFlag::POPULATED_WITH_DIRECTORIES);
 }
+
+std::condition_variable_any g_condFolderPopulated;
 
 /**
  *  Returns the container's contents by copying them into the given list.
@@ -795,11 +867,25 @@ FSContainer::getContents(FSList &llFiles,
     try
     {
         bool fStopped = false;
-        FSLock lock;
+
+        // If this container is being populated on another thread, block on the global
+        // condition variable until the other thread posts it (when populate is done).
+        std::unique_lock<std::recursive_mutex> lock(g_mutexFiles);
+        while (_refBase._fl.test(FSFlag::POPULATING))
+            g_condFolderPopulated.wait(lock);
+        // Lock is held again now. Folder state is now guaranteed to not be POPULATING
+        // (either it's never been populated, or it was populated earlier, or the
+        // other thread is done); now go test the state for good.
+
         if (    ((getContents == Get::ALL) && !isCompletelyPopulated())
              || ((getContents != Get::ALL) && !isPopulatedWithDirectories())
            )
         {
+            // Folder needs populating: then set the flag so that only one thread populates
+            // at a time.
+            _refBase._fl |= FSFlag::POPULATING;
+            lock.unlock();
+
             PFSModelBase pSharedThis = _refBase.getSharedFromThis();
 
             /* The refresh algorithm is simple. For every file returned from the Gio backend,
@@ -809,11 +895,15 @@ FSContainer::getContents(FSList &llFiles,
              * the above loop is marked with  a "dirty" flag. A final loop then removes all
              * objects from the contents map that do not have the "dirty" flag set. */
             if (getContents == Get::ALL)
+            {
+                ContentsLock cLock(*_pMap);
+                FSLock lock2Temp;
                 for (auto it : _pMap->m)
                 {
                     auto &p = it.second;
                     p->_fl |= FSFlag::DIRTY;
                 }
+            }
 
             Glib::RefPtr<Gio::FileEnumerator> en;
             if (!(en = _refBase._pGioFile->enumerate_children("*",
@@ -831,10 +921,14 @@ FSContainer::getContents(FSList &llFiles,
                          && (strThis != "..")
                        )
                     {
-                        auto pAwake = isAwake(strThis);
+                        ContentsLock cLock(*_pMap);
+                        auto pAwake = isAwake(cLock, strThis);
                         if (pAwake)
+                        {
+                            FSLock lock2Temp;
                             // Clear the dirty flag.
                             pAwake->_fl.reset(FSFlag::DIRTY);
+                        }
                         else
                         {
                             if (pStopFlag)
@@ -879,7 +973,7 @@ FSContainer::getContents(FSList &llFiles,
 
                             if (pKeep)
                             {
-                                pKeep->setParent(pSharedThis);
+                                this->addChild(cLock, pKeep);
 
                                 if (    (getContents == Get::FIRST_FOLDER_ONLY)
                                      && (!pKeep->isHidden())
@@ -896,22 +990,12 @@ FSContainer::getContents(FSList &llFiles,
                         }
                     }
                 }
-
-                if (!fStopped)
-                {
-                    if (getContents == Get::FOLDERS_ONLY)
-                        _refBase._fl |= FSFlag::POPULATED_WITH_DIRECTORIES;
-                    else if (getContents == Get::ALL)
-                    {
-                        _refBase._fl |= FSFlag::POPULATED_WITH_DIRECTORIES;
-                        _refBase._fl |= FSFlag::POPULATED_WITH_ALL;
-                    }
-                }
             }
         }
 
         if (!fStopped)
         {
+            ContentsLock cLock(*_pMap);
             for (auto it = _pMap->m.begin();
                  it != _pMap->m.end();
                 )
@@ -970,6 +1054,18 @@ FSContainer::getContents(FSList &llFiles,
                         break;
                     }
             }
+
+            FSLock lock2Temp;
+            if (getContents == Get::FOLDERS_ONLY)
+                _refBase._fl |= FSFlag::POPULATED_WITH_DIRECTORIES;
+            else if (getContents == Get::ALL)
+            {
+                _refBase._fl |= FSFlag::POPULATED_WITH_DIRECTORIES;
+                _refBase._fl |= FSFlag::POPULATED_WITH_ALL;
+            }
+
+            _refBase._fl.reset(FSFlag::POPULATING);
+            g_condFolderPopulated.notify_all();
         }
     }
     catch(Gio::Error &e)
@@ -992,32 +1088,13 @@ FSContainer::getContents(FSList &llFiles,
  *  is in the symlink target if the container is a symlink). The new instance is also
  *  returned.
  */
-PFSDirectory FSContainer::createSubdirectory(const std::string &strName)
+PFSDirectory
+FSContainer::createSubdirectory(const std::string &strName)
 {
     PFSDirectory pDirReturn;
 
-    PFSDirectory pDirParent;
-
     // If this is a symlink, then create the directory in the symlink's target instead.
-    switch (_refBase.getResolvedType())
-    {
-        case FSTypeResolved::SYMLINK_TO_DIRECTORY:
-        {
-            FSSymlink *pSymlink = static_cast<FSSymlink*>(&_refBase);
-            pDirParent = static_pointer_cast<FSDirectory>(pSymlink->getTarget());
-        }
-        break;
-
-        case FSTypeResolved::DIRECTORY:
-            pDirParent = static_pointer_cast<FSDirectory>(_refBase.getSharedFromThis());
-        break;
-
-        default:
-        break;
-    }
-
-    if (!pDirParent)
-        throw FSException("Cannot create directory under " + _refBase.getRelativePath());
+    PFSDirectory pDirParent = resolveDirectory();
 
     try
     {
@@ -1033,11 +1110,15 @@ PFSDirectory FSContainer::createSubdirectory(const std::string &strName)
 
         // If we got here, we have a directory.
         pDirReturn = FSDirectory::Create(pGioFileNew);
-        pDirReturn->setParent(_refBase.getSharedFromThis());
+        {
+            ContentsLock cLock(*_pMap);
+            this->addChild(cLock, pDirReturn);
+        }
 
         // Notify the monitors.
+        PFSModelBase pFS = pDirReturn;
         for (auto &p : _llMonitors)
-            p->onDirectoryAdded(pDirReturn);
+            p->onItemAdded(pFS);
     }
     catch(Gio::Error &e)
     {
@@ -1046,6 +1127,64 @@ PFSDirectory FSContainer::createSubdirectory(const std::string &strName)
 
     return pDirReturn;
 }
+
+PFSFile
+FSContainer::createEmptyDocument(const std::string &strName)
+{
+    PFSFile pFileReturn;
+
+    // If this is a symlink, then create the directory in the symlink's target instead.
+    PFSDirectory pDirParent = resolveDirectory();
+
+    try
+    {
+        // To create a new subdirectory via Gio::File, create an empty Gio::File first
+        // and then invoke make_directory on it.
+        std::string strPath = pDirParent->getRelativePath() + "/" + strName;
+        Debug::Log(FILE_HIGH, string(__func__) + ": creating directory \"" + strPath + "\"");
+
+        // The follwing cannot fail.
+        Glib::RefPtr<Gio::File> pGioFileNew = Gio::File::create_for_path(strPath);
+        // But the following can throw.
+        auto pStream = pGioFileNew->create_file();
+        pStream->close();
+
+        // If we got here, we have a directory.
+        pFileReturn = FSFile::Create(pGioFileNew, 0);
+        {
+            ContentsLock cLock(*_pMap);
+            this->addChild(cLock, pFileReturn);
+        }
+
+        // Notify the monitors.
+        PFSModelBase pFS = pFileReturn;
+        for (auto &p : _llMonitors)
+            p->onItemAdded(pFS);
+    }
+    catch(Gio::Error &e)
+    {
+        throw FSException(e.what());
+    }
+
+    return pFileReturn;
+}
+
+/**
+ *  Notifies all monitors attached to *this that a file has been removed.
+ *
+ *  Call this on the GUI thread after calling FSModelBase::sendToTrash().
+ *  Note that at this time, the file no longer exists on disk and is only
+ *  an empty shell any more.
+ */
+void
+FSContainer::notifyFileRemoved(PFSModelBase pFS)
+{
+    auto pThis = pFS->shared_from_this();
+    for (auto &pMonitor : _llMonitors)
+        pMonitor->onItemRemoved(pThis);
+}
+
+
 
 
 /***************************************************************************
@@ -1165,15 +1304,12 @@ FSSymlink::FSSymlink(Glib::RefPtr<Gio::File> pGioFile)
 FSTypeResolved
 FSSymlink::getResolvedType() /* override */
 {
-    FSLock lock;
     Debug::Log(FILE_LOW, "Symlink::getResolvedTypeImpl()");
-    follow(lock);
 
-    switch (_state)
+    auto state = follow();
+
+    switch (state)
     {
-        case State::NOT_FOLLOWED_YET:
-            throw FSException("shouldn't happen");
-
         case State::BROKEN:
             return FSTypeResolved::BROKEN_SYMLINK;
 
@@ -1181,10 +1317,13 @@ FSSymlink::getResolvedType() /* override */
             return FSTypeResolved::SYMLINK_TO_FILE;
 
         case State::TO_DIRECTORY:
+            return FSTypeResolved::SYMLINK_TO_DIRECTORY;
+
+        case State::NOT_FOLLOWED_YET:
+        case State::RESOLVING:
         break;
     }
-
-    return FSTypeResolved::SYMLINK_TO_DIRECTORY;
+    throw FSException("shouldn't happen");
 }
 
 /**
@@ -1210,19 +1349,42 @@ FSSymlink::Create(Glib::RefPtr<Gio::File> pGioFile)
 PFSModelBase
 FSSymlink::getTarget()
 {
-    FSLock lock;
-    follow(lock);
+    follow();
     return _pTarget;
 }
 
-void
-FSSymlink::follow(FSLock &lock)
+std::condition_variable_any g_condSymlinkResolved;
+
+/**
+ *  Atomically resolves the symlink and caches the result. This may need to
+ *  to blocking disk I/O and may therefore not be quick.
+ */
+FSSymlink::State
+FSSymlink::follow()
 {
     Debug::Enter(FILE_LOW, "FSSymlink::follow(\"" + getRelativePath() + "\"");
+
+    // Make sure that only one thread resolves this link at a time. We
+    // set the link's state to State::RESOLVING below while we're following,
+    // so if the link's state is State::RESOLVING now, it means another
+    // thread is already in the process of resolving this link. In that
+    // case, block on a condition variable which will get posted by the
+    // other thread.
+    std::unique_lock<std::recursive_mutex> lock(g_mutexFiles);
+    while (_state == State::RESOLVING)
+        g_condSymlinkResolved.wait(lock);
+
+    // Lock is held again now.
+    // Either we're the only thread, or the other thread is done following.
+    // So now REALLY test the state.
+
     if (_state == State::NOT_FOLLOWED_YET)
     {
         if (!_pParent)
             throw FSException("symlink with no parent no good");
+
+        _state = State::RESOLVING;
+        lock.unlock();
 
         string strParentDir = _pParent->getRelativePath();
         Debug::Log(FILE_LOW, "parent = \"" + strParentDir + "\"");
@@ -1233,6 +1395,7 @@ FSSymlink::follow(FSLock &lock)
         if (strContents.empty())
         {
             Debug::Log(FILE_MID, "readlink(\"" + getRelativePath() + "\") returned empty string -> BROKEN_SYMLINK");
+            lock.lock();
             _state = State::BROKEN;
         }
         else
@@ -1248,23 +1411,35 @@ FSSymlink::follow(FSLock &lock)
                 strTarget += strContents;
             }
 
-            if ((_pTarget = FindPath(strTarget)))
+            try
             {
-                if (_pTarget->getType() == FSType::DIRECTORY)
-                    _state = State::TO_DIRECTORY;
-                else
-                    _state = State::TO_FILE;
-                Debug::Log(FILE_MID, "Woke up symlink target \"" + strTarget + "\", state: " + to_string((int)_state));
+                auto pTarget = FindPath(strTarget);
+                if (pTarget)
+                {
+                    lock.lock();
+                    _pTarget = pTarget;
+                    if (_pTarget->getType() == FSType::DIRECTORY)
+                        _state = State::TO_DIRECTORY;
+                    else
+                        _state = State::TO_FILE;
+                    Debug::Log(FILE_MID, "Woke up symlink target \"" + strTarget + "\", state: " + to_string((int)_state));
+                }
             }
-            else
+            catch(...)
             {
-                Debug::Log(FILE_MID, "Could not find symlink target " + strTarget + " (from \"" + strContents + "\") --> BROKEN");
+                Debug::Log(FILE_HIGH, "Could not find symlink target " + strTarget + " (from \"" + strContents + "\") --> BROKEN");
+                lock.lock();
                 _state = State::BROKEN;
             }
         }
+
+        // Post the condition variable so that other threads who may be blocked in this function
+        // on this symlink will wake up.
+        g_condSymlinkResolved.notify_all();
     }
 
     Debug::Leave();
+    return _state;
 }
 
 

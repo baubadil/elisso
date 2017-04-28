@@ -32,6 +32,9 @@ struct FileOperation::Impl
 
     PProgressDialog         *_ppProgressDialog;
 
+    // Shared source container of all objects, set & validated during init.
+    FSContainer             *pSourceContainer = nullptr;
+
     // Progress data. Protected by the parent WorkerResult mutex.
     PFSModelBase            pFSCurrent;
     double                  dProgress = 0;
@@ -51,9 +54,9 @@ struct FileOperation::Impl
 PFileOperation
 FileOperation::Create(Type t,
                       const FileSelection &sel,
-                      FileOperationsList &refQueue,
-                      PProgressDialog *ppProgressDialog,
-                      Gtk::Window *pParentWindow)
+                      FileOperationsList &refQueue,         //!< in: list to append new FileOperation instance to
+                      PProgressDialog *ppProgressDialog,    //!< in: progress dialog to append file operation to
+                      Gtk::Window *pParentWindow)           //!< in: parent window for (modal) progress dialog
 {
     /* This nasty trickery is necessary to make std::make_shared work with a protected constructor. */
     class Derived : public FileOperation
@@ -93,8 +96,19 @@ FileOperation::Create(Type t,
         (*ppProgressDialog)->addOperation(p);
     }
 
-    // Copy the list of files to operate on.
-    p->_llFiles = sel.llAll;
+    // Deep-copy the list of files to operate on.
+    for (auto &pFS : sel.llAll)
+    {
+        p->_llFiles.push_back(pFS);
+        auto pParent = pFS->getParent();
+        if (!pParent)
+            throw FSException("File has no parent");
+        FSContainer *pContainerThis = pParent->getContainer();
+        if (!p->_pImpl->pSourceContainer)
+            p->_pImpl->pSourceContainer = pContainerThis;
+        else if (pContainerThis != p->_pImpl->pSourceContainer)
+            throw FSException("Files in given list have more than one parent container");
+    }
 
     // Launch the thread.
     p->_pImpl->pThread = new std::thread([p]()
@@ -212,7 +226,7 @@ FileOperation::onItemProcessed(PFSModelBase pFS)
             break;
 
             case Type::TRASH:
-                pFS->notifyFileRemoved();
+                _pImpl->pSourceContainer->notifyFileRemoved(pFS);
             break;
         }
     }

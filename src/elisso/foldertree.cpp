@@ -149,7 +149,7 @@ struct ElissoFolderTree::Impl : public ProhibitCopy
  *
  **************************************************************************/
 
-std::recursive_mutex g_mutexJobs;
+Mutex g_mutexJobs;
 
 class JobsLock : public Lock
 {
@@ -250,19 +250,25 @@ void
 ElissoFolderTree::addTreeRoot(const Glib::ustring &strName,
                               PFSDirectory pDir)
 {
-    const FolderTreeModelColumns &cols = FolderTreeModelColumns::Get();
+     // Add the first page in an idle loop so we have no delay in showing the window.
+    Glib::signal_idle().connect([this, strName, pDir]() -> bool
+    {
+        const FolderTreeModelColumns &cols = FolderTreeModelColumns::Get();
 
-    Gtk::TreeModel::iterator itRoot;
-    itRoot = _pImpl->pTreeStore->append();
-    (*itRoot)[cols._colMajorSort] = g_cTreeRootItems++;
-    (*itRoot)[cols._colIconAndName] = strName;
-    (*itRoot)[cols._colPDir] = pDir;
-    (*itRoot)[cols._colState] = TreeNodeState::UNKNOWN;
+        Gtk::TreeModel::iterator itRoot;
+        itRoot = _pImpl->pTreeStore->append();
+        (*itRoot)[cols._colMajorSort] = g_cTreeRootItems++;
+        (*itRoot)[cols._colIconAndName] = strName;
+        (*itRoot)[cols._colPDir] = pDir;
+        (*itRoot)[cols._colState] = TreeNodeState::UNKNOWN;
 
-    this->spawnPopulate(itRoot);
+//         this->spawnPopulate(itRoot);
 
-    Gtk::TreePath path = Gtk::TreePath(itRoot);
-    _pImpl->llTreeRoots.push_back({pDir, itRoot});
+        Gtk::TreePath path = Gtk::TreePath(itRoot);
+        _pImpl->llTreeRoots.push_back({pDir, itRoot});
+
+        return false;
+    });
 }
 
 /**

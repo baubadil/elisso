@@ -22,8 +22,6 @@
 
 #define FS_BUF_LEN 1024
 
-class FSLock;
-
 enum class FSType
 {
     UNINITIALIZED,
@@ -72,6 +70,8 @@ typedef Glib::RefPtr<Gdk::Pixbuf> PPixbuf;
 class FSContainer;
 struct ContentsMap;
 
+class ContentsLock;
+
 
 /***************************************************************************
  *
@@ -109,8 +109,8 @@ class FSMonitorBase : public ProhibitCopy, public enable_shared_from_this<FSMoni
     friend class FSContainer;
 
 public:
+    virtual void onItemAdded(PFSModelBase &pFS) = 0;
     virtual void onItemRemoved(PFSModelBase &pFS) = 0;
-    virtual void onDirectoryAdded(PFSDirectory &pDir) = 0;
 
     FSContainer* isWatching()
     {
@@ -137,16 +137,17 @@ typedef std::list<PFSMonitorBase> FSMonitorsList;
  *
  **************************************************************************/
 
-enum class FSFlag : uint8_t
+enum class FSFlag : uint16_t
 {
     POPULATED_WITH_DIRECTORIES =  (1 <<  0),        // only for dirs
     POPULATED_WITH_ALL         =  (1 <<  1),        // only for dirs
-    IS_ROOT_DIRECTORY          =  (1 <<  2),        // only for dirs; strParticle is ""
-    IS_CURRENT_DIRECTORY       =  (1 <<  3),        // only for dirs; strParticle is "."
-    DIRTY                      =  (1 <<  4),        // only used during populate
-    HIDDEN_CHECKED             =  (1 <<  5),
-    HIDDEN                     =  (1 <<  6),
-    LAZY_LOADING_ICON          =  (1 <<  7),
+    POPULATING                 =  (1 <<  2),        // only for dirs
+    IS_ROOT_DIRECTORY          =  (1 <<  3),        // only for dirs; strParticle is ""
+    IS_CURRENT_DIRECTORY       =  (1 <<  4),        // only for dirs; strParticle is "."
+    DIRTY                      =  (1 <<  5),        // only used during populate
+    HIDDEN_CHECKED             =  (1 <<  6),
+    HIDDEN                     =  (1 <<  7),
+    LAZY_LOADING_ICON          =  (1 <<  8),
 };
 
 typedef FlagSet<FSFlag> FSFlagSet;
@@ -243,8 +244,6 @@ public:
     void sendToTrash();
     void testFileOps();
 
-    void notifyFileRemoved();
-
 protected:
     /*
      *  Protected methods
@@ -257,9 +256,6 @@ protected:
                 Glib::RefPtr<Gio::File> pGioFile,
                 uint64_t cbSize);
     virtual ~FSModelBase() { };
-
-    ContentsMap& getContentsMap();
-    void setParent(PFSModelBase pNewParent);
 
     PFSModelBase getSharedFromThis()
     {
@@ -301,6 +297,8 @@ public:
     PPixbuf getThumbnail(uint32_t thumbsize);
 
 protected:
+    friend class FSContainer;
+
     static PFSFile Create(Glib::RefPtr<Gio::File> pGioFile,
                           uint64_t cbSize);
     FSFile(Glib::RefPtr<Gio::File> pGioFile,
@@ -344,8 +342,6 @@ public:
         FIRST_FOLDER_ONLY
     };
 
-    PFSModelBase isAwake(const std::string &strParticle);
-
     PFSModelBase find(const std::string &strParticle);
 
     bool isPopulatedWithDirectories();
@@ -359,6 +355,9 @@ public:
                        StopFlag *pStopFlag);
 
     PFSDirectory createSubdirectory(const std::string &strName);
+    PFSFile createEmptyDocument(const std::string &strName);
+
+    void notifyFileRemoved(PFSModelBase pFS);
 
 protected:
     friend class FSModelBase;
@@ -366,6 +365,12 @@ protected:
 
     FSContainer(FSModelBase &refBase);
     virtual ~FSContainer();
+
+    PFSDirectory resolveDirectory();
+
+    void addChild(ContentsLock &lock, PFSModelBase p);
+    void removeChild(ContentsLock &lock, PFSModelBase p);
+    PFSModelBase isAwake(ContentsLock &lock, const std::string &strParticle);
 
     ContentsMap         *_pMap;
 
@@ -388,9 +393,6 @@ protected:
  */
 class FSDirectory : public FSModelBase, public FSContainer
 {
-    friend class FSModelBase;
-    friend class FSContainer;
-
 public:
     virtual FSTypeResolved getResolvedType() override
     {
@@ -401,6 +403,9 @@ public:
     static PFSDirectory GetRoot();
 
 protected:
+    friend class FSModelBase;
+    friend class FSContainer;
+
     FSDirectory(Glib::RefPtr<Gio::File> pGioFile);
     static PFSDirectory Create(Glib::RefPtr<Gio::File> pGioFile);
 };
@@ -492,15 +497,16 @@ protected:
     enum class State
     {
         NOT_FOLLOWED_YET = 0,
-        BROKEN = 1,
-        TO_FILE = 2,
-        TO_DIRECTORY = 3
+        RESOLVING = 1,
+        BROKEN = 2,
+        TO_FILE = 3,
+        TO_DIRECTORY = 4
     };
-    State               _state;
-    PFSModelBase        _pTarget;
+    State           _state;
+    PFSModelBase    _pTarget;
 
 private:
-    void follow(FSLock &lock);
+    State follow();
 };
 
 

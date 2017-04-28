@@ -59,8 +59,7 @@ class ElissoApplication;
 class ElissoApplicationWindow : public Gtk::ApplicationWindow
 {
 public:
-    ElissoApplicationWindow(ElissoApplication &app,
-                            PFSModelBase pdirInitial);
+    ElissoApplicationWindow(ElissoApplication &app);
     virtual ~ElissoApplicationWindow();
 
     /**
@@ -93,6 +92,7 @@ public:
     ElissoFolderView* getActiveFolderView();
 
     void addFolderTab(PFSModelBase pDirOrSymlink);
+    void addFolderTab(const std::string &strError);
 
     void enableEditActions(size_t cFolders, size_t cOtherFiles);
     void enableBackForwardActions();

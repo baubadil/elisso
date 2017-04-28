@@ -218,7 +218,16 @@ void Thumbnailer::fileReaderThread()
         using namespace std::chrono;
         steady_clock::time_point t1 = steady_clock::now();
 
-        PPixbuf ppb = Gdk::Pixbuf::create_from_file(pThumbnailIn->pFile->getRelativePath());
+        PPixbuf ppb;
+        try
+        {
+            ppb = Gdk::Pixbuf::create_from_file(pThumbnailIn->pFile->getRelativePath());
+        }
+        catch(...)
+        {
+            // No error handling. If we can't read the file, no thumbnail. Period.
+        }
+
         if (ppb)
         {
             milliseconds time_span = duration_cast<milliseconds>(steady_clock::now() - t1);
@@ -232,7 +241,9 @@ void Thumbnailer::fileReaderThread()
     }
 }
 
-PPixbuf Thumbnailer::scale(PFSFile pFS, PPixbuf ppbIn, size_t thumbsize)
+PPixbuf Thumbnailer::scale(PFSFile pFS,
+                           PPixbuf ppbIn,
+                           size_t thumbsize)
 {
     size_t
         cxSrc = ppbIn->get_width(),
@@ -251,8 +262,18 @@ PPixbuf Thumbnailer::scale(PFSFile pFS, PPixbuf ppbIn, size_t thumbsize)
     if (ppbOut)
     {
         Glib::ustring strOrientation = ppbIn->get_option("orientation");
-        if (strOrientation == "8")
-            ppbOut = ppbOut->rotate_simple(Gdk::PixbufRotation::PIXBUF_ROTATE_COUNTERCLOCKWISE);
+        if (!strOrientation.empty())
+        {
+//             Debug::Log(DEBUG_ALWAYS, "orientation of \"" + pFS->getBasename() + "\": " + strOrientation);
+
+            // 1 means orientation is not rotated.
+            // 6 means orientation 45° counter-clockwise.
+            if (strOrientation == "6")
+                ppbOut = ppbOut->rotate_simple(Gdk::PixbufRotation::PIXBUF_ROTATE_CLOCKWISE);
+            // 8 means orientation 45° clockwise.
+            else if (strOrientation == "8")
+                ppbOut = ppbOut->rotate_simple(Gdk::PixbufRotation::PIXBUF_ROTATE_COUNTERCLOCKWISE);
+        }
     }
 
     pFS->setThumbnail(thumbsize, ppbOut);

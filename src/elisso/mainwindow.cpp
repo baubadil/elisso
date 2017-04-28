@@ -13,8 +13,7 @@
 #include "elisso/elisso.h"
 #include "xwp/except.h"
 
-ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app,
-                                                 PFSModelBase pdirInitial)      //!< in: initial directory or nullptr for "home"
+ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app)      //!< in: initial directory or nullptr for "home"
     : _app(app),
       _mainVBox(Gtk::ORIENTATION_VERTICAL),
       _vPaned(),
@@ -87,13 +86,6 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app,
 
     this->show_all_children();
 
-    // Add the first page in an idle loop so we have no delay in showing the window.
-    Glib::signal_idle().connect([this, pdirInitial]() -> bool
-    {
-        this->addFolderTab(pdirInitial);
-        return false;       // don't call again
-    });
-
     _notebook.set_scrollable(true);
     _notebook.popup_enable();
     _notebook.show_all();
@@ -134,22 +126,43 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app,
 void
 ElissoApplicationWindow::addFolderTab(PFSModelBase pDirOrSymlink)       //!< in: directory to open, or nullptr for "home"
 {
-    // Create a new view and add it to the notebook, which then owns it.
+    // Add the first page in an idle loop so we have no delay in showing the window.
+    Glib::signal_idle().connect([this, pDirOrSymlink]() -> bool
+    {
+        Debug::Enter(CMD_TOP, "addFolderTab lambda");
+        // Create a new view and add it to the notebook, which then owns it.
+        int iPageInserted;
+        auto pView = new ElissoFolderView(*this, iPageInserted);
+
+        pView->show();
+
+        _notebook.set_current_page(iPageInserted);
+        _notebook.set_tab_reorderable(*pView, true);
+
+        auto p2 = pDirOrSymlink;
+        if (!p2)
+            p2 = FSDirectory::GetHome();
+        pView->setDirectory(p2,
+                            {});     // do not push to history
+
+        Debug::Leave();
+        return false;       // disconnect, do not call again
+    }, Glib::PRIORITY_LOW);
+}
+
+void
+ElissoApplicationWindow::addFolderTab(const std::string &strError)
+{
+    Debug::Enter(CMD_TOP, "addFolderTab with error: " + strError);
     int iPageInserted;
     auto pView = new ElissoFolderView(*this, iPageInserted);
-    auto p2 = pDirOrSymlink;
-
-    if (!p2)
-        p2 = FSDirectory::GetHome();
-
     pView->show();
-
     _notebook.set_current_page(iPageInserted);
     _notebook.set_tab_reorderable(*pView, true);
-
-    pView->setDirectory(p2,
-                        {});     // do not push to history
+    pView->setError(strError);
+    Debug::Leave();
 }
+
 
 void
 ElissoApplicationWindow::initActionHandlers()
@@ -182,6 +195,7 @@ ElissoApplicationWindow::initActionHandlers()
 
     this->add_action(ACTION_FILE_CREATE_DOCUMENT, [this]()
     {
+        this->handleViewAction(ACTION_FILE_CREATE_DOCUMENT);
     });
 
     this->add_action(ACTION_FILE_QUIT, [this]()
@@ -543,12 +557,16 @@ ElissoApplicationWindow::enableBackForwardActions()
 void
 ElissoApplicationWindow::onLoadingFolderView(ElissoFolderView &view)
 {
-    PFSModelBase pDir = view.getDirectory();
+    auto pCurrentViewPage = getActiveFolderView();
+    if (pCurrentViewPage && (pCurrentViewPage == &view))
+    {
+        PFSModelBase pDir = view.getDirectory();
 
-    this->setWindowTitle("Loading " + pDir->getBasename() + "...");
-    this->enableViewTypeActions(false);
-    // Disable all edit actions; they will only get re-enabled when the "selected" signal comes in.
-    this->enableEditActions(0, 0);
+        this->setWindowTitle("Loading " + pDir->getBasename() + "...");
+        this->enableViewTypeActions(false);
+        // Disable all edit actions; they will only get re-enabled when the "selected" signal comes in.
+        this->enableEditActions(0, 0);
+    }
 }
 
 /**

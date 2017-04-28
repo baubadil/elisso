@@ -91,9 +91,9 @@ public:
     }
 
 protected:
-    std::recursive_mutex    mutex;
-    Glib::Dispatcher        dispatcher;
-    std::deque<P>           deque;
+    Mutex               mutex;
+    Glib::Dispatcher    dispatcher;
+    std::deque<P>       deque;
 };
 
 #endif // ELISSO_WORKER_H

@@ -40,8 +40,6 @@ protected:
     bool on_button_press_event(GdkEventButton* button_event) override;
 
 private:
-    Gtk::ApplicationWindow& getToplevelWindow();
-
     ElissoFolderView *_pView = NULL;
 };
 
