@@ -20,6 +20,8 @@
 
 typedef std::shared_ptr<Gtk::TreeRowReference> PRowReference;
 
+#define USE_XICONVIEW
+
 // const DebugFlag DEBUG_ALWAYS          = 0;
 
     // low-level

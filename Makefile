@@ -29,8 +29,9 @@ OTHERS += $(GSCHEMA_COMPILED)
 
 PROGRAMS += elisso
 elisso_TEMPLATE = EXE
-elisso_LIBS = $(PATH_STAGE_LIB)/xwp.a $(GTKMM_LIBS) libpcre libpthread
+elisso_LIBS = $(PATH_STAGE_LIB)/xwp.a $(PATH_STAGE_LIB)/xgtk.a $(GTKMM_LIBS) libpcre libpthread
 
+include $(PATH_CURRENT)/src/x-gtk/Makefile.kmk
 include $(PATH_CURRENT)/src/elisso/Makefile.kmk
 
 include $(FILE_KBUILD_SUB_FOOTER)

@@ -1,0 +1,8 @@
+
+SUB_DEPTH = ../..
+
+LIBRARIES += xgtk
+xgtk_TEMPLATE = EXE
+xgtk_SOURCES = \
+	src/x-gtk/x-iconview_cpp.cpp \
+	src/x-gtk/x-iconview_c.cpp

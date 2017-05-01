@@ -12,7 +12,6 @@
 
 #include <thread>
 
-#include "elisso/elisso.h"
 #include "elisso/mainwindow.h"
 #include "elisso/worker.h"
 

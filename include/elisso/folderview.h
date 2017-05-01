@@ -17,6 +17,10 @@
 
 #include "xwp/flagset.h"
 
+#ifdef USE_XICONVIEW
+#include "x-gtk/x-iconview_cpp.h"
+#endif
+
 class ElissoFolderView;
 struct FileSelection;
 class Thumbnailer;
@@ -188,7 +192,11 @@ private:
 
     Gtk::ScrolledWindow         _scrolledWindow;        // Parent of both icon and tree view.
 
+#ifdef USE_XICONVIEW
+    Gtk::XIconView              _iconView;
+#else
     Gtk::IconView               _iconView;
+#endif
     TreeViewPlus                _treeView;
 //     Gtk::FlowBox                _compactView;
     Gtk::InfoBar                _infoBarError;

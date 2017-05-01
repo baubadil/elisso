@@ -10,7 +10,6 @@
 
 #include "elisso/treeviewplus.h"
 
-#include "elisso/elisso.h"
 #include "elisso/folderview.h"
 
 #include "xwp/except.h"

@@ -5,7 +5,6 @@ elisso_SOURCES += \
 	src/elisso/contenttype.cpp \
 	src/elisso/main.cpp \
 	src/elisso/mainwindow.cpp \
-	src/elisso/iconviewplus.cpp \
 	src/elisso/fileops.cpp \
 	src/elisso/folderview.cpp \
 	src/elisso/foldertree.cpp \
@@ -13,4 +12,4 @@ elisso_SOURCES += \
 	src/elisso/progressdialog.cpp \
 	src/elisso/textentrydialog.cpp \
 	src/elisso/thumbnailer.cpp \
-	src/elisso/treeviewplus.cpp
+	src/elisso/treeviewplus.cpp \
