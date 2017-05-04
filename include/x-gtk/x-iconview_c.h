@@ -49,27 +49,6 @@ typedef void (* XGtkIconViewForeachFunc)     (XGtkIconView      *icon_view,
         GtkTreePath      *path,
         gpointer          data);
 
-/**
- * GtkIconViewDropPosition:
- * @XICONVIEW_NO_DROP: no drop possible
- * @XICONVIEW_DROP_INTO: dropped item replaces the item
- * @XICONVIEW_DROP_LEFT: droppped item is inserted to the left
- * @XICONVIEW_DROP_RIGHT: dropped item is inserted to the right
- * @XICONVIEW_DROP_ABOVE: dropped item is inserted above
- * @XICONVIEW_DROP_BELOW: dropped item is inserted below
- *
- * An enum for determining where a dropped item goes.
- */
-// typedef enum
-// {
-//     XICONVIEW_NO_DROP,
-//     XICONVIEW_DROP_INTO,
-//     XICONVIEW_DROP_LEFT,
-//     XICONVIEW_DROP_RIGHT,
-//     XICONVIEW_DROP_ABOVE,
-//     XICONVIEW_DROP_BELOW
-// } GtkIconViewDropPosition;
-
 struct XGtkIconView
 {
     GtkContainer parent;

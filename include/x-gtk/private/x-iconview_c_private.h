@@ -20,6 +20,9 @@
 
 #include "x-gtk/x-iconview_c.h"
 
+#include <list>
+#include <memory>
+
 // #include "gtk/gtkcssnodeprivate.h"
 
 #define P_(a) (a)
@@ -49,10 +52,16 @@ struct XGtkIconViewItem
 
     gint row, col;
 
-    guint selected : 1;
-    guint selected_before_rubberbanding : 1;
+    bool selected = false;
+    bool selected_before_rubberbanding = false;
 
+    XGtkIconViewItem()
+    {
+        cell_area.width = -1;
+        cell_area.height = -1;
+    }
 };
+typedef std::shared_ptr<XGtkIconViewItem> PXGtkIconViewItem;
 
 struct XGtkIconViewPrivate
 {
@@ -75,7 +84,8 @@ struct XGtkIconViewPrivate
 
     GtkTreeModel *model;
 
-    GList *items;
+    // GList *items;
+    std::list<PXGtkIconViewItem> llItems;
 
     GtkAdjustment *hadjustment;
     GtkAdjustment *vadjustment;
@@ -89,11 +99,11 @@ struct XGtkIconViewPrivate
     gint scroll_value_diff;
     gint event_last_x, event_last_y;
 
-    XGtkIconViewItem *anchor_item;
-    XGtkIconViewItem *cursor_item;
+    PXGtkIconViewItem anchor_item;
+    PXGtkIconViewItem cursor_item;
 
-    XGtkIconViewItem *last_single_clicked;
-    XGtkIconViewItem *last_prelight;
+    PXGtkIconViewItem last_single_clicked;
+    PXGtkIconViewItem last_prelight;
 
     GtkOrientation item_orientation;
 
@@ -152,19 +162,19 @@ struct XGtkIconViewPrivate
 };
 
 void _xiconview_set_cell_data(XGtkIconView *icon_view,
-                                  XGtkIconViewItem *item);
+                              PXGtkIconViewItem pItem);
 void _xiconview_set_cursor_item(XGtkIconView *icon_view,
-                                    XGtkIconViewItem *item,
-                                    GtkCellRenderer *cursor_cell);
-XGtkIconViewItem* _xiconview_get_item_at_coords(XGtkIconView *icon_view,
+                                PXGtkIconViewItem pItem,
+                                GtkCellRenderer *cursor_cell);
+PXGtkIconViewItem _xiconview_get_item_at_coords(XGtkIconView *icon_view,
                                                     gint x,
                                                     gint y,
                                                     gboolean                only_in_cell,
                                                     GtkCellRenderer       **cell_at_pos);
 void                 _xiconview_select_item(XGtkIconView *icon_view,
-                                                XGtkIconViewItem        *item);
+                                            PXGtkIconViewItem pItem);
 void                 _xiconview_unselect_item(XGtkIconView *icon_view,
-                                                  XGtkIconViewItem        *item);
+                                              PXGtkIconViewItem pItem);
 
 void gtk_adjustment_animate_to_value (GtkAdjustment *adjustment,
                                       gdouble        value);

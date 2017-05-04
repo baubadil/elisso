@@ -22,6 +22,8 @@
 
 #include <glib-object.h>
 
+#include <algorithm>
+
 /**
  * SECTION:gtkiconview
  * @title: XGtkIconView
@@ -54,8 +56,8 @@
 
 struct XGtkIconViewChild
 {
-    GtkWidget    *widget;
-    GdkRectangle  area;
+    GtkWidget *widget;
+    GdkRectangle area;
 };
 
 /* Signals */
@@ -102,201 +104,135 @@ enum
 // static gpointer xiconview_parent_class = nullptr;
 
 /* GObject vfuncs */
-static void             xiconview_cell_layout_init          (GtkCellLayoutIface *iface);
-static void             xiconview_dispose                   (GObject            *object);
-static void             xiconview_constructed               (GObject            *object);
-static void             xiconview_set_property              (GObject            *object,
-        guint               prop_id,
-        const GValue       *value,
-        GParamSpec         *pspec);
-static void             xiconview_get_property              (GObject            *object,
-        guint               prop_id,
-        GValue             *value,
-        GParamSpec         *pspec);
+static void xiconview_cell_layout_init(GtkCellLayoutIface *iface);
+static void xiconview_dispose(GObject *object);
+static void xiconview_constructed(GObject *object);
+static void xiconview_set_property(GObject *object, guint prop_id, const GValue *value, GParamSpec *pspec);
+static void xiconview_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
 /* GtkWidget vfuncs */
-static void             xiconview_destroy                   (GtkWidget          *widget);
-static void             xiconview_realize                   (GtkWidget          *widget);
-static void             xiconview_unrealize                 (GtkWidget          *widget);
-static GtkSizeRequestMode xiconview_get_request_mode        (GtkWidget          *widget);
-static void             xiconview_get_preferred_width       (GtkWidget          *widget,
-        gint               *minimum,
-        gint               *natural);
-static void             xiconview_get_preferred_width_for_height
-(GtkWidget          *widget,
- gint                height,
- gint               *minimum,
- gint               *natural);
-static void             xiconview_get_preferred_height      (GtkWidget          *widget,
-        gint               *minimum,
-        gint               *natural);
-static void             xiconview_get_preferred_height_for_width
-(GtkWidget          *widget,
- gint                width,
- gint               *minimum,
- gint               *natural);
-static void             xiconview_size_allocate             (GtkWidget          *widget,
-        GtkAllocation      *allocation);
-static gboolean         xiconview_draw                      (GtkWidget          *widget,
-        cairo_t            *cr);
-static gboolean         xiconview_motion                    (GtkWidget          *widget,
-        GdkEventMotion     *event);
-static gboolean         xiconview_leave                     (GtkWidget          *widget,
-        GdkEventCrossing   *event);
-static gboolean         xiconview_button_press              (GtkWidget          *widget,
-        GdkEventButton     *event);
-static gboolean         xiconview_button_release            (GtkWidget          *widget,
-        GdkEventButton     *event);
-static gboolean         xiconview_key_press                 (GtkWidget          *widget,
-        GdkEventKey        *event);
-static gboolean         xiconview_key_release               (GtkWidget          *widget,
-        GdkEventKey        *event);
-
+static void xiconview_destroy(GtkWidget *widget);
+static void xiconview_realize(GtkWidget *widget);
+static void xiconview_unrealize(GtkWidget *widget);
+static GtkSizeRequestMode xiconview_get_request_mode(GtkWidget *widget);
+static void xiconview_get_preferred_width(GtkWidget *widget, gint *minimum, gint *natural);
+static void xiconview_get_preferred_width_for_height(GtkWidget *widget, gint height, gint *minimum, gint *natural);
+static void xiconview_get_preferred_height(GtkWidget *widget, gint *minimum, gint *natural);
+static void xiconview_get_preferred_height_for_width(GtkWidget *widget, gint width, gint *minimum, gint *natural);
+static void xiconview_size_allocate(GtkWidget *widget, GtkAllocation *allocation);
+static gboolean xiconview_draw(GtkWidget *widget, cairo_t *cr);
+static gboolean xiconview_motion(GtkWidget *widget, GdkEventMotion *event);
+static gboolean xiconview_leave(GtkWidget *widget, GdkEventCrossing *event);
+static gboolean xiconview_button_press(GtkWidget *widget, GdkEventButton *event);
+static gboolean xiconview_button_release(GtkWidget *widget, GdkEventButton *event);
+static gboolean xiconview_key_press(GtkWidget *widget, GdkEventKey *event);
+static gboolean xiconview_key_release(GtkWidget *widget, GdkEventKey *event);
 
 /* GtkContainer vfuncs */
-static void             xiconview_remove                    (GtkContainer       *container,
-        GtkWidget          *widget);
-static void             xiconview_forall                    (GtkContainer       *container,
-        gboolean            include_internals,
-        GtkCallback         callback,
-        gpointer            callback_data);
+static void xiconview_remove(GtkContainer *container, GtkWidget *widget);
+static void
+xiconview_forall(GtkContainer *container, gboolean include_internals, GtkCallback callback, gpointer callback_data);
 
 /* XGtkIconView vfuncs */
-static void             xiconview_real_select_all           (XGtkIconView        *icon_view);
-static void             xiconview_real_unselect_all         (XGtkIconView        *icon_view);
-static void             xiconview_real_select_cursor_item   (XGtkIconView        *icon_view);
-static void             xiconview_real_toggle_cursor_item   (XGtkIconView        *icon_view);
-static gboolean         xiconview_real_activate_cursor_item (XGtkIconView        *icon_view);
+static void xiconview_real_select_all(XGtkIconView *icon_view);
+static void xiconview_real_unselect_all(XGtkIconView *icon_view);
+static void xiconview_real_select_cursor_item(XGtkIconView *icon_view);
+static void xiconview_real_toggle_cursor_item(XGtkIconView *icon_view);
+static gboolean xiconview_real_activate_cursor_item(XGtkIconView *icon_view);
 
 /* Internal functions */
-static void                 xiconview_set_hadjustment_values         (XGtkIconView            *icon_view);
-static void                 xiconview_set_vadjustment_values         (XGtkIconView            *icon_view);
-static void                 xiconview_set_hadjustment                (XGtkIconView            *icon_view,
-        GtkAdjustment          *adjustment);
-static void                 xiconview_set_vadjustment                (XGtkIconView            *icon_view,
-        GtkAdjustment          *adjustment);
-static void                 xiconview_adjustment_changed             (GtkAdjustment          *adjustment,
-        XGtkIconView            *icon_view);
-static void                 xiconview_layout                         (XGtkIconView            *icon_view);
-static void                 xiconview_paint_item                     (XGtkIconView            *icon_view,
-        cairo_t                *cr,
-        XGtkIconViewItem        *item,
-        gint                    x,
-        gint                    y,
-        gboolean                draw_focus);
-static void                 xiconview_paint_rubberband               (XGtkIconView            *icon_view,
-        cairo_t                *cr);
-static void                 xiconview_queue_draw_path                (XGtkIconView *icon_view,
-        GtkTreePath *path);
-static void                 xiconview_queue_draw_item                (XGtkIconView            *icon_view,
-        XGtkIconViewItem        *item);
-static void                 xiconview_start_rubberbanding            (XGtkIconView            *icon_view,
-        GdkDevice              *device,
-        gint                    x,
-        gint                    y);
-static void                 xiconview_stop_rubberbanding             (XGtkIconView            *icon_view);
-static void                 xiconview_update_rubberband_selection    (XGtkIconView            *icon_view);
-static gboolean             xiconview_item_hit_test                  (XGtkIconView            *icon_view,
-        XGtkIconViewItem        *item,
-        gint                    x,
-        gint                    y,
-        gint                    width,
-        gint                    height);
-static gboolean             xiconview_unselect_all_internal          (XGtkIconView            *icon_view);
-static void                 xiconview_update_rubberband              (gpointer                data);
-static void                 xiconview_item_invalidate_size           (XGtkIconViewItem        *item);
-static void                 xiconview_invalidate_sizes               (XGtkIconView            *icon_view);
-static void                 xiconview_add_move_binding               (GtkBindingSet          *binding_set,
-        guint                   keyval,
-        guint                   modmask,
-        GtkMovementStep         step,
-        gint                    count);
-static gboolean             xiconview_real_move_cursor               (XGtkIconView            *icon_view,
-        GtkMovementStep         step,
-        gint                    count);
-static void                 xiconview_move_cursor_up_down            (XGtkIconView            *icon_view,
-        gint                    count);
-static void                 xiconview_move_cursor_page_up_down       (XGtkIconView            *icon_view,
-        gint                    count);
-static void                 xiconview_move_cursor_left_right         (XGtkIconView            *icon_view,
-        gint                    count);
-static void                 xiconview_move_cursor_start_end          (XGtkIconView            *icon_view,
-        gint                    count);
-static void                 xiconview_scroll_to_item                 (XGtkIconView            *icon_view,
-        XGtkIconViewItem        *item);
-static gboolean             xiconview_select_all_between             (XGtkIconView            *icon_view,
-        XGtkIconViewItem        *anchor,
-        XGtkIconViewItem        *cursor);
+static void xiconview_set_hadjustment_values(XGtkIconView *icon_view);
+static void xiconview_set_vadjustment_values(XGtkIconView *icon_view);
+static void xiconview_set_hadjustment(XGtkIconView *icon_view, GtkAdjustment *adjustment);
+static void xiconview_set_vadjustment(XGtkIconView *icon_view, GtkAdjustment *adjustment);
+static void xiconview_adjustment_changed(GtkAdjustment *adjustment, XGtkIconView *icon_view);
+static void xiconview_layout(XGtkIconView *icon_view);
+static void xiconview_paint_item(XGtkIconView *icon_view,
+                                 cairo_t *cr,
+                                 PXGtkIconViewItem pItem,
+                                 gint x,
+                                 gint y,
+                                 gboolean draw_focus);
+static void xiconview_paint_rubberband(XGtkIconView *icon_view, cairo_t *cr);
+static void xiconview_queue_draw_path(XGtkIconView *icon_view, GtkTreePath *path);
+static void xiconview_queue_draw_item(XGtkIconView *icon_view, PXGtkIconViewItem pItem);
+static void xiconview_start_rubberbanding(XGtkIconView *icon_view, GdkDevice *device, gint x, gint y);
+static void xiconview_stop_rubberbanding(XGtkIconView *icon_view);
+static void xiconview_update_rubberband_selection(XGtkIconView *icon_view);
+static gboolean xiconview_item_hit_test(XGtkIconView *icon_view,
+                                        PXGtkIconViewItem pItem,
+                                        gint x,
+                                        gint y,
+                                        gint width,
+                                        gint height);
+static gboolean xiconview_unselect_all_internal(XGtkIconView *icon_view);
+static void xiconview_update_rubberband(gpointer data);
+static void xiconview_item_invalidate_size(PXGtkIconViewItem &pItem);
+static void xiconview_invalidate_sizes(XGtkIconView *icon_view);
+static void
+xiconview_add_move_binding(GtkBindingSet *binding_set, guint keyval, guint modmask, GtkMovementStep step, gint count);
+static gboolean xiconview_real_move_cursor(XGtkIconView *icon_view, GtkMovementStep step, gint count);
+static void xiconview_move_cursor_up_down(XGtkIconView *icon_view, gint count);
+static void xiconview_move_cursor_page_up_down(XGtkIconView *icon_view, gint count);
+static void xiconview_move_cursor_left_right(XGtkIconView *icon_view, gint count);
+static void xiconview_move_cursor_start_end(XGtkIconView *icon_view, gint count);
+static void xiconview_scroll_to_item(XGtkIconView *icon_view, PXGtkIconViewItem pItem);
+static gboolean
+xiconview_select_all_between(XGtkIconView *icon_view, PXGtkIconViewItem anchor, PXGtkIconViewItem cursor);
 
-static void                 xiconview_ensure_cell_area               (XGtkIconView            *icon_view,
-        GtkCellArea            *cell_area);
+static void xiconview_ensure_cell_area(XGtkIconView *icon_view, GtkCellArea *cell_area);
 
-static GtkCellArea         *xiconview_cell_layout_get_area           (GtkCellLayout          *layout);
+static GtkCellArea *xiconview_cell_layout_get_area(GtkCellLayout *layout);
 
-static void                 xiconview_item_selected_changed          (XGtkIconView            *icon_view,
-        XGtkIconViewItem        *item);
+static void xiconview_item_selected_changed(XGtkIconView *icon_view,
+                                            PXGtkIconViewItem pItem);
 
-static void                 xiconview_add_editable                   (GtkCellArea            *area,
-        GtkCellRenderer        *renderer,
-        GtkCellEditable        *editable,
-        GdkRectangle           *cell_area,
-        const gchar            *path,
-        XGtkIconView            *icon_view);
-static void                 xiconview_remove_editable                (GtkCellArea            *area,
-        GtkCellRenderer        *renderer,
-        GtkCellEditable        *editable,
-        XGtkIconView            *icon_view);
-static void                 update_text_cell                             (XGtkIconView            *icon_view);
-static void                 update_pixbuf_cell                           (XGtkIconView            *icon_view);
+static void xiconview_add_editable(GtkCellArea *area,
+                                   GtkCellRenderer *renderer,
+                                   GtkCellEditable *editable,
+                                   GdkRectangle *cell_area,
+                                   const gchar *path,
+                                   XGtkIconView *icon_view);
+static void xiconview_remove_editable(GtkCellArea *area,
+                                      GtkCellRenderer *renderer,
+                                      GtkCellEditable *editable,
+                                      XGtkIconView *icon_view);
+static void update_text_cell(XGtkIconView *icon_view);
+static void update_pixbuf_cell(XGtkIconView *icon_view);
 
 /* Source side drag signals */
-static void xiconview_drag_begin       (GtkWidget        *widget,
-        GdkDragContext   *context);
-static void xiconview_drag_end         (GtkWidget        *widget,
-        GdkDragContext   *context);
-static void xiconview_drag_data_get    (GtkWidget        *widget,
-        GdkDragContext   *context,
-        GtkSelectionData *selection_data,
-        guint             info,
-        guint             time);
-static void xiconview_drag_data_delete (GtkWidget        *widget,
-        GdkDragContext   *context);
+static void xiconview_drag_begin(GtkWidget *widget, GdkDragContext *context);
+static void xiconview_drag_end(GtkWidget *widget, GdkDragContext *context);
+static void xiconview_drag_data_get(
+    GtkWidget *widget, GdkDragContext *context, GtkSelectionData *selection_data, guint info, guint time);
+static void xiconview_drag_data_delete(GtkWidget *widget, GdkDragContext *context);
 
 /* Target side drag signals */
-static void     xiconview_drag_leave         (GtkWidget        *widget,
-        GdkDragContext   *context,
-        guint             time);
-static gboolean xiconview_drag_motion        (GtkWidget        *widget,
-        GdkDragContext   *context,
-        gint              x,
-        gint              y,
-        guint             time);
-static gboolean xiconview_drag_drop          (GtkWidget        *widget,
-        GdkDragContext   *context,
-        gint              x,
-        gint              y,
-        guint             time);
-static void     xiconview_drag_data_received (GtkWidget        *widget,
-        GdkDragContext   *context,
-        gint              x,
-        gint              y,
-        GtkSelectionData *selection_data,
-        guint             info,
-        guint             time);
-static gboolean xiconview_maybe_begin_drag   (XGtkIconView             *icon_view,
-        GdkEventMotion          *event);
+static void xiconview_drag_leave(GtkWidget *widget, GdkDragContext *context, guint time);
+static gboolean xiconview_drag_motion(GtkWidget *widget, GdkDragContext *context, gint x, gint y, guint time);
+static gboolean xiconview_drag_drop(GtkWidget *widget, GdkDragContext *context, gint x, gint y, guint time);
+static void xiconview_drag_data_received(GtkWidget *widget,
+                                         GdkDragContext *context,
+                                         gint x,
+                                         gint y,
+                                         GtkSelectionData *selection_data,
+                                         guint info,
+                                         guint time);
+static gboolean xiconview_maybe_begin_drag(XGtkIconView *icon_view, GdkEventMotion *event);
 
-static void     remove_scroll_timeout            (XGtkIconView *icon_view);
+static void remove_scroll_timeout(XGtkIconView *icon_view);
 
 /* GtkBuildable */
 static GtkBuildableIface *parent_buildable_iface;
-static void     xiconview_buildable_init             (GtkBuildableIface *iface);
-// static gboolean xiconview_buildable_custom_tag_start (GtkBuildable  *buildable,
+static void xiconview_buildable_init(GtkBuildableIface *iface);
+// static gboolean xiconview_buildable_custom_tag_start (GtkBuildable
+// *buildable,
 //         GtkBuilder    *builder,
 //         GObject       *child,
 //         const gchar   *tagname,
 //         GMarkupParser *parser,
 //         gpointer      *data);
-// static void     xiconview_buildable_custom_tag_end   (GtkBuildable  *buildable,
+// static void     xiconview_buildable_custom_tag_end   (GtkBuildable
+// *buildable,
 //         GtkBuilder    *builder,
 //         GObject       *child,
 //         const gchar   *tagname,
@@ -304,27 +240,26 @@ static void     xiconview_buildable_init             (GtkBuildableIface *iface);
 
 static guint icon_view_signals[LAST_SIGNAL] = { 0 };
 
-G_DEFINE_TYPE_WITH_CODE (XGtkIconView, xiconview, GTK_TYPE_CONTAINER,
-                         G_ADD_PRIVATE(XGtkIconView)
-                         G_IMPLEMENT_INTERFACE(GTK_TYPE_CELL_LAYOUT,
-                                 xiconview_cell_layout_init)
-                         G_IMPLEMENT_INTERFACE(GTK_TYPE_BUILDABLE,
-                                 xiconview_buildable_init)
-                         G_IMPLEMENT_INTERFACE(GTK_TYPE_SCROLLABLE, NULL))
+G_DEFINE_TYPE_WITH_CODE(XGtkIconView,
+                        xiconview,
+                        GTK_TYPE_CONTAINER,
+                        G_ADD_PRIVATE(XGtkIconView)
+                            G_IMPLEMENT_INTERFACE(GTK_TYPE_CELL_LAYOUT, xiconview_cell_layout_init)
+                                G_IMPLEMENT_INTERFACE(GTK_TYPE_BUILDABLE, xiconview_buildable_init)
+                                    G_IMPLEMENT_INTERFACE(GTK_TYPE_SCROLLABLE, NULL))
 
-static void
-xiconview_class_init (XGtkIconViewClass *klass)
+static void xiconview_class_init(XGtkIconViewClass *klass)
 {
     GObjectClass *gobject_class;
     GtkWidgetClass *widget_class;
     GtkContainerClass *container_class;
     GtkBindingSet *binding_set;
 
-    binding_set = gtk_binding_set_by_class (klass);
+    binding_set = gtk_binding_set_by_class(klass);
 
-    gobject_class = (GObjectClass *) klass;
-    widget_class = (GtkWidgetClass *) klass;
-    container_class = (GtkContainerClass *) klass;
+    gobject_class = (GObjectClass *)klass;
+    widget_class = (GtkWidgetClass *)klass;
+    container_class = (GtkContainerClass *)klass;
 
     gobject_class->constructed = xiconview_constructed;
     gobject_class->dispose = xiconview_dispose;
@@ -371,19 +306,20 @@ xiconview_class_init (XGtkIconViewClass *klass)
      * XGtkIconView:selection-mode:
      *
      * The ::selection-mode property specifies the selection mode of
-     * icon view. If the mode is #GTK_SELECTION_MULTIPLE, rubberband selection
+     * icon view. If the mode is #GTK_SELECTION_MULTIPLE, rubberband
+     * selection
      * is enabled, for the other modes, only keyboard selection is possible.
      *
      * Since: 2.6
      */
-    g_object_class_install_property (gobject_class,
-                                     PROP_SELECTION_MODE,
-                                     g_param_spec_enum ("selection-mode",
-                                             P_("Selection mode"),
-                                             P_("The selection mode"),
-                                             GTK_TYPE_SELECTION_MODE,
-                                             GTK_SELECTION_SINGLE,
-                                             (GParamFlags)(GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY)));
+    g_object_class_install_property(gobject_class,
+                                    PROP_SELECTION_MODE,
+                                    g_param_spec_enum("selection-mode",
+                                                      P_("Selection mode"),
+                                                      P_("The selection mode"),
+                                                      GTK_TYPE_SELECTION_MODE,
+                                                      GTK_SELECTION_SINGLE,
+                                                      (GParamFlags)(GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY)));
 
     /**
      * XGtkIconView:pixbuf-column:
@@ -395,13 +331,15 @@ xiconview_class_init (XGtkIconViewClass *klass)
      *
      * Since: 2.6
      */
-    g_object_class_install_property (gobject_class,
-                                     PROP_PIXBUF_COLUMN,
-                                     g_param_spec_int ("pixbuf-column",
-                                             P_("Pixbuf column"),
-                                             P_("Model column used to retrieve the icon pixbuf from"),
-                                             -1, G_MAXINT, -1,
-                                             (GParamFlags)(GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY)));
+    g_object_class_install_property(gobject_class,
+                                    PROP_PIXBUF_COLUMN,
+                                    g_param_spec_int("pixbuf-column",
+                                                     P_("Pixbuf column"),
+                                                     P_("Model column used to retrieve the icon pixbuf from"),
+                                                     -1,
+                                                     G_MAXINT,
+                                                     -1,
+                                                     (GParamFlags)(GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY)));
 
     /**
      * XGtkIconView:text-column:
@@ -413,41 +351,47 @@ xiconview_class_init (XGtkIconViewClass *klass)
      *
      * Since: 2.6
      */
-    g_object_class_install_property (gobject_class,
-                                     PROP_TEXT_COLUMN,
-                                     g_param_spec_int ("text-column",
-                                             P_("Text column"),
-                                             P_("Model column used to retrieve the text from"),
-                                             -1, G_MAXINT, -1,
-                                             (GParamFlags)(GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY)));
-
+    g_object_class_install_property(gobject_class,
+                                    PROP_TEXT_COLUMN,
+                                    g_param_spec_int("text-column",
+                                                     P_("Text column"),
+                                                     P_("Model column used to retrieve the text from"),
+                                                     -1,
+                                                     G_MAXINT,
+                                                     -1,
+                                                     (GParamFlags)(GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY)));
 
     /**
      * XGtkIconView:markup-column:
      *
      * The ::markup-column property contains the number of the model column
-     * containing markup information to be displayed. The markup column must be
-     * of type #G_TYPE_STRING. If this property and the :text-column property
+     * containing markup information to be displayed. The markup column must
+     * be
+     * of type #G_TYPE_STRING. If this property and the :text-column
+     * property
      * are both set to column numbers, it overrides the text column.
      * If both are set to -1, no texts are displayed.
      *
      * Since: 2.6
      */
-    g_object_class_install_property (gobject_class,
-                                     PROP_MARKUP_COLUMN,
-                                     g_param_spec_int ("markup-column",
-                                             P_("Markup column"),
-                                             P_("Model column used to retrieve the text if using Pango markup"),
-                                             -1, G_MAXINT, -1,
-                                             (GParamFlags)(GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY)));
+    g_object_class_install_property(gobject_class,
+                                    PROP_MARKUP_COLUMN,
+                                    g_param_spec_int("markup-column",
+                                                     P_("Markup column"),
+                                                     P_("Model column used to retrieve the text if using Pango "
+                                                        "markup"),
+                                                     -1,
+                                                     G_MAXINT,
+                                                     -1,
+                                                     (GParamFlags)(GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY)));
 
-    g_object_class_install_property (gobject_class,
-                                     PROP_MODEL,
-                                     g_param_spec_object ("model",
-                                             P_("Icon View Model"),
-                                             P_("The model for the icon view"),
-                                             GTK_TYPE_TREE_MODEL,
-                                             (GParamFlags)(GTK_PARAM_READWRITE)));
+    g_object_class_install_property(gobject_class,
+                                    PROP_MODEL,
+                                    g_param_spec_object("model",
+                                                        P_("Icon View Model"),
+                                                        P_("The model for the icon view"),
+                                                        GTK_TYPE_TREE_MODEL,
+                                                        (GParamFlags)(GTK_PARAM_READWRITE)));
 
     /**
      * XGtkIconView:columns:
@@ -458,14 +402,15 @@ xiconview_class_init (XGtkIconViewClass *klass)
      *
      * Since: 2.6
      */
-    g_object_class_install_property (gobject_class,
-                                     PROP_COLUMNS,
-                                     g_param_spec_int ("columns",
-                                             P_("Number of columns"),
-                                             P_("Number of columns to display"),
-                                             -1, G_MAXINT, -1,
-                                             (GParamFlags)(GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY)));
-
+    g_object_class_install_property(gobject_class,
+                                    PROP_COLUMNS,
+                                    g_param_spec_int("columns",
+                                                     P_("Number of columns"),
+                                                     P_("Number of columns to display"),
+                                                     -1,
+                                                     G_MAXINT,
+                                                     -1,
+                                                     (GParamFlags)(GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY)));
 
     /**
      * XGtkIconView:item-width:
@@ -476,13 +421,15 @@ xiconview_class_init (XGtkIconViewClass *klass)
      *
      * Since: 2.6
      */
-    g_object_class_install_property (gobject_class,
-                                     PROP_ITEM_WIDTH,
-                                     g_param_spec_int ("item-width",
-                                             P_("Width for each item"),
-                                             P_("The width used for each item"),
-                                             -1, G_MAXINT, -1,
-                                             (GParamFlags)(GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY)));
+    g_object_class_install_property(gobject_class,
+                                    PROP_ITEM_WIDTH,
+                                    g_param_spec_int("item-width",
+                                                     P_("Width for each item"),
+                                                     P_("The width used for each item"),
+                                                     -1,
+                                                     G_MAXINT,
+                                                     -1,
+                                                     (GParamFlags)(GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY)));
 
     /**
      * XGtkIconView:spacing:
@@ -492,45 +439,53 @@ xiconview_class_init (XGtkIconViewClass *klass)
      *
      * Since: 2.6
      */
-    g_object_class_install_property (gobject_class,
-                                     PROP_SPACING,
-                                     g_param_spec_int ("spacing",
-                                             P_("Spacing"),
-                                             P_("Space which is inserted between cells of an item"),
-                                             0, G_MAXINT, 0,
-                                             (GParamFlags)(GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY)));
+    g_object_class_install_property(gobject_class,
+                                    PROP_SPACING,
+                                    g_param_spec_int("spacing",
+                                                     P_("Spacing"),
+                                                     P_("Space which is inserted between cells of an item"),
+                                                     0,
+                                                     G_MAXINT,
+                                                     0,
+                                                     (GParamFlags)(GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY)));
 
     /**
      * XGtkIconView:row-spacing:
      *
-     * The row-spacing property specifies the space which is inserted between
+     * The row-spacing property specifies the space which is inserted
+     * between
      * the rows of the icon view.
      *
      * Since: 2.6
      */
-    g_object_class_install_property (gobject_class,
-                                     PROP_ROW_SPACING,
-                                     g_param_spec_int ("row-spacing",
-                                             P_("Row Spacing"),
-                                             P_("Space which is inserted between grid rows"),
-                                             0, G_MAXINT, 6,
-                                             (GParamFlags)(GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY)));
+    g_object_class_install_property(gobject_class,
+                                    PROP_ROW_SPACING,
+                                    g_param_spec_int("row-spacing",
+                                                     P_("Row Spacing"),
+                                                     P_("Space which is inserted between grid rows"),
+                                                     0,
+                                                     G_MAXINT,
+                                                     6,
+                                                     (GParamFlags)(GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY)));
 
     /**
      * XGtkIconView:column-spacing:
      *
-     * The column-spacing property specifies the space which is inserted between
+     * The column-spacing property specifies the space which is inserted
+     * between
      * the columns of the icon view.
      *
      * Since: 2.6
      */
-    g_object_class_install_property (gobject_class,
-                                     PROP_COLUMN_SPACING,
-                                     g_param_spec_int ("column-spacing",
-                                             P_("Column Spacing"),
-                                             P_("Space which is inserted between grid columns"),
-                                             0, G_MAXINT, 6,
-                                             (GParamFlags)(GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY)));
+    g_object_class_install_property(gobject_class,
+                                    PROP_COLUMN_SPACING,
+                                    g_param_spec_int("column-spacing",
+                                                     P_("Column Spacing"),
+                                                     P_("Space which is inserted between grid columns"),
+                                                     0,
+                                                     G_MAXINT,
+                                                     6,
+                                                     (GParamFlags)(GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY)));
 
     /**
      * XGtkIconView:margin:
@@ -540,30 +495,35 @@ xiconview_class_init (XGtkIconViewClass *klass)
      *
      * Since: 2.6
      */
-    g_object_class_install_property (gobject_class,
-                                     PROP_MARGIN,
-                                     g_param_spec_int ("margin",
-                                             P_("Margin"),
-                                             P_("Space which is inserted at the edges of the icon view"),
-                                             0, G_MAXINT, 6,
-                                             (GParamFlags)(GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY)));
+    g_object_class_install_property(gobject_class,
+                                    PROP_MARGIN,
+                                    g_param_spec_int("margin",
+                                                     P_("Margin"),
+                                                     P_("Space which is inserted at the edges of the icon view"),
+                                                     0,
+                                                     G_MAXINT,
+                                                     6,
+                                                     (GParamFlags)(GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY)));
 
     /**
      * XGtkIconView:item-orientation:
      *
-     * The item-orientation property specifies how the cells (i.e. the icon and
+     * The item-orientation property specifies how the cells (i.e. the icon
+     * and
      * the text) of the item are positioned relative to each other.
      *
      * Since: 2.6
      */
-    g_object_class_install_property (gobject_class,
-                                     PROP_ITEM_ORIENTATION,
-                                     g_param_spec_enum ("item-orientation",
-                                             P_("Item Orientation"),
-                                             P_("How the text and icon of each item are positioned relative to each other"),
-                                             GTK_TYPE_ORIENTATION,
-                                             GTK_ORIENTATION_VERTICAL,
-                                             (GParamFlags)(GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY)));
+    g_object_class_install_property(gobject_class,
+                                    PROP_ITEM_ORIENTATION,
+                                    g_param_spec_enum("item-orientation",
+                                                      P_("Item Orientation"),
+                                                      P_("How the text and icon of each item are positioned relative "
+                                                         "to "
+                                                         "each other"),
+                                                      GTK_TYPE_ORIENTATION,
+                                                      GTK_ORIENTATION_VERTICAL,
+                                                      (GParamFlags)(GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY)));
 
     /**
      * XGtkIconView:reorderable:
@@ -573,23 +533,25 @@ xiconview_class_init (XGtkIconViewClass *klass)
      *
      * Since: 2.8
      */
-    g_object_class_install_property (gobject_class,
-                                     PROP_REORDERABLE,
-                                     g_param_spec_boolean ("reorderable",
-                                             P_("Reorderable"),
-                                             P_("View is reorderable"),
-                                             FALSE,
-                                             (GParamFlags)(G_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY)));
+    g_object_class_install_property(gobject_class,
+                                    PROP_REORDERABLE,
+                                    g_param_spec_boolean("reorderable",
+                                                         P_("Reorderable"),
+                                                         P_("View is reorderable"),
+                                                         FALSE,
+                                                         (GParamFlags)(G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY)));
 
-    g_object_class_install_property (gobject_class,
-                                     PROP_TOOLTIP_COLUMN,
-                                     g_param_spec_int ("tooltip-column",
-                                             P_("Tooltip Column"),
-                                             P_("The column in the model containing the tooltip texts for the items"),
-                                             -1,
-                                             G_MAXINT,
-                                             -1,
-                                             (GParamFlags)(GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY)));
+    g_object_class_install_property(gobject_class,
+                                    PROP_TOOLTIP_COLUMN,
+                                    g_param_spec_int("tooltip-column",
+                                                     P_("Tooltip Column"),
+                                                     P_("The column in the model containing the tooltip texts for "
+                                                        "the "
+                                                        "items"),
+                                                     -1,
+                                                     G_MAXINT,
+                                                     -1,
+                                                     (GParamFlags)(GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY)));
 
     /**
      * XGtkIconView:item-padding:
@@ -599,53 +561,57 @@ xiconview_class_init (XGtkIconViewClass *klass)
      *
      * Since: 2.18
      */
-    g_object_class_install_property (gobject_class,
-                                     PROP_ITEM_PADDING,
-                                     g_param_spec_int ("item-padding",
-                                             P_("Item Padding"),
-                                             P_("Padding around icon view items"),
-                                             0, G_MAXINT, 6,
-                                             (GParamFlags)(GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY)));
+    g_object_class_install_property(gobject_class,
+                                    PROP_ITEM_PADDING,
+                                    g_param_spec_int("item-padding",
+                                                     P_("Item Padding"),
+                                                     P_("Padding around icon view items"),
+                                                     0,
+                                                     G_MAXINT,
+                                                     6,
+                                                     (GParamFlags)(GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY)));
 
     /**
      * XGtkIconView:cell-area:
      *
      * The #GtkCellArea used to layout cell renderers for this view.
      *
-     * If no area is specified when creating the icon view with xiconview_new_with_area()
+     * If no area is specified when creating the icon view with
+     * xiconview_new_with_area()
      * a #GtkCellAreaBox will be used.
      *
      * Since: 3.0
      */
-    g_object_class_install_property (gobject_class,
-                                     PROP_CELL_AREA,
-                                     g_param_spec_object ("cell-area",
-                                             P_("Cell Area"),
-                                             P_("The GtkCellArea used to layout cells"),
-                                             GTK_TYPE_CELL_AREA,
-                                             (GParamFlags)(GTK_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY)));
+    g_object_class_install_property(gobject_class,
+                                    PROP_CELL_AREA,
+                                    g_param_spec_object("cell-area",
+                                                        P_("Cell Area"),
+                                                        P_("The GtkCellArea used to layout cells"),
+                                                        GTK_TYPE_CELL_AREA,
+                                                        (GParamFlags)(GTK_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY)));
 
     /**
      * XGtkIconView:activate-on-single-click:
      *
-     * The activate-on-single-click property specifies whether the "item-activated" signal
+     * The activate-on-single-click property specifies whether the
+     * "item-activated" signal
      * will be emitted after a single click.
      *
      * Since: 3.8
      */
-    g_object_class_install_property (gobject_class,
-                                     PROP_ACTIVATE_ON_SINGLE_CLICK,
-                                     g_param_spec_boolean ("activate-on-single-click",
-                                             P_("Activate on Single Click"),
-                                             P_("Activate row on a single click"),
-                                             FALSE,
-                                             (GParamFlags)(GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY)));
+    g_object_class_install_property(gobject_class,
+                                    PROP_ACTIVATE_ON_SINGLE_CLICK,
+                                    g_param_spec_boolean("activate-on-single-click",
+                                                         P_("Activate on Single Click"),
+                                                         P_("Activate row on a single click"),
+                                                         FALSE,
+                                                         (GParamFlags)(GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY)));
 
     /* Scrollable interface properties */
-    g_object_class_override_property (gobject_class, PROP_HADJUSTMENT,    "hadjustment");
-    g_object_class_override_property (gobject_class, PROP_VADJUSTMENT,    "vadjustment");
-    g_object_class_override_property (gobject_class, PROP_HSCROLL_POLICY, "hscroll-policy");
-    g_object_class_override_property (gobject_class, PROP_VSCROLL_POLICY, "vscroll-policy");
+    g_object_class_override_property(gobject_class, PROP_HADJUSTMENT, "hadjustment");
+    g_object_class_override_property(gobject_class, PROP_VADJUSTMENT, "vadjustment");
+    g_object_class_override_property(gobject_class, PROP_HSCROLL_POLICY, "hscroll-policy");
+    g_object_class_override_property(gobject_class, PROP_VSCROLL_POLICY, "vscroll-policy");
 
     /* Style properties */
     /**
@@ -653,32 +619,34 @@ xiconview_class_init (XGtkIconViewClass *klass)
      *
      * The color of the selection box.
      *
-     * Deprecated: 3.20: The color of the selection box is determined by CSS;
+     * Deprecated: 3.20: The color of the selection box is determined by
+     * CSS;
      *     the value of this style property is ignored.
      */
-    gtk_widget_class_install_style_property (widget_class,
-            g_param_spec_boxed ("selection-box-color",
-                                P_("Selection Box Color"),
-                                P_("Color of the selection box"),
-                                g_type_from_name ("GdkColor"),
-                                (GParamFlags)(GTK_PARAM_READABLE|G_PARAM_DEPRECATED)));
-
+    gtk_widget_class_install_style_property(widget_class,
+                                            g_param_spec_boxed("selection-box-color",
+                                                               P_("Selection Box Color"),
+                                                               P_("Color of the selection box"),
+                                                               g_type_from_name("GdkColor"),
+                                                               (GParamFlags)(GTK_PARAM_READABLE | G_PARAM_DEPRECATED)));
 
     /**
      * XGtkIconView:selection-box-alpha:
      *
      * The opacity of the selection box.
      *
-     * Deprecated: 3.20: The opacity of the selection box is determined by CSS;
+     * Deprecated: 3.20: The opacity of the selection box is determined by
+     * CSS;
      *     the value of this style property is ignored.
      */
-    gtk_widget_class_install_style_property (widget_class,
-            g_param_spec_uchar ("selection-box-alpha",
-                                P_("Selection Box Alpha"),
-                                P_("Opacity of the selection box"),
-                                0, 0xff,
-                                0x40,
-                                (GParamFlags)(GTK_PARAM_READABLE|G_PARAM_DEPRECATED)));
+    gtk_widget_class_install_style_property(widget_class,
+                                            g_param_spec_uchar("selection-box-alpha",
+                                                               P_("Selection Box Alpha"),
+                                                               P_("Opacity of the selection box"),
+                                                               0,
+                                                               0xff,
+                                                               0x40,
+                                                               (GParamFlags)(GTK_PARAM_READABLE | G_PARAM_DEPRECATED)));
 
     /* Signals */
     /**
@@ -694,15 +662,16 @@ xiconview_class_init (XGtkIconViewClass *klass)
      * emitted when a non-editable item is selected and one of the keys:
      * Space, Return or Enter is pressed.
      */
-    icon_view_signals[ITEM_ACTIVATED] =
-        g_signal_new (I_("item-activated"),
-                      G_TYPE_FROM_CLASS (gobject_class),
-                      G_SIGNAL_RUN_LAST,
-                      G_STRUCT_OFFSET (XGtkIconViewClass, item_activated),
-                      NULL, NULL,
-                      g_cclosure_marshal_VOID__BOXED,
-                      G_TYPE_NONE, 1,
-                      GTK_TYPE_TREE_PATH);
+    icon_view_signals[ITEM_ACTIVATED] = g_signal_new(I_("item-activated"),
+                                                     G_TYPE_FROM_CLASS(gobject_class),
+                                                     G_SIGNAL_RUN_LAST,
+                                                     G_STRUCT_OFFSET(XGtkIconViewClass, item_activated),
+                                                     NULL,
+                                                     NULL,
+                                                     g_cclosure_marshal_VOID__BOXED,
+                                                     G_TYPE_NONE,
+                                                     1,
+                                                     GTK_TYPE_TREE_PATH);
 
     /**
      * XGtkIconView::selection-changed:
@@ -711,14 +680,15 @@ xiconview_class_init (XGtkIconViewClass *klass)
      * The ::selection-changed signal is emitted when the selection
      * (i.e. the set of selected items) changes.
      */
-    icon_view_signals[SELECTION_CHANGED] =
-        g_signal_new (I_("selection-changed"),
-                      G_TYPE_FROM_CLASS (gobject_class),
-                      G_SIGNAL_RUN_FIRST,
-                      G_STRUCT_OFFSET (XGtkIconViewClass, selection_changed),
-                      NULL, NULL,
-                      g_cclosure_marshal_VOID__VOID,
-                      G_TYPE_NONE, 0);
+    icon_view_signals[SELECTION_CHANGED] = g_signal_new(I_("selection-changed"),
+                                                        G_TYPE_FROM_CLASS(gobject_class),
+                                                        G_SIGNAL_RUN_FIRST,
+                                                        G_STRUCT_OFFSET(XGtkIconViewClass, selection_changed),
+                                                        NULL,
+                                                        NULL,
+                                                        g_cclosure_marshal_VOID__VOID,
+                                                        G_TYPE_NONE,
+                                                        0);
 
     /**
      * XGtkIconView::select-all:
@@ -733,14 +703,15 @@ xiconview_class_init (XGtkIconViewClass *klass)
      *
      * The default binding for this signal is Ctrl-a.
      */
-    icon_view_signals[SELECT_ALL] =
-        g_signal_new (I_("select-all"),
-                      G_TYPE_FROM_CLASS (gobject_class),
-                      (GSignalFlags)(G_SIGNAL_RUN_LAST | G_SIGNAL_ACTION),
-                      G_STRUCT_OFFSET (XGtkIconViewClass, select_all),
-                      NULL, NULL,
-                      g_cclosure_marshal_VOID__VOID,
-                      G_TYPE_NONE, 0);
+    icon_view_signals[SELECT_ALL] = g_signal_new(I_("select-all"),
+                                                 G_TYPE_FROM_CLASS(gobject_class),
+                                                 (GSignalFlags)(G_SIGNAL_RUN_LAST | G_SIGNAL_ACTION),
+                                                 G_STRUCT_OFFSET(XGtkIconViewClass, select_all),
+                                                 NULL,
+                                                 NULL,
+                                                 g_cclosure_marshal_VOID__VOID,
+                                                 G_TYPE_NONE,
+                                                 0);
 
     /**
      * XGtkIconView::unselect-all:
@@ -755,14 +726,15 @@ xiconview_class_init (XGtkIconViewClass *klass)
      *
      * The default binding for this signal is Ctrl-Shift-a.
      */
-    icon_view_signals[UNSELECT_ALL] =
-        g_signal_new (I_("unselect-all"),
-                      G_TYPE_FROM_CLASS (gobject_class),
-                      (GSignalFlags)(G_SIGNAL_RUN_LAST | G_SIGNAL_ACTION),
-                      G_STRUCT_OFFSET (XGtkIconViewClass, unselect_all),
-                      NULL, NULL,
-                      g_cclosure_marshal_VOID__VOID,
-                      G_TYPE_NONE, 0);
+    icon_view_signals[UNSELECT_ALL] = g_signal_new(I_("unselect-all"),
+                                                   G_TYPE_FROM_CLASS(gobject_class),
+                                                   (GSignalFlags)(G_SIGNAL_RUN_LAST | G_SIGNAL_ACTION),
+                                                   G_STRUCT_OFFSET(XGtkIconViewClass, unselect_all),
+                                                   NULL,
+                                                   NULL,
+                                                   g_cclosure_marshal_VOID__VOID,
+                                                   G_TYPE_NONE,
+                                                   0);
 
     /**
      * XGtkIconView::select-cursor-item:
@@ -778,14 +750,15 @@ xiconview_class_init (XGtkIconViewClass *klass)
      *
      * There is no default binding for this signal.
      */
-    icon_view_signals[SELECT_CURSOR_ITEM] =
-        g_signal_new (I_("select-cursor-item"),
-                      G_TYPE_FROM_CLASS (gobject_class),
-                      (GSignalFlags)(G_SIGNAL_RUN_LAST | G_SIGNAL_ACTION),
-                      G_STRUCT_OFFSET (XGtkIconViewClass, select_cursor_item),
-                      NULL, NULL,
-                      g_cclosure_marshal_VOID__VOID,
-                      G_TYPE_NONE, 0);
+    icon_view_signals[SELECT_CURSOR_ITEM] = g_signal_new(I_("select-cursor-item"),
+                                                         G_TYPE_FROM_CLASS(gobject_class),
+                                                         (GSignalFlags)(G_SIGNAL_RUN_LAST | G_SIGNAL_ACTION),
+                                                         G_STRUCT_OFFSET(XGtkIconViewClass, select_cursor_item),
+                                                         NULL,
+                                                         NULL,
+                                                         g_cclosure_marshal_VOID__VOID,
+                                                         G_TYPE_NONE,
+                                                         0);
 
     /**
      * XGtkIconView::toggle-cursor-item:
@@ -802,14 +775,15 @@ xiconview_class_init (XGtkIconViewClass *klass)
      *
      * There is no default binding for this signal is Ctrl-Space.
      */
-    icon_view_signals[TOGGLE_CURSOR_ITEM] =
-        g_signal_new (I_("toggle-cursor-item"),
-                      G_TYPE_FROM_CLASS (gobject_class),
-                      (GSignalFlags)(G_SIGNAL_RUN_LAST | G_SIGNAL_ACTION),
-                      G_STRUCT_OFFSET (XGtkIconViewClass, toggle_cursor_item),
-                      NULL, NULL,
-                      g_cclosure_marshal_VOID__VOID,
-                      G_TYPE_NONE, 0);
+    icon_view_signals[TOGGLE_CURSOR_ITEM] = g_signal_new(I_("toggle-cursor-item"),
+                                                         G_TYPE_FROM_CLASS(gobject_class),
+                                                         (GSignalFlags)(G_SIGNAL_RUN_LAST | G_SIGNAL_ACTION),
+                                                         G_STRUCT_OFFSET(XGtkIconViewClass, toggle_cursor_item),
+                                                         NULL,
+                                                         NULL,
+                                                         g_cclosure_marshal_VOID__VOID,
+                                                         G_TYPE_NONE,
+                                                         0);
 
     /**
      * XGtkIconView::activate-cursor-item:
@@ -825,14 +799,15 @@ xiconview_class_init (XGtkIconViewClass *klass)
      *
      * The default bindings for this signal are Space, Return and Enter.
      */
-    icon_view_signals[ACTIVATE_CURSOR_ITEM] =
-        g_signal_new (I_("activate-cursor-item"),
-                      G_TYPE_FROM_CLASS (gobject_class),
-                      (GSignalFlags)(G_SIGNAL_RUN_LAST | G_SIGNAL_ACTION),
-                      G_STRUCT_OFFSET (XGtkIconViewClass, activate_cursor_item),
-                      NULL, NULL,
-                      NULL, // _gtk_marshal_BOOLEAN__VOID,
-                      G_TYPE_BOOLEAN, 0);
+    icon_view_signals[ACTIVATE_CURSOR_ITEM] = g_signal_new(I_("activate-cursor-item"),
+                                                           G_TYPE_FROM_CLASS(gobject_class),
+                                                           (GSignalFlags)(G_SIGNAL_RUN_LAST | G_SIGNAL_ACTION),
+                                                           G_STRUCT_OFFSET(XGtkIconViewClass, activate_cursor_item),
+                                                           NULL,
+                                                           NULL,
+                                                           NULL, // _gtk_marshal_BOOLEAN__VOID,
+                                                           G_TYPE_BOOLEAN,
+                                                           0);
 
     /**
      * XGtkIconView::move-cursor:
@@ -855,105 +830,75 @@ xiconview_class_init (XGtkIconViewClass *klass)
      * All of these will extend the selection when combined with
      * the Shift modifier.
      */
-    icon_view_signals[MOVE_CURSOR] =
-        g_signal_new (I_("move-cursor"),
-                      G_TYPE_FROM_CLASS (gobject_class),
-                      (GSignalFlags)(G_SIGNAL_RUN_LAST | G_SIGNAL_ACTION),
-                      G_STRUCT_OFFSET (XGtkIconViewClass, move_cursor),
-                      NULL, NULL,
-                      NULL, // _gtk_marshal_BOOLEAN__ENUM_INT,
-                      G_TYPE_BOOLEAN, 2,
-                      GTK_TYPE_MOVEMENT_STEP,
-                      G_TYPE_INT);
+    icon_view_signals[MOVE_CURSOR] = g_signal_new(I_("move-cursor"),
+                                                  G_TYPE_FROM_CLASS(gobject_class),
+                                                  (GSignalFlags)(G_SIGNAL_RUN_LAST | G_SIGNAL_ACTION),
+                                                  G_STRUCT_OFFSET(XGtkIconViewClass, move_cursor),
+                                                  NULL,
+                                                  NULL,
+                                                  NULL, // _gtk_marshal_BOOLEAN__ENUM_INT,
+                                                  G_TYPE_BOOLEAN,
+                                                  2,
+                                                  GTK_TYPE_MOVEMENT_STEP,
+                                                  G_TYPE_INT);
 
     /* Key bindings */
-    gtk_binding_entry_add_signal (binding_set, GDK_KEY_a, (GdkModifierType)(GDK_CONTROL_MASK),
-                                  "select-all", 0);
-    gtk_binding_entry_add_signal (binding_set, GDK_KEY_a, (GdkModifierType)(GDK_CONTROL_MASK | GDK_SHIFT_MASK),
-                                  "unselect-all", 0);
-    gtk_binding_entry_add_signal (binding_set, GDK_KEY_space, GDK_CONTROL_MASK,
-                                  "toggle-cursor-item", 0);
-    gtk_binding_entry_add_signal (binding_set, GDK_KEY_KP_Space, GDK_CONTROL_MASK,
-                                  "toggle-cursor-item", 0);
+    gtk_binding_entry_add_signal(binding_set, GDK_KEY_a, (GdkModifierType)(GDK_CONTROL_MASK), "select-all", 0);
+    gtk_binding_entry_add_signal(
+        binding_set, GDK_KEY_a, (GdkModifierType)(GDK_CONTROL_MASK | GDK_SHIFT_MASK), "unselect-all", 0);
+    gtk_binding_entry_add_signal(binding_set, GDK_KEY_space, GDK_CONTROL_MASK, "toggle-cursor-item", 0);
+    gtk_binding_entry_add_signal(binding_set, GDK_KEY_KP_Space, GDK_CONTROL_MASK, "toggle-cursor-item", 0);
 
-    gtk_binding_entry_add_signal (binding_set, GDK_KEY_space, (GdkModifierType)0,
-                                  "activate-cursor-item", 0);
-    gtk_binding_entry_add_signal (binding_set, GDK_KEY_KP_Space, (GdkModifierType)0,
-                                  "activate-cursor-item", 0);
-    gtk_binding_entry_add_signal (binding_set, GDK_KEY_Return, (GdkModifierType)0,
-                                  "activate-cursor-item", 0);
-    gtk_binding_entry_add_signal (binding_set, GDK_KEY_ISO_Enter, (GdkModifierType)0,
-                                  "activate-cursor-item", 0);
-    gtk_binding_entry_add_signal (binding_set, GDK_KEY_KP_Enter, (GdkModifierType)0,
-                                  "activate-cursor-item", 0);
+    gtk_binding_entry_add_signal(binding_set, GDK_KEY_space, (GdkModifierType)0, "activate-cursor-item", 0);
+    gtk_binding_entry_add_signal(binding_set, GDK_KEY_KP_Space, (GdkModifierType)0, "activate-cursor-item", 0);
+    gtk_binding_entry_add_signal(binding_set, GDK_KEY_Return, (GdkModifierType)0, "activate-cursor-item", 0);
+    gtk_binding_entry_add_signal(binding_set, GDK_KEY_ISO_Enter, (GdkModifierType)0, "activate-cursor-item", 0);
+    gtk_binding_entry_add_signal(binding_set, GDK_KEY_KP_Enter, (GdkModifierType)0, "activate-cursor-item", 0);
 
-    xiconview_add_move_binding (binding_set, GDK_KEY_Up, 0,
-                                    GTK_MOVEMENT_DISPLAY_LINES, -1);
-    xiconview_add_move_binding (binding_set, GDK_KEY_KP_Up, 0,
-                                    GTK_MOVEMENT_DISPLAY_LINES, -1);
+    xiconview_add_move_binding(binding_set, GDK_KEY_Up, 0, GTK_MOVEMENT_DISPLAY_LINES, -1);
+    xiconview_add_move_binding(binding_set, GDK_KEY_KP_Up, 0, GTK_MOVEMENT_DISPLAY_LINES, -1);
 
-    xiconview_add_move_binding (binding_set, GDK_KEY_Down, 0,
-                                    GTK_MOVEMENT_DISPLAY_LINES, 1);
-    xiconview_add_move_binding (binding_set, GDK_KEY_KP_Down, 0,
-                                    GTK_MOVEMENT_DISPLAY_LINES, 1);
+    xiconview_add_move_binding(binding_set, GDK_KEY_Down, 0, GTK_MOVEMENT_DISPLAY_LINES, 1);
+    xiconview_add_move_binding(binding_set, GDK_KEY_KP_Down, 0, GTK_MOVEMENT_DISPLAY_LINES, 1);
 
-    xiconview_add_move_binding (binding_set, GDK_KEY_p, GDK_CONTROL_MASK,
-                                    GTK_MOVEMENT_DISPLAY_LINES, -1);
+    xiconview_add_move_binding(binding_set, GDK_KEY_p, GDK_CONTROL_MASK, GTK_MOVEMENT_DISPLAY_LINES, -1);
 
-    xiconview_add_move_binding (binding_set, GDK_KEY_n, GDK_CONTROL_MASK,
-                                    GTK_MOVEMENT_DISPLAY_LINES, 1);
+    xiconview_add_move_binding(binding_set, GDK_KEY_n, GDK_CONTROL_MASK, GTK_MOVEMENT_DISPLAY_LINES, 1);
 
-    xiconview_add_move_binding (binding_set, GDK_KEY_Home, 0,
-                                    GTK_MOVEMENT_BUFFER_ENDS, -1);
-    xiconview_add_move_binding (binding_set, GDK_KEY_KP_Home, 0,
-                                    GTK_MOVEMENT_BUFFER_ENDS, -1);
+    xiconview_add_move_binding(binding_set, GDK_KEY_Home, 0, GTK_MOVEMENT_BUFFER_ENDS, -1);
+    xiconview_add_move_binding(binding_set, GDK_KEY_KP_Home, 0, GTK_MOVEMENT_BUFFER_ENDS, -1);
 
-    xiconview_add_move_binding (binding_set, GDK_KEY_End, 0,
-                                    GTK_MOVEMENT_BUFFER_ENDS, 1);
-    xiconview_add_move_binding (binding_set, GDK_KEY_KP_End, 0,
-                                    GTK_MOVEMENT_BUFFER_ENDS, 1);
+    xiconview_add_move_binding(binding_set, GDK_KEY_End, 0, GTK_MOVEMENT_BUFFER_ENDS, 1);
+    xiconview_add_move_binding(binding_set, GDK_KEY_KP_End, 0, GTK_MOVEMENT_BUFFER_ENDS, 1);
 
-    xiconview_add_move_binding (binding_set, GDK_KEY_Page_Up, 0,
-                                    GTK_MOVEMENT_PAGES, -1);
-    xiconview_add_move_binding (binding_set, GDK_KEY_KP_Page_Up, 0,
-                                    GTK_MOVEMENT_PAGES, -1);
+    xiconview_add_move_binding(binding_set, GDK_KEY_Page_Up, 0, GTK_MOVEMENT_PAGES, -1);
+    xiconview_add_move_binding(binding_set, GDK_KEY_KP_Page_Up, 0, GTK_MOVEMENT_PAGES, -1);
 
-    xiconview_add_move_binding (binding_set, GDK_KEY_Page_Down, 0,
-                                    GTK_MOVEMENT_PAGES, 1);
-    xiconview_add_move_binding (binding_set, GDK_KEY_KP_Page_Down, 0,
-                                    GTK_MOVEMENT_PAGES, 1);
+    xiconview_add_move_binding(binding_set, GDK_KEY_Page_Down, 0, GTK_MOVEMENT_PAGES, 1);
+    xiconview_add_move_binding(binding_set, GDK_KEY_KP_Page_Down, 0, GTK_MOVEMENT_PAGES, 1);
 
-    xiconview_add_move_binding (binding_set, GDK_KEY_Right, 0,
-                                    GTK_MOVEMENT_VISUAL_POSITIONS, 1);
-    xiconview_add_move_binding (binding_set, GDK_KEY_Left, 0,
-                                    GTK_MOVEMENT_VISUAL_POSITIONS, -1);
+    xiconview_add_move_binding(binding_set, GDK_KEY_Right, 0, GTK_MOVEMENT_VISUAL_POSITIONS, 1);
+    xiconview_add_move_binding(binding_set, GDK_KEY_Left, 0, GTK_MOVEMENT_VISUAL_POSITIONS, -1);
 
-    xiconview_add_move_binding (binding_set, GDK_KEY_KP_Right, 0,
-                                    GTK_MOVEMENT_VISUAL_POSITIONS, 1);
-    xiconview_add_move_binding (binding_set, GDK_KEY_KP_Left, 0,
-                                    GTK_MOVEMENT_VISUAL_POSITIONS, -1);
+    xiconview_add_move_binding(binding_set, GDK_KEY_KP_Right, 0, GTK_MOVEMENT_VISUAL_POSITIONS, 1);
+    xiconview_add_move_binding(binding_set, GDK_KEY_KP_Left, 0, GTK_MOVEMENT_VISUAL_POSITIONS, -1);
 
-//   gtk_widget_class_set_accessible_type (widget_class, GTK_TYPE_ICON_VIEW_ACCESSIBLE);
-    gtk_widget_class_set_css_name (widget_class, "iconview");
+    //   gtk_widget_class_set_accessible_type (widget_class,
+    //   GTK_TYPE_ICON_VIEW_ACCESSIBLE);
+    gtk_widget_class_set_css_name(widget_class, "iconview");
 }
 
-static void
-xiconview_buildable_init (GtkBuildableIface *iface)
+static void xiconview_buildable_init(GtkBuildableIface *iface)
 {
-    parent_buildable_iface = (GtkBuildableIface *)g_type_interface_peek_parent (iface);
-//     iface->add_child = _gtk_cell_layout_buildable_add_child;
-//     iface->custom_tag_start = xiconview_buildable_custom_tag_start;
-//     iface->custom_tag_end = xiconview_buildable_custom_tag_end;
+    parent_buildable_iface = (GtkBuildableIface *)g_type_interface_peek_parent(iface);
+    //     iface->add_child = _gtk_cell_layout_buildable_add_child;
+    //     iface->custom_tag_start = xiconview_buildable_custom_tag_start;
+    //     iface->custom_tag_end = xiconview_buildable_custom_tag_end;
 }
 
-static void
-xiconview_cell_layout_init (GtkCellLayoutIface *iface)
-{
-    iface->get_area = xiconview_cell_layout_get_area;
-}
+static void xiconview_cell_layout_init(GtkCellLayoutIface *iface) { iface->get_area = xiconview_cell_layout_get_area; }
 
-static void
-xiconview_init (XGtkIconView *icon_view)
+static void xiconview_init(XGtkIconView *icon_view)
 {
     icon_view->priv = new XGtkIconViewPrivate();
 
@@ -970,7 +915,7 @@ xiconview_init (XGtkIconView *icon_view)
     icon_view->priv->pixbuf_cell = NULL;
     icon_view->priv->tooltip_column = -1;
 
-    gtk_widget_set_can_focus (GTK_WIDGET (icon_view), TRUE);
+    gtk_widget_set_can_focus(GTK_WIDGET(icon_view), TRUE);
 
     icon_view->priv->item_orientation = GTK_ORIENTATION_VERTICAL;
 
@@ -985,67 +930,59 @@ xiconview_init (XGtkIconView *icon_view)
 
     icon_view->priv->draw_focus = TRUE;
 
-    icon_view->priv->row_contexts =
-        g_ptr_array_new_with_free_func ((GDestroyNotify)g_object_unref);
+    icon_view->priv->row_contexts = g_ptr_array_new_with_free_func((GDestroyNotify)g_object_unref);
 
-    gtk_style_context_add_class (gtk_widget_get_style_context (GTK_WIDGET (icon_view)),
-                                 GTK_STYLE_CLASS_VIEW);
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(icon_view)), GTK_STYLE_CLASS_VIEW);
 }
 
 /* GObject methods */
 
-static void
-xiconview_constructed (GObject *object)
+static void xiconview_constructed(GObject *object)
 {
     XGtkIconView *icon_view = XICONVIEW(object);
 
-    G_OBJECT_CLASS(xiconview_parent_class)->constructed (object);
+    G_OBJECT_CLASS(xiconview_parent_class)->constructed(object);
 
-    xiconview_ensure_cell_area (icon_view, NULL);
+    xiconview_ensure_cell_area(icon_view, NULL);
 }
 
-static void
-xiconview_dispose (GObject *object)
+static void xiconview_dispose(GObject *object)
 {
     XGtkIconView *icon_view;
     XGtkIconViewPrivate *priv;
 
     icon_view = XICONVIEW(object);
-    priv      = icon_view->priv;
+    priv = icon_view->priv;
 
     if (priv->cell_area_context)
     {
-        g_object_unref (priv->cell_area_context);
+        g_object_unref(priv->cell_area_context);
         priv->cell_area_context = NULL;
     }
 
     if (priv->row_contexts)
     {
-        g_ptr_array_free (priv->row_contexts, TRUE);
+        g_ptr_array_free(priv->row_contexts, TRUE);
         priv->row_contexts = NULL;
     }
 
     if (priv->cell_area)
     {
-        gtk_cell_area_stop_editing (icon_view->priv->cell_area, TRUE);
+        gtk_cell_area_stop_editing(icon_view->priv->cell_area, TRUE);
 
-        g_signal_handler_disconnect (priv->cell_area, priv->add_editable_id);
-        g_signal_handler_disconnect (priv->cell_area, priv->remove_editable_id);
+        g_signal_handler_disconnect(priv->cell_area, priv->add_editable_id);
+        g_signal_handler_disconnect(priv->cell_area, priv->remove_editable_id);
         priv->add_editable_id = 0;
         priv->remove_editable_id = 0;
 
-        g_object_unref (priv->cell_area);
+        g_object_unref(priv->cell_area);
         priv->cell_area = NULL;
     }
 
-    G_OBJECT_CLASS (xiconview_parent_class)->dispose (object);
+    G_OBJECT_CLASS(xiconview_parent_class)->dispose(object);
 }
 
-static void
-xiconview_set_property (GObject      *object,
-                            guint         prop_id,
-                            const GValue *value,
-                            GParamSpec   *pspec)
+static void xiconview_set_property(GObject *object, guint prop_id, const GValue *value, GParamSpec *pspec)
 {
     XGtkIconView *icon_view;
     GtkCellArea *area;
@@ -1054,108 +991,105 @@ xiconview_set_property (GObject      *object,
 
     switch (prop_id)
     {
-    case PROP_SELECTION_MODE:
-        xiconview_set_selection_mode (icon_view, (GtkSelectionMode)g_value_get_enum (value));
-        break;
-    case PROP_PIXBUF_COLUMN:
-        xiconview_set_pixbuf_column (icon_view, g_value_get_int (value));
-        break;
-    case PROP_TEXT_COLUMN:
-        xiconview_set_text_column (icon_view, g_value_get_int (value));
-        break;
-    case PROP_MARKUP_COLUMN:
-        xiconview_set_markup_column (icon_view, g_value_get_int (value));
-        break;
-    case PROP_MODEL:
-        xiconview_set_model (icon_view, (GtkTreeModel*)g_value_get_object (value));
-        break;
-    case PROP_ITEM_ORIENTATION:
-        xiconview_set_item_orientation (icon_view, (GtkOrientation)g_value_get_enum (value));
-        break;
-    case PROP_COLUMNS:
-        xiconview_set_columns (icon_view, g_value_get_int (value));
-        break;
-    case PROP_ITEM_WIDTH:
-        xiconview_set_item_width (icon_view, g_value_get_int (value));
-        break;
-    case PROP_SPACING:
-        xiconview_set_spacing (icon_view, g_value_get_int (value));
-        break;
-    case PROP_ROW_SPACING:
-        xiconview_set_row_spacing (icon_view, g_value_get_int (value));
-        break;
-    case PROP_COLUMN_SPACING:
-        xiconview_set_column_spacing (icon_view, g_value_get_int (value));
-        break;
-    case PROP_MARGIN:
-        xiconview_set_margin (icon_view, g_value_get_int (value));
-        break;
-    case PROP_REORDERABLE:
-        xiconview_set_reorderable (icon_view, g_value_get_boolean (value));
-        break;
+        case PROP_SELECTION_MODE:
+            xiconview_set_selection_mode(icon_view, (GtkSelectionMode)g_value_get_enum(value));
+            break;
+        case PROP_PIXBUF_COLUMN:
+            xiconview_set_pixbuf_column(icon_view, g_value_get_int(value));
+            break;
+        case PROP_TEXT_COLUMN:
+            xiconview_set_text_column(icon_view, g_value_get_int(value));
+            break;
+        case PROP_MARKUP_COLUMN:
+            xiconview_set_markup_column(icon_view, g_value_get_int(value));
+            break;
+        case PROP_MODEL:
+            xiconview_set_model(icon_view, (GtkTreeModel *)g_value_get_object(value));
+            break;
+        case PROP_ITEM_ORIENTATION:
+            xiconview_set_item_orientation(icon_view, (GtkOrientation)g_value_get_enum(value));
+            break;
+        case PROP_COLUMNS:
+            xiconview_set_columns(icon_view, g_value_get_int(value));
+            break;
+        case PROP_ITEM_WIDTH:
+            xiconview_set_item_width(icon_view, g_value_get_int(value));
+            break;
+        case PROP_SPACING:
+            xiconview_set_spacing(icon_view, g_value_get_int(value));
+            break;
+        case PROP_ROW_SPACING:
+            xiconview_set_row_spacing(icon_view, g_value_get_int(value));
+            break;
+        case PROP_COLUMN_SPACING:
+            xiconview_set_column_spacing(icon_view, g_value_get_int(value));
+            break;
+        case PROP_MARGIN:
+            xiconview_set_margin(icon_view, g_value_get_int(value));
+            break;
+        case PROP_REORDERABLE:
+            xiconview_set_reorderable(icon_view, g_value_get_boolean(value));
+            break;
 
-    case PROP_TOOLTIP_COLUMN:
-        xiconview_set_tooltip_column (icon_view, g_value_get_int (value));
-        break;
+        case PROP_TOOLTIP_COLUMN:
+            xiconview_set_tooltip_column(icon_view, g_value_get_int(value));
+            break;
 
-    case PROP_ITEM_PADDING:
-        xiconview_set_item_padding (icon_view, g_value_get_int (value));
-        break;
+        case PROP_ITEM_PADDING:
+            xiconview_set_item_padding(icon_view, g_value_get_int(value));
+            break;
 
-    case PROP_ACTIVATE_ON_SINGLE_CLICK:
-        xiconview_set_activate_on_single_click (icon_view, g_value_get_boolean (value));
-        break;
+        case PROP_ACTIVATE_ON_SINGLE_CLICK:
+            xiconview_set_activate_on_single_click(icon_view, g_value_get_boolean(value));
+            break;
 
-    case PROP_CELL_AREA:
-        /* Construct-only, can only be assigned once */
-        area = (GtkCellArea*)g_value_get_object(value);
-        if (area)
-        {
-            if (icon_view->priv->cell_area != NULL)
+        case PROP_CELL_AREA:
+            /* Construct-only, can only be assigned once */
+            area = (GtkCellArea *)g_value_get_object(value);
+            if (area)
             {
-                g_warning ("cell-area has already been set, ignoring construct property");
-                g_object_ref_sink (area);
-                g_object_unref (area);
+                if (icon_view->priv->cell_area != NULL)
+                {
+                    g_warning("cell-area has already been set, "
+                              "ignoring construct property");
+                    g_object_ref_sink(area);
+                    g_object_unref(area);
+                }
+                else
+                    xiconview_ensure_cell_area(icon_view, area);
             }
-            else
-                xiconview_ensure_cell_area (icon_view, area);
-        }
-        break;
+            break;
 
-    case PROP_HADJUSTMENT:
-        xiconview_set_hadjustment(icon_view, (GtkAdjustment*)g_value_get_object(value));
-        break;
-    case PROP_VADJUSTMENT:
-        xiconview_set_vadjustment(icon_view, (GtkAdjustment*)g_value_get_object(value));
-        break;
-    case PROP_HSCROLL_POLICY:
-        if (icon_view->priv->hscroll_policy != g_value_get_enum (value))
-        {
-            icon_view->priv->hscroll_policy = g_value_get_enum (value);
-            gtk_widget_queue_resize (GTK_WIDGET (icon_view));
-            g_object_notify_by_pspec (object, pspec);
-        }
-        break;
-    case PROP_VSCROLL_POLICY:
-        if (icon_view->priv->vscroll_policy != g_value_get_enum (value))
-        {
-            icon_view->priv->vscroll_policy = g_value_get_enum (value);
-            gtk_widget_queue_resize (GTK_WIDGET (icon_view));
-            g_object_notify_by_pspec (object, pspec);
-        }
-        break;
+        case PROP_HADJUSTMENT:
+            xiconview_set_hadjustment(icon_view, (GtkAdjustment *)g_value_get_object(value));
+            break;
+        case PROP_VADJUSTMENT:
+            xiconview_set_vadjustment(icon_view, (GtkAdjustment *)g_value_get_object(value));
+            break;
+        case PROP_HSCROLL_POLICY:
+            if (icon_view->priv->hscroll_policy != g_value_get_enum(value))
+            {
+                icon_view->priv->hscroll_policy = g_value_get_enum(value);
+                gtk_widget_queue_resize(GTK_WIDGET(icon_view));
+                g_object_notify_by_pspec(object, pspec);
+            }
+            break;
+        case PROP_VSCROLL_POLICY:
+            if (icon_view->priv->vscroll_policy != g_value_get_enum(value))
+            {
+                icon_view->priv->vscroll_policy = g_value_get_enum(value);
+                gtk_widget_queue_resize(GTK_WIDGET(icon_view));
+                g_object_notify_by_pspec(object, pspec);
+            }
+            break;
 
-    default:
-        G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
-        break;
+        default:
+            G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
+            break;
     }
 }
 
-static void
-xiconview_get_property (GObject      *object,
-                            guint         prop_id,
-                            GValue       *value,
-                            GParamSpec   *pspec)
+static void xiconview_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
 {
     XGtkIconView *icon_view;
 
@@ -1163,113 +1097,111 @@ xiconview_get_property (GObject      *object,
 
     switch (prop_id)
     {
-    case PROP_SELECTION_MODE:
-        g_value_set_enum (value, icon_view->priv->selection_mode);
-        break;
-    case PROP_PIXBUF_COLUMN:
-        g_value_set_int (value, icon_view->priv->pixbuf_column);
-        break;
-    case PROP_TEXT_COLUMN:
-        g_value_set_int (value, icon_view->priv->text_column);
-        break;
-    case PROP_MARKUP_COLUMN:
-        g_value_set_int (value, icon_view->priv->markup_column);
-        break;
-    case PROP_MODEL:
-        g_value_set_object (value, icon_view->priv->model);
-        break;
-    case PROP_ITEM_ORIENTATION:
-        g_value_set_enum (value, icon_view->priv->item_orientation);
-        break;
-    case PROP_COLUMNS:
-        g_value_set_int (value, icon_view->priv->columns);
-        break;
-    case PROP_ITEM_WIDTH:
-        g_value_set_int (value, icon_view->priv->item_width);
-        break;
-    case PROP_SPACING:
-        g_value_set_int (value, icon_view->priv->spacing);
-        break;
-    case PROP_ROW_SPACING:
-        g_value_set_int (value, icon_view->priv->row_spacing);
-        break;
-    case PROP_COLUMN_SPACING:
-        g_value_set_int (value, icon_view->priv->column_spacing);
-        break;
-    case PROP_MARGIN:
-        g_value_set_int (value, icon_view->priv->margin);
-        break;
-    case PROP_REORDERABLE:
-        g_value_set_boolean (value, icon_view->priv->reorderable);
-        break;
-    case PROP_TOOLTIP_COLUMN:
-        g_value_set_int (value, icon_view->priv->tooltip_column);
-        break;
+        case PROP_SELECTION_MODE:
+            g_value_set_enum(value, icon_view->priv->selection_mode);
+            break;
+        case PROP_PIXBUF_COLUMN:
+            g_value_set_int(value, icon_view->priv->pixbuf_column);
+            break;
+        case PROP_TEXT_COLUMN:
+            g_value_set_int(value, icon_view->priv->text_column);
+            break;
+        case PROP_MARKUP_COLUMN:
+            g_value_set_int(value, icon_view->priv->markup_column);
+            break;
+        case PROP_MODEL:
+            g_value_set_object(value, icon_view->priv->model);
+            break;
+        case PROP_ITEM_ORIENTATION:
+            g_value_set_enum(value, icon_view->priv->item_orientation);
+            break;
+        case PROP_COLUMNS:
+            g_value_set_int(value, icon_view->priv->columns);
+            break;
+        case PROP_ITEM_WIDTH:
+            g_value_set_int(value, icon_view->priv->item_width);
+            break;
+        case PROP_SPACING:
+            g_value_set_int(value, icon_view->priv->spacing);
+            break;
+        case PROP_ROW_SPACING:
+            g_value_set_int(value, icon_view->priv->row_spacing);
+            break;
+        case PROP_COLUMN_SPACING:
+            g_value_set_int(value, icon_view->priv->column_spacing);
+            break;
+        case PROP_MARGIN:
+            g_value_set_int(value, icon_view->priv->margin);
+            break;
+        case PROP_REORDERABLE:
+            g_value_set_boolean(value, icon_view->priv->reorderable);
+            break;
+        case PROP_TOOLTIP_COLUMN:
+            g_value_set_int(value, icon_view->priv->tooltip_column);
+            break;
 
-    case PROP_ITEM_PADDING:
-        g_value_set_int (value, icon_view->priv->item_padding);
-        break;
+        case PROP_ITEM_PADDING:
+            g_value_set_int(value, icon_view->priv->item_padding);
+            break;
 
-    case PROP_ACTIVATE_ON_SINGLE_CLICK:
-        g_value_set_boolean (value, icon_view->priv->activate_on_single_click);
-        break;
+        case PROP_ACTIVATE_ON_SINGLE_CLICK:
+            g_value_set_boolean(value, icon_view->priv->activate_on_single_click);
+            break;
 
-    case PROP_CELL_AREA:
-        g_value_set_object (value, icon_view->priv->cell_area);
-        break;
+        case PROP_CELL_AREA:
+            g_value_set_object(value, icon_view->priv->cell_area);
+            break;
 
-    case PROP_HADJUSTMENT:
-        g_value_set_object (value, icon_view->priv->hadjustment);
-        break;
-    case PROP_VADJUSTMENT:
-        g_value_set_object (value, icon_view->priv->vadjustment);
-        break;
-    case PROP_HSCROLL_POLICY:
-        g_value_set_enum (value, icon_view->priv->hscroll_policy);
-        break;
-    case PROP_VSCROLL_POLICY:
-        g_value_set_enum (value, icon_view->priv->vscroll_policy);
-        break;
+        case PROP_HADJUSTMENT:
+            g_value_set_object(value, icon_view->priv->hadjustment);
+            break;
+        case PROP_VADJUSTMENT:
+            g_value_set_object(value, icon_view->priv->vadjustment);
+            break;
+        case PROP_HSCROLL_POLICY:
+            g_value_set_enum(value, icon_view->priv->hscroll_policy);
+            break;
+        case PROP_VSCROLL_POLICY:
+            g_value_set_enum(value, icon_view->priv->vscroll_policy);
+            break;
 
-    default:
-        G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
-        break;
+        default:
+            G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
+            break;
     }
 }
 
 /* GtkWidget methods */
-static void
-xiconview_destroy (GtkWidget *widget)
+static void xiconview_destroy(GtkWidget *widget)
 {
     XGtkIconView *icon_view = XICONVIEW(widget);
 
-    xiconview_set_model (icon_view, NULL);
+    xiconview_set_model(icon_view, NULL);
 
     if (icon_view->priv->scroll_to_path != NULL)
     {
-        gtk_tree_row_reference_free (icon_view->priv->scroll_to_path);
+        gtk_tree_row_reference_free(icon_view->priv->scroll_to_path);
         icon_view->priv->scroll_to_path = NULL;
     }
 
-    remove_scroll_timeout (icon_view);
+    remove_scroll_timeout(icon_view);
 
     if (icon_view->priv->hadjustment != NULL)
     {
-        g_object_unref (icon_view->priv->hadjustment);
+        g_object_unref(icon_view->priv->hadjustment);
         icon_view->priv->hadjustment = NULL;
     }
 
     if (icon_view->priv->vadjustment != NULL)
     {
-        g_object_unref (icon_view->priv->vadjustment);
+        g_object_unref(icon_view->priv->vadjustment);
         icon_view->priv->vadjustment = NULL;
     }
 
-    GTK_WIDGET_CLASS (xiconview_parent_class)->destroy (widget);
+    GTK_WIDGET_CLASS(xiconview_parent_class)->destroy(widget);
 }
 
-static void
-xiconview_realize (GtkWidget *widget)
+static void xiconview_realize(GtkWidget *widget)
 {
     XGtkIconView *icon_view = XICONVIEW(widget);
     GtkAllocation allocation;
@@ -1277,9 +1209,9 @@ xiconview_realize (GtkWidget *widget)
     GdkWindowAttr attributes;
     gint attributes_mask;
 
-    gtk_widget_set_realized (widget, TRUE);
+    gtk_widget_set_realized(widget, TRUE);
 
-    gtk_widget_get_allocation (widget, &allocation);
+    gtk_widget_get_allocation(widget, &allocation);
 
     /* Make the main, clipping window */
     attributes.window_type = GDK_WINDOW_CHILD;
@@ -1288,76 +1220,71 @@ xiconview_realize (GtkWidget *widget)
     attributes.width = allocation.width;
     attributes.height = allocation.height;
     attributes.wclass = GDK_INPUT_OUTPUT;
-    attributes.visual = gtk_widget_get_visual (widget);
+    attributes.visual = gtk_widget_get_visual(widget);
     attributes.event_mask = GDK_VISIBILITY_NOTIFY_MASK;
 
     attributes_mask = GDK_WA_X | GDK_WA_Y | GDK_WA_VISUAL;
 
-    window = gdk_window_new (gtk_widget_get_parent_window (widget),
-                             &attributes, attributes_mask);
-    gtk_widget_set_window (widget, window);
-    gtk_widget_register_window (widget, window);
+    window = gdk_window_new(gtk_widget_get_parent_window(widget), &attributes, attributes_mask);
+    gtk_widget_set_window(widget, window);
+    gtk_widget_register_window(widget, window);
 
-    gtk_widget_get_allocation (widget, &allocation);
+    gtk_widget_get_allocation(widget, &allocation);
 
     /* Make the window for the icon view */
     attributes.x = 0;
     attributes.y = 0;
-    attributes.width = MAX (icon_view->priv->width, allocation.width);
-    attributes.height = MAX (icon_view->priv->height, allocation.height);
-    attributes.event_mask = (GDK_SCROLL_MASK |
-                             GDK_SMOOTH_SCROLL_MASK |
-                             GDK_POINTER_MOTION_MASK |
-                             GDK_LEAVE_NOTIFY_MASK |
-                             GDK_BUTTON_PRESS_MASK |
-                             GDK_BUTTON_RELEASE_MASK |
-                             GDK_KEY_PRESS_MASK |
-                             GDK_KEY_RELEASE_MASK) |
-                            gtk_widget_get_events (widget);
+    attributes.width = MAX(icon_view->priv->width, allocation.width);
+    attributes.height = MAX(icon_view->priv->height, allocation.height);
+    attributes.event_mask = (GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK | GDK_POINTER_MOTION_MASK | GDK_LEAVE_NOTIFY_MASK
+                             | GDK_BUTTON_PRESS_MASK
+                             | GDK_BUTTON_RELEASE_MASK
+                             | GDK_KEY_PRESS_MASK
+                             | GDK_KEY_RELEASE_MASK)
+                            | gtk_widget_get_events(widget);
 
-    icon_view->priv->bin_window = gdk_window_new (window,
-                                  &attributes, attributes_mask);
-    gtk_widget_register_window (widget, icon_view->priv->bin_window);
-    gdk_window_show (icon_view->priv->bin_window);
+    icon_view->priv->bin_window = gdk_window_new(window, &attributes, attributes_mask);
+    gtk_widget_register_window(widget, icon_view->priv->bin_window);
+    gdk_window_show(icon_view->priv->bin_window);
 }
 
-static void
-xiconview_unrealize (GtkWidget *widget)
+static void xiconview_unrealize(GtkWidget *widget)
 {
     XGtkIconView *icon_view;
 
     icon_view = XICONVIEW(widget);
 
-    gtk_widget_unregister_window (widget, icon_view->priv->bin_window);
-    gdk_window_destroy (icon_view->priv->bin_window);
+    gtk_widget_unregister_window(widget, icon_view->priv->bin_window);
+    gdk_window_destroy(icon_view->priv->bin_window);
     icon_view->priv->bin_window = NULL;
 
-    GTK_WIDGET_CLASS (xiconview_parent_class)->unrealize (widget);
+    GTK_WIDGET_CLASS(xiconview_parent_class)->unrealize(widget);
 }
 
-static gint
-xiconview_get_n_items (XGtkIconView *icon_view)
+static gint xiconview_get_n_items(XGtkIconView *icon_view)
 {
     XGtkIconViewPrivate *priv = icon_view->priv;
 
     if (priv->model == NULL)
         return 0;
 
-    return gtk_tree_model_iter_n_children (priv->model, NULL);
+    return gtk_tree_model_iter_n_children(priv->model, NULL);
 }
 
-static void
-adjust_wrap_width (XGtkIconView *icon_view)
+static void adjust_wrap_width(XGtkIconView *icon_view)
 {
     if (icon_view->priv->text_cell)
     {
         gint pixbuf_width, wrap_width;
 
-        if (icon_view->priv->items && icon_view->priv->pixbuf_cell)
+        if (    !icon_view->priv->llItems.empty()
+             && icon_view->priv->pixbuf_cell
+           )
         {
-            gtk_cell_renderer_get_preferred_width (icon_view->priv->pixbuf_cell,
-                                                   GTK_WIDGET (icon_view),
-                                                   &pixbuf_width, NULL);
+            gtk_cell_renderer_get_preferred_width(icon_view->priv->pixbuf_cell,
+                                                  GTK_WIDGET(icon_view),
+                                                  &pixbuf_width,
+                                                  NULL);
         }
         else
         {
@@ -1379,20 +1306,24 @@ adjust_wrap_width (XGtkIconView *icon_view)
         }
         else
         {
-            wrap_width = MAX (pixbuf_width * 2, 50);
+            wrap_width = MAX(pixbuf_width * 2, 50);
         }
 
-        if (icon_view->priv->items && icon_view->priv->pixbuf_cell)
+        if (    !icon_view->priv->llItems.empty()
+             && icon_view->priv->pixbuf_cell
+           )
         {
-            /* Here we go with the same old guess, try the icon size and set double
-             * the size of the first icon found in the list, naive but works much
+            /* Here we go with the same old guess, try the icon size
+             * and set double
+             * the size of the first icon found in the list, naive
+             * but works much
              * of the time */
 
-            wrap_width = MAX (wrap_width * 2, 50);
+            wrap_width = MAX(wrap_width * 2, 50);
         }
 
-        g_object_set (icon_view->priv->text_cell, "wrap-width", wrap_width, NULL);
-        g_object_set (icon_view->priv->text_cell, "width", wrap_width, NULL);
+        g_object_set(icon_view->priv->text_cell, "wrap-width", wrap_width, NULL);
+        g_object_set(icon_view->priv->text_cell, "width", wrap_width, NULL);
     }
 }
 
@@ -1421,143 +1352,127 @@ adjust_wrap_width (XGtkIconView *icon_view)
  * So when reading this code and fixing my bugs where I confuse these two, be
  * aware of this distinction.
  */
-static void
-cell_area_get_preferred_size (XGtkIconView        *icon_view,
-                              GtkCellAreaContext *context,
-                              GtkOrientation      orientation,
-                              gint                for_size,
-                              gint               *minimum,
-                              gint               *natural)
+static void cell_area_get_preferred_size(XGtkIconView *icon_view,
+                                         GtkCellAreaContext *context,
+                                         GtkOrientation orientation,
+                                         gint for_size,
+                                         gint *minimum,
+                                         gint *natural)
 {
     if (orientation == GTK_ORIENTATION_HORIZONTAL)
     {
         if (for_size > 0)
-            gtk_cell_area_get_preferred_width_for_height (icon_view->priv->cell_area,
-                    context,
-                    GTK_WIDGET (icon_view),
-                    for_size,
-                    minimum, natural);
+            gtk_cell_area_get_preferred_width_for_height(
+                icon_view->priv->cell_area, context, GTK_WIDGET(icon_view), for_size, minimum, natural);
         else
-            gtk_cell_area_get_preferred_width (icon_view->priv->cell_area,
-                                               context,
-                                               GTK_WIDGET (icon_view),
-                                               minimum, natural);
+            gtk_cell_area_get_preferred_width(
+                icon_view->priv->cell_area, context, GTK_WIDGET(icon_view), minimum, natural);
     }
     else
     {
         if (for_size > 0)
-            gtk_cell_area_get_preferred_height_for_width (icon_view->priv->cell_area,
-                    context,
-                    GTK_WIDGET (icon_view),
-                    for_size,
-                    minimum, natural);
+            gtk_cell_area_get_preferred_height_for_width(
+                icon_view->priv->cell_area, context, GTK_WIDGET(icon_view), for_size, minimum, natural);
         else
-            gtk_cell_area_get_preferred_height (icon_view->priv->cell_area,
-                                                context,
-                                                GTK_WIDGET (icon_view),
-                                                minimum, natural);
+            gtk_cell_area_get_preferred_height(
+                icon_view->priv->cell_area, context, GTK_WIDGET(icon_view), minimum, natural);
     }
 }
 
-static gboolean
-xiconview_is_empty (XGtkIconView *icon_view)
+static gboolean xiconview_is_empty(XGtkIconView *icon_view)
 {
-    return icon_view->priv->items == NULL;
+    return icon_view->priv->llItems.empty();
 }
 
-static void
-xiconview_get_preferred_item_size (XGtkIconView    *icon_view,
-                                       GtkOrientation  orientation,
-                                       gint            for_size,
-                                       gint           *minimum,
-                                       gint           *natural)
+static void xiconview_get_preferred_item_size(XGtkIconView *icon_view,
+                                              GtkOrientation orientation,
+                                              gint for_size,
+                                              gint *minimum,
+                                              gint *natural)
 {
     XGtkIconViewPrivate *priv = icon_view->priv;
     GtkCellAreaContext *context;
-    GList *items;
+//     GList *items;
 
-    g_assert (!xiconview_is_empty (icon_view));
+    g_assert(!xiconview_is_empty(icon_view));
 
-    context = gtk_cell_area_create_context (priv->cell_area);
+    context = gtk_cell_area_create_context(priv->cell_area);
 
     for_size -= 2 * priv->item_padding;
 
     if (for_size > 0)
     {
         /* This is necessary for the context to work properly */
-        for (items = priv->items; items; items = items->next)
+        for (auto &pItem : priv->llItems)
+//         for (items = priv->items; items; items = items->next)
         {
-            XGtkIconViewItem *item = (XGtkIconViewItem *)items->data;
+//             XGtkIconViewItem *item = &i; // (XGtkIconViewItem *)items->data;
 
-            _xiconview_set_cell_data (icon_view, item);
-            cell_area_get_preferred_size (icon_view, context, (GtkOrientation)(1 - orientation), -1, NULL, NULL);
+            _xiconview_set_cell_data(icon_view, pItem);
+            cell_area_get_preferred_size(icon_view, context, (GtkOrientation)(1 - orientation), -1, NULL, NULL);
         }
     }
 
-    for (items = priv->items; items; items = items->next)
+    // for (items = priv->items; items; items = items->next)
+    int cItem = 0;
+    for (auto &pItem : priv->llItems)
     {
-        XGtkIconViewItem *item = (XGtkIconViewItem *)items->data;
+//         XGtkIconViewItem *item = &i; // (XGtkIconViewItem *)items->data;
 
-        _xiconview_set_cell_data (icon_view, item);
-        if (items == priv->items)
-            adjust_wrap_width (icon_view);
-        cell_area_get_preferred_size (icon_view, context, orientation, for_size, NULL, NULL);
+        _xiconview_set_cell_data(icon_view, pItem);
+        if (cItem == 0) // items == priv->items)
+            adjust_wrap_width(icon_view);
+        cell_area_get_preferred_size(icon_view, context, orientation, for_size, NULL, NULL);
+        ++cItem;
     }
 
     if (orientation == GTK_ORIENTATION_HORIZONTAL)
     {
         if (for_size > 0)
-            gtk_cell_area_context_get_preferred_width_for_height (context,
-                    for_size,
-                    minimum, natural);
+            gtk_cell_area_context_get_preferred_width_for_height(context, for_size, minimum, natural);
         else
-            gtk_cell_area_context_get_preferred_width (context,
-                    minimum, natural);
+            gtk_cell_area_context_get_preferred_width(context, minimum, natural);
     }
     else
     {
         if (for_size > 0)
-            gtk_cell_area_context_get_preferred_height_for_width (context,
-                    for_size,
-                    minimum, natural);
+            gtk_cell_area_context_get_preferred_height_for_width(context, for_size, minimum, natural);
         else
-            gtk_cell_area_context_get_preferred_height (context,
-                    minimum, natural);
+            gtk_cell_area_context_get_preferred_height(context, minimum, natural);
     }
 
     if (orientation == GTK_ORIENTATION_HORIZONTAL && priv->item_width >= 0)
     {
         if (minimum)
-            *minimum = MAX (*minimum, priv->item_width);
+            *minimum = MAX(*minimum, priv->item_width);
         if (natural)
             *natural = *minimum;
     }
 
     if (minimum)
-        *minimum = MAX (1, *minimum + 2 * priv->item_padding);
+        *minimum = MAX(1, *minimum + 2 * priv->item_padding);
     if (natural)
-        *natural = MAX (1, *natural + 2 * priv->item_padding);
+        *natural = MAX(1, *natural + 2 * priv->item_padding);
 
-    g_object_unref (context);
+    g_object_unref(context);
 }
 
-static void
-xiconview_compute_n_items_for_size (XGtkIconView    *icon_view,
-                                        GtkOrientation  orientation,
-                                        gint            size,
-                                        gint           *min_items,
-                                        gint           *min_item_size,
-                                        gint           *max_items,
-                                        gint           *max_item_size)
+static void xiconview_compute_n_items_for_size(XGtkIconView *icon_view,
+                                               GtkOrientation orientation,
+                                               gint size,
+                                               gint *min_items,
+                                               gint *min_item_size,
+                                               gint *max_items,
+                                               gint *max_item_size)
 {
     XGtkIconViewPrivate *priv = icon_view->priv;
     int minimum, natural, spacing;
 
-    g_return_if_fail (min_item_size == NULL || min_items != NULL);
-    g_return_if_fail (max_item_size == NULL || max_items != NULL);
-    g_return_if_fail (!xiconview_is_empty (icon_view));
+    g_return_if_fail(min_item_size == NULL || min_items != NULL);
+    g_return_if_fail(max_item_size == NULL || max_items != NULL);
+    g_return_if_fail(!xiconview_is_empty(icon_view));
 
-    xiconview_get_preferred_item_size (icon_view, orientation, -1, &minimum, &natural);
+    xiconview_get_preferred_item_size(icon_view, orientation, -1, &minimum, &natural);
 
     if (orientation == GTK_ORIENTATION_HORIZONTAL)
         spacing = priv->column_spacing;
@@ -1580,7 +1495,7 @@ xiconview_compute_n_items_for_size (XGtkIconView    *icon_view,
         }
         else
         {
-            int n_items = xiconview_get_n_items (icon_view);
+            int n_items = xiconview_get_n_items(icon_view);
 
             if (min_items)
                 *min_items = (n_items + priv->columns - 1) / priv->columns;
@@ -1610,7 +1525,7 @@ xiconview_compute_n_items_for_size (XGtkIconView    *icon_view,
     if (min_item_size)
     {
         *min_item_size = size / *min_items;
-        *min_item_size = CLAMP (*min_item_size, minimum, natural);
+        *min_item_size = CLAMP(*min_item_size, minimum, natural);
         *min_item_size -= spacing;
         *min_item_size -= 2 * priv->item_padding;
     }
@@ -1618,34 +1533,27 @@ xiconview_compute_n_items_for_size (XGtkIconView    *icon_view,
     if (max_item_size)
     {
         *max_item_size = size / *max_items;
-        *max_item_size = CLAMP (*max_item_size, minimum, natural);
+        *max_item_size = CLAMP(*max_item_size, minimum, natural);
         *max_item_size -= spacing;
         *max_item_size -= 2 * priv->item_padding;
     }
 }
 
-static GtkSizeRequestMode
-xiconview_get_request_mode (GtkWidget *widget)
-{
-    return GTK_SIZE_REQUEST_HEIGHT_FOR_WIDTH;
-}
+static GtkSizeRequestMode xiconview_get_request_mode(GtkWidget *widget) { return GTK_SIZE_REQUEST_HEIGHT_FOR_WIDTH; }
 
-static void
-xiconview_get_preferred_width (GtkWidget *widget,
-                                   gint      *minimum,
-                                   gint      *natural)
+static void xiconview_get_preferred_width(GtkWidget *widget, gint *minimum, gint *natural)
 {
     XGtkIconView *icon_view = XICONVIEW(widget);
     XGtkIconViewPrivate *priv = icon_view->priv;
     int item_min, item_nat;
 
-    if (xiconview_is_empty (icon_view))
+    if (xiconview_is_empty(icon_view))
     {
         *minimum = *natural = 2 * priv->margin;
         return;
     }
 
-    xiconview_get_preferred_item_size (icon_view, GTK_ORIENTATION_HORIZONTAL, -1, &item_min, &item_nat);
+    xiconview_get_preferred_item_size(icon_view, GTK_ORIENTATION_HORIZONTAL, -1, &item_min, &item_nat);
 
     if (priv->columns > 0)
     {
@@ -1654,7 +1562,7 @@ xiconview_get_preferred_width (GtkWidget *widget,
     }
     else
     {
-        int n_items = xiconview_get_n_items (icon_view);
+        int n_items = xiconview_get_n_items(icon_view);
 
         *minimum = item_min;
         *natural = item_nat * n_items + priv->column_spacing * (n_items - 1);
@@ -1664,26 +1572,22 @@ xiconview_get_preferred_width (GtkWidget *widget,
     *natural += 2 * priv->margin;
 }
 
-static void
-xiconview_get_preferred_width_for_height (GtkWidget *widget,
-        gint       height,
-        gint      *minimum,
-        gint      *natural)
+static void xiconview_get_preferred_width_for_height(GtkWidget *widget, gint height, gint *minimum, gint *natural)
 {
     XGtkIconView *icon_view = XICONVIEW(widget);
     XGtkIconViewPrivate *priv = icon_view->priv;
     int item_min, item_nat, rows, row_height, n_items;
 
-    if (xiconview_is_empty (icon_view))
+    if (xiconview_is_empty(icon_view))
     {
         *minimum = *natural = 2 * priv->margin;
         return;
     }
 
-    xiconview_compute_n_items_for_size (icon_view, GTK_ORIENTATION_VERTICAL, height, &rows, &row_height, NULL, NULL);
-    n_items = xiconview_get_n_items (icon_view);
+    xiconview_compute_n_items_for_size(icon_view, GTK_ORIENTATION_VERTICAL, height, &rows, &row_height, NULL, NULL);
+    n_items = xiconview_get_n_items(icon_view);
 
-    xiconview_get_preferred_item_size (icon_view, GTK_ORIENTATION_HORIZONTAL, row_height, &item_min, &item_nat);
+    xiconview_get_preferred_item_size(icon_view, GTK_ORIENTATION_HORIZONTAL, row_height, &item_min, &item_nat);
     *minimum = (item_min + priv->column_spacing) * ((n_items + rows - 1) / rows) - priv->column_spacing;
     *natural = (item_nat + priv->column_spacing) * ((n_items + rows - 1) / rows) - priv->column_spacing;
 
@@ -1691,23 +1595,20 @@ xiconview_get_preferred_width_for_height (GtkWidget *widget,
     *natural += 2 * priv->margin;
 }
 
-static void
-xiconview_get_preferred_height (GtkWidget *widget,
-                                    gint      *minimum,
-                                    gint      *natural)
+static void xiconview_get_preferred_height(GtkWidget *widget, gint *minimum, gint *natural)
 {
     XGtkIconView *icon_view = XICONVIEW(widget);
     XGtkIconViewPrivate *priv = icon_view->priv;
     int item_min, item_nat, n_items;
 
-    if (xiconview_is_empty (icon_view))
+    if (xiconview_is_empty(icon_view))
     {
         *minimum = *natural = 2 * priv->margin;
         return;
     }
 
-    xiconview_get_preferred_item_size (icon_view, GTK_ORIENTATION_VERTICAL, -1, &item_min, &item_nat);
-    n_items = xiconview_get_n_items (icon_view);
+    xiconview_get_preferred_item_size(icon_view, GTK_ORIENTATION_VERTICAL, -1, &item_min, &item_nat);
+    n_items = xiconview_get_n_items(icon_view);
 
     if (priv->columns > 0)
     {
@@ -1726,26 +1627,23 @@ xiconview_get_preferred_height (GtkWidget *widget,
     *natural += 2 * priv->margin;
 }
 
-static void
-xiconview_get_preferred_height_for_width (GtkWidget *widget,
-        gint       width,
-        gint      *minimum,
-        gint      *natural)
+static void xiconview_get_preferred_height_for_width(GtkWidget *widget, gint width, gint *minimum, gint *natural)
 {
     XGtkIconView *icon_view = XICONVIEW(widget);
     XGtkIconViewPrivate *priv = icon_view->priv;
     int item_min, item_nat, columns, column_width, n_items;
 
-    if (xiconview_is_empty (icon_view))
+    if (xiconview_is_empty(icon_view))
     {
         *minimum = *natural = 2 * priv->margin;
         return;
     }
 
-    xiconview_compute_n_items_for_size (icon_view, GTK_ORIENTATION_HORIZONTAL, width, NULL, NULL, &columns, &column_width);
-    n_items = xiconview_get_n_items (icon_view);
+    xiconview_compute_n_items_for_size(
+        icon_view, GTK_ORIENTATION_HORIZONTAL, width, NULL, NULL, &columns, &column_width);
+    n_items = xiconview_get_n_items(icon_view);
 
-    xiconview_get_preferred_item_size (icon_view, GTK_ORIENTATION_VERTICAL, column_width, &item_min, &item_nat);
+    xiconview_get_preferred_item_size(icon_view, GTK_ORIENTATION_VERTICAL, column_width, &item_min, &item_nat);
     *minimum = (item_min + priv->row_spacing) * ((n_items + columns - 1) / columns) - priv->row_spacing;
     *natural = (item_nat + priv->row_spacing) * ((n_items + columns - 1) / columns) - priv->row_spacing;
 
@@ -1753,8 +1651,7 @@ xiconview_get_preferred_height_for_width (GtkWidget *widget,
     *natural += 2 * priv->margin;
 }
 
-static void
-xiconview_allocate_children (XGtkIconView *icon_view)
+static void xiconview_allocate_children(XGtkIconView *icon_view)
 {
     GList *list;
 
@@ -1763,194 +1660,184 @@ xiconview_allocate_children (XGtkIconView *icon_view)
         XGtkIconViewChild *child = (XGtkIconViewChild *)list->data;
 
         /* totally ignore our child's requisition */
-        gtk_widget_size_allocate (child->widget, &child->area);
+        gtk_widget_size_allocate(child->widget, &child->area);
     }
 }
 
-static void
-xiconview_size_allocate (GtkWidget      *widget,
-                             GtkAllocation  *allocation)
+static void xiconview_size_allocate(GtkWidget *widget, GtkAllocation *allocation)
 {
     XGtkIconView *icon_view = XICONVIEW(widget);
 
-    gtk_widget_set_allocation (widget, allocation);
+    gtk_widget_set_allocation(widget, allocation);
 
-    xiconview_layout (icon_view);
+    xiconview_layout(icon_view);
 
-    if (gtk_widget_get_realized (widget))
+    if (gtk_widget_get_realized(widget))
     {
-        gdk_window_move_resize (gtk_widget_get_window (widget),
-                                allocation->x, allocation->y,
-                                allocation->width, allocation->height);
-        gdk_window_resize (icon_view->priv->bin_window,
-                           MAX (icon_view->priv->width, allocation->width),
-                           MAX (icon_view->priv->height, allocation->height));
+        gdk_window_move_resize(
+            gtk_widget_get_window(widget), allocation->x, allocation->y, allocation->width, allocation->height);
+        gdk_window_resize(icon_view->priv->bin_window,
+                          MAX(icon_view->priv->width, allocation->width),
+                          MAX(icon_view->priv->height, allocation->height));
     }
 
-    xiconview_allocate_children (icon_view);
+    xiconview_allocate_children(icon_view);
 
     /* Delay signal emission */
-    g_object_freeze_notify (G_OBJECT (icon_view->priv->hadjustment));
-    g_object_freeze_notify (G_OBJECT (icon_view->priv->vadjustment));
+    g_object_freeze_notify(G_OBJECT(icon_view->priv->hadjustment));
+    g_object_freeze_notify(G_OBJECT(icon_view->priv->vadjustment));
 
-    xiconview_set_hadjustment_values (icon_view);
-    xiconview_set_vadjustment_values (icon_view);
+    xiconview_set_hadjustment_values(icon_view);
+    xiconview_set_vadjustment_values(icon_view);
 
-    if (gtk_widget_get_realized (widget) &&
-            icon_view->priv->scroll_to_path)
+    if (gtk_widget_get_realized(widget) && icon_view->priv->scroll_to_path)
     {
         GtkTreePath *path;
-        path = gtk_tree_row_reference_get_path (icon_view->priv->scroll_to_path);
-        gtk_tree_row_reference_free (icon_view->priv->scroll_to_path);
+        path = gtk_tree_row_reference_get_path(icon_view->priv->scroll_to_path);
+        gtk_tree_row_reference_free(icon_view->priv->scroll_to_path);
         icon_view->priv->scroll_to_path = NULL;
 
-        xiconview_scroll_to_path (icon_view, path,
-                                      icon_view->priv->scroll_to_use_align,
-                                      icon_view->priv->scroll_to_row_align,
-                                      icon_view->priv->scroll_to_col_align);
-        gtk_tree_path_free (path);
+        xiconview_scroll_to_path(icon_view,
+                                 path,
+                                 icon_view->priv->scroll_to_use_align,
+                                 icon_view->priv->scroll_to_row_align,
+                                 icon_view->priv->scroll_to_col_align);
+        gtk_tree_path_free(path);
     }
 
     /* Emit any pending signals now */
-    g_object_thaw_notify (G_OBJECT (icon_view->priv->hadjustment));
-    g_object_thaw_notify (G_OBJECT (icon_view->priv->vadjustment));
+    g_object_thaw_notify(G_OBJECT(icon_view->priv->hadjustment));
+    g_object_thaw_notify(G_OBJECT(icon_view->priv->vadjustment));
 }
 
-static gboolean
-xiconview_draw (GtkWidget *widget,
-                    cairo_t   *cr)
+static gboolean xiconview_draw(GtkWidget *widget, cairo_t *cr)
 {
     XGtkIconView *icon_view;
-    GList *icons;
+//     GList *icons;
     GtkTreePath *path;
     gint dest_index;
     GtkIconViewDropPosition dest_pos;
-    XGtkIconViewItem *dest_item = NULL;
+    PXGtkIconViewItem pDestItem;
     GtkStyleContext *context;
 
     icon_view = XICONVIEW(widget);
 
-    context = gtk_widget_get_style_context (widget);
-    gtk_render_background (context, cr,
-                           0, 0,
-                           gtk_widget_get_allocated_width (widget),
-                           gtk_widget_get_allocated_height (widget));
+    context = gtk_widget_get_style_context(widget);
+    gtk_render_background(
+        context, cr, 0, 0, gtk_widget_get_allocated_width(widget), gtk_widget_get_allocated_height(widget));
 
-    if (!gtk_cairo_should_draw_window (cr, icon_view->priv->bin_window))
+    if (!gtk_cairo_should_draw_window(cr, icon_view->priv->bin_window))
         return FALSE;
 
-    cairo_save (cr);
+    cairo_save(cr);
 
-    gtk_cairo_transform_to_window (cr, widget, icon_view->priv->bin_window);
+    gtk_cairo_transform_to_window(cr, widget, icon_view->priv->bin_window);
 
-    cairo_set_line_width (cr, 1.);
+    cairo_set_line_width(cr, 1.);
 
-    xiconview_get_drag_dest_item (icon_view, &path, &dest_pos);
+    xiconview_get_drag_dest_item(icon_view, &path, &dest_pos);
 
     if (path)
     {
-        dest_index = gtk_tree_path_get_indices (path)[0];
-        gtk_tree_path_free (path);
+        dest_index = gtk_tree_path_get_indices(path)[0];
+        gtk_tree_path_free(path);
     }
     else
         dest_index = -1;
 
-    for (icons = icon_view->priv->items; icons; icons = icons->next)
+    // for (icons = icon_view->priv->items; icons; icons = icons->next)
+    for (auto &pItem : icon_view->priv->llItems)
     {
-        XGtkIconViewItem *item = (XGtkIconViewItem *)icons->data;
+//         XGtkIconViewItem *item = &i; // (XGtkIconViewItem *)icons->data;
         GdkRectangle paint_area;
 
-        paint_area.x      = item->cell_area.x      - icon_view->priv->item_padding;
-        paint_area.y      = item->cell_area.y      - icon_view->priv->item_padding;
-        paint_area.width  = item->cell_area.width  + icon_view->priv->item_padding * 2;
-        paint_area.height = item->cell_area.height + icon_view->priv->item_padding * 2;
+        paint_area.x = pItem->cell_area.x - icon_view->priv->item_padding;
+        paint_area.y = pItem->cell_area.y - icon_view->priv->item_padding;
+        paint_area.width = pItem->cell_area.width + icon_view->priv->item_padding * 2;
+        paint_area.height = pItem->cell_area.height + icon_view->priv->item_padding * 2;
 
-        cairo_save (cr);
+        cairo_save(cr);
 
-        cairo_rectangle (cr, paint_area.x, paint_area.y, paint_area.width, paint_area.height);
-        cairo_clip (cr);
+        cairo_rectangle(cr, paint_area.x, paint_area.y, paint_area.width, paint_area.height);
+        cairo_clip(cr);
 
-        if (gdk_cairo_get_clip_rectangle (cr, NULL))
+        if (gdk_cairo_get_clip_rectangle(cr, NULL))
         {
-            xiconview_paint_item (icon_view, cr, item,
-                                      item->cell_area.x, item->cell_area.y,
-                                      icon_view->priv->draw_focus);
+            xiconview_paint_item(icon_view,
+                                 cr,
+                                 pItem,
+                                 pItem->cell_area.x,
+                                 pItem->cell_area.y,
+                                 icon_view->priv->draw_focus);
 
-            if (dest_index == item->index)
-                dest_item = item;
+            if (dest_index == pItem->index)
+                pDestItem = pItem;
         }
 
-        cairo_restore (cr);
+        cairo_restore(cr);
     }
 
-    if (dest_item &&
-            dest_pos != GTK_ICON_VIEW_NO_DROP)
+    if (pDestItem && dest_pos != GTK_ICON_VIEW_NO_DROP)
     {
         GdkRectangle rect = { 0 };
 
         switch (dest_pos)
         {
-        case GTK_ICON_VIEW_DROP_INTO:
-            rect = dest_item->cell_area;
-            break;
-        case GTK_ICON_VIEW_DROP_ABOVE:
-            rect.x = dest_item->cell_area.x;
-            rect.y = dest_item->cell_area.y - 1;
-            rect.width = dest_item->cell_area.width;
-            rect.height = 2;
-            break;
-        case GTK_ICON_VIEW_DROP_LEFT:
-            rect.x = dest_item->cell_area.x - 1;
-            rect.y = dest_item->cell_area.y;
-            rect.width = 2;
-            rect.height = dest_item->cell_area.height;
-            break;
-        case GTK_ICON_VIEW_DROP_BELOW:
-            rect.x = dest_item->cell_area.x;
-            rect.y = dest_item->cell_area.y + dest_item->cell_area.height - 1;
-            rect.width = dest_item->cell_area.width;
-            rect.height = 2;
-            break;
-        case GTK_ICON_VIEW_DROP_RIGHT:
-            rect.x = dest_item->cell_area.x + dest_item->cell_area.width - 1;
-            rect.y = dest_item->cell_area.y;
-            rect.width = 2;
-            rect.height = dest_item->cell_area.height;
-        case GTK_ICON_VIEW_NO_DROP:
-            ;
-            break;
+            case GTK_ICON_VIEW_DROP_INTO:
+                rect = pDestItem->cell_area;
+                break;
+            case GTK_ICON_VIEW_DROP_ABOVE:
+                rect.x = pDestItem->cell_area.x;
+                rect.y = pDestItem->cell_area.y - 1;
+                rect.width = pDestItem->cell_area.width;
+                rect.height = 2;
+                break;
+            case GTK_ICON_VIEW_DROP_LEFT:
+                rect.x = pDestItem->cell_area.x - 1;
+                rect.y = pDestItem->cell_area.y;
+                rect.width = 2;
+                rect.height = pDestItem->cell_area.height;
+                break;
+            case GTK_ICON_VIEW_DROP_BELOW:
+                rect.x = pDestItem->cell_area.x;
+                rect.y = pDestItem->cell_area.y + pDestItem->cell_area.height - 1;
+                rect.width = pDestItem->cell_area.width;
+                rect.height = 2;
+                break;
+            case GTK_ICON_VIEW_DROP_RIGHT:
+                rect.x = pDestItem->cell_area.x + pDestItem->cell_area.width - 1;
+                rect.y = pDestItem->cell_area.y;
+                rect.width = 2;
+                rect.height = pDestItem->cell_area.height;
+            case GTK_ICON_VIEW_NO_DROP:;
+                break;
         }
 
-        gtk_render_focus (context, cr,
-                          rect.x, rect.y,
-                          rect.width, rect.height);
+        gtk_render_focus(context, cr, rect.x, rect.y, rect.width, rect.height);
     }
 
     if (icon_view->priv->doing_rubberband)
-        xiconview_paint_rubberband (icon_view, cr);
+        xiconview_paint_rubberband(icon_view, cr);
 
-    cairo_restore (cr);
+    cairo_restore(cr);
 
-    return GTK_WIDGET_CLASS (xiconview_parent_class)->draw (widget, cr);
+    return GTK_WIDGET_CLASS(xiconview_parent_class)->draw(widget, cr);
 }
 
-static gboolean
-rubberband_scroll_timeout (gpointer data)
+static gboolean rubberband_scroll_timeout(gpointer data)
 {
     XGtkIconView *icon_view = (XGtkIconView *)data;
 
-    gtk_adjustment_set_value (icon_view->priv->vadjustment,
-                              gtk_adjustment_get_value (icon_view->priv->vadjustment) +
-                              icon_view->priv->scroll_value_diff);
+    gtk_adjustment_set_value(icon_view->priv->vadjustment,
+                             gtk_adjustment_get_value(icon_view->priv->vadjustment)
+                                 + icon_view->priv->scroll_value_diff);
 
-    xiconview_update_rubberband (icon_view);
+    xiconview_update_rubberband(icon_view);
 
     return TRUE;
 }
 
-static gboolean
-xiconview_motion (GtkWidget      *widget,
-                      GdkEventMotion *event)
+static gboolean xiconview_motion(GtkWidget *widget, GdkEventMotion *event)
 {
     GtkAllocation allocation;
     XGtkIconView *icon_view;
@@ -1958,18 +1845,18 @@ xiconview_motion (GtkWidget      *widget,
 
     icon_view = XICONVIEW(widget);
 
-    xiconview_maybe_begin_drag (icon_view, event);
+    xiconview_maybe_begin_drag(icon_view, event);
 
     if (icon_view->priv->doing_rubberband)
     {
-        xiconview_update_rubberband (widget);
+        xiconview_update_rubberband(widget);
 
-        abs_y = event->y - icon_view->priv->height *
-                (gtk_adjustment_get_value (icon_view->priv->vadjustment) /
-                 (gtk_adjustment_get_upper (icon_view->priv->vadjustment) -
-                  gtk_adjustment_get_lower (icon_view->priv->vadjustment)));
+        abs_y = event->y
+                - icon_view->priv->height * (gtk_adjustment_get_value(icon_view->priv->vadjustment)
+                                             / (gtk_adjustment_get_upper(icon_view->priv->vadjustment)
+                                                - gtk_adjustment_get_lower(icon_view->priv->vadjustment)));
 
-        gtk_widget_get_allocation (widget, &allocation);
+        gtk_widget_get_allocation(widget, &allocation);
 
         if (abs_y < 0 || abs_y > allocation.height)
         {
@@ -1981,49 +1868,44 @@ xiconview_motion (GtkWidget      *widget,
             icon_view->priv->event_last_x = event->x;
             icon_view->priv->event_last_y = event->y;
 
-            if (icon_view->priv->scroll_timeout_id == 0) {
-                icon_view->priv->scroll_timeout_id = gdk_threads_add_timeout (30, rubberband_scroll_timeout,
-                                                     icon_view);
-                g_source_set_name_by_id (icon_view->priv->scroll_timeout_id, "[gtk+] rubberband_scroll_timeout");
+            if (icon_view->priv->scroll_timeout_id == 0)
+            {
+                icon_view->priv->scroll_timeout_id = gdk_threads_add_timeout(30, rubberband_scroll_timeout, icon_view);
+                g_source_set_name_by_id(icon_view->priv->scroll_timeout_id, "[gtk+] rubberband_scroll_timeout");
             }
         }
         else
-            remove_scroll_timeout (icon_view);
+            remove_scroll_timeout(icon_view);
     }
     else
     {
-        XGtkIconViewItem *item, *last_prelight_item;
+        PXGtkIconViewItem last_prelight_item;
         GtkCellRenderer *cell = NULL;
 
         last_prelight_item = icon_view->priv->last_prelight;
-        item = _xiconview_get_item_at_coords (icon_view,
-                event->x, event->y,
-                FALSE,
-                &cell);
+        auto pItem = _xiconview_get_item_at_coords(icon_view, event->x, event->y, FALSE, &cell);
 
-        if (item != last_prelight_item)
+        if (pItem != last_prelight_item)
         {
-            if (item != NULL)
+            if (pItem != NULL)
             {
-                xiconview_queue_draw_item (icon_view, item);
+                xiconview_queue_draw_item(icon_view, pItem);
             }
 
             if (last_prelight_item != NULL)
             {
-                xiconview_queue_draw_item (icon_view,
-                                               icon_view->priv->last_prelight);
+                xiconview_queue_draw_item(icon_view,
+                                          icon_view->priv->last_prelight);
             }
 
-            icon_view->priv->last_prelight = item;
+            icon_view->priv->last_prelight = pItem;
         }
     }
 
     return TRUE;
 }
 
-static gboolean
-xiconview_leave (GtkWidget        *widget,
-                     GdkEventCrossing *event)
+static gboolean xiconview_leave(GtkWidget *widget, GdkEventCrossing *event)
 {
     XGtkIconView *icon_view;
     XGtkIconViewPrivate *priv;
@@ -2033,16 +1915,14 @@ xiconview_leave (GtkWidget        *widget,
 
     if (priv->last_prelight)
     {
-        xiconview_queue_draw_item (icon_view, priv->last_prelight);
+        xiconview_queue_draw_item(icon_view, priv->last_prelight);
         priv->last_prelight = NULL;
     }
 
     return FALSE;
 }
 
-static void
-xiconview_remove (GtkContainer *container,
-                      GtkWidget    *widget)
+static void xiconview_remove(GtkContainer *container, GtkWidget *widget)
 {
     XGtkIconView *icon_view;
     XGtkIconViewChild *child = NULL;
@@ -2056,11 +1936,11 @@ xiconview_remove (GtkContainer *container,
         child = (XGtkIconViewChild *)tmp_list->data;
         if (child->widget == widget)
         {
-            gtk_widget_unparent (widget);
+            gtk_widget_unparent(widget);
 
-            icon_view->priv->children = g_list_remove_link (icon_view->priv->children, tmp_list);
-            g_list_free_1 (tmp_list);
-            g_free (child);
+            icon_view->priv->children = g_list_remove_link(icon_view->priv->children, tmp_list);
+            g_list_free_1(tmp_list);
+            g_free(child);
             return;
         }
 
@@ -2069,10 +1949,7 @@ xiconview_remove (GtkContainer *container,
 }
 
 static void
-xiconview_forall (GtkContainer *container,
-                      gboolean      include_internals,
-                      GtkCallback   callback,
-                      gpointer      callback_data)
+xiconview_forall(GtkContainer *container, gboolean include_internals, GtkCallback callback, gpointer callback_data)
 {
     XGtkIconView *icon_view;
     XGtkIconViewChild *child = NULL;
@@ -2086,73 +1963,80 @@ xiconview_forall (GtkContainer *container,
         child = (XGtkIconViewChild *)tmp_list->data;
         tmp_list = tmp_list->next;
 
-        (* callback) (child->widget, callback_data);
+        (*callback)(child->widget, callback_data);
     }
 }
 
-static void
-xiconview_item_selected_changed (XGtkIconView      *icon_view,
-                                     XGtkIconViewItem  *item)
+static void xiconview_item_selected_changed(XGtkIconView *icon_view,
+                                            PXGtkIconViewItem pItem)
 {
     AtkObject *obj;
     AtkObject *item_obj;
 
-    obj = gtk_widget_get_accessible (GTK_WIDGET (icon_view));
+    obj = gtk_widget_get_accessible(GTK_WIDGET(icon_view));
     if (obj != NULL)
     {
-        item_obj = atk_object_ref_accessible_child (obj, item->index);
+        item_obj = atk_object_ref_accessible_child(obj, pItem->index);
         if (item_obj != NULL)
         {
-            atk_object_notify_state_change (item_obj, ATK_STATE_SELECTED, item->selected);
-            g_object_unref (item_obj);
+            atk_object_notify_state_change(item_obj, ATK_STATE_SELECTED, pItem->selected);
+            g_object_unref(item_obj);
         }
     }
 }
 
-static void
-xiconview_add_editable (GtkCellArea            *area,
-                            GtkCellRenderer        *renderer,
-                            GtkCellEditable        *editable,
-                            GdkRectangle           *cell_area,
-                            const gchar            *path,
-                            XGtkIconView            *icon_view)
+static void xiconview_add_editable(GtkCellArea *area,
+                                   GtkCellRenderer *renderer,
+                                   GtkCellEditable *editable,
+                                   GdkRectangle *cell_area,
+                                   const gchar *path,
+                                   XGtkIconView *icon_view)
 {
     XGtkIconViewChild *child;
-    GtkWidget *widget = GTK_WIDGET (editable);
+    GtkWidget *widget = GTK_WIDGET(editable);
 
-    child = g_new (XGtkIconViewChild, 1);
+    child = g_new(XGtkIconViewChild, 1);
 
-    child->widget      = widget;
-    child->area.x      = cell_area->x;
-    child->area.y      = cell_area->y;
-    child->area.width  = cell_area->width;
+    child->widget = widget;
+    child->area.x = cell_area->x;
+    child->area.y = cell_area->y;
+    child->area.width = cell_area->width;
     child->area.height = cell_area->height;
 
-    icon_view->priv->children = g_list_append (icon_view->priv->children, child);
+    icon_view->priv->children = g_list_append(icon_view->priv->children, child);
 
-    if (gtk_widget_get_realized (GTK_WIDGET (icon_view)))
-        gtk_widget_set_parent_window (child->widget, icon_view->priv->bin_window);
+    if (gtk_widget_get_realized(GTK_WIDGET(icon_view)))
+        gtk_widget_set_parent_window(child->widget, icon_view->priv->bin_window);
 
-    gtk_widget_set_parent (widget, GTK_WIDGET (icon_view));
+    gtk_widget_set_parent(widget, GTK_WIDGET(icon_view));
 }
 
-static void
-xiconview_remove_editable (GtkCellArea            *area,
-                               GtkCellRenderer        *renderer,
-                               GtkCellEditable        *editable,
-                               XGtkIconView            *icon_view)
+static void xiconview_remove_editable(GtkCellArea *area,
+                                      GtkCellRenderer *renderer,
+                                      GtkCellEditable *editable,
+                                      XGtkIconView *icon_view)
 {
     GtkTreePath *path;
 
-    if (gtk_widget_has_focus (GTK_WIDGET (editable)))
-        gtk_widget_grab_focus (GTK_WIDGET (icon_view));
+    if (gtk_widget_has_focus(GTK_WIDGET(editable)))
+        gtk_widget_grab_focus(GTK_WIDGET(icon_view));
 
-    gtk_container_remove (GTK_CONTAINER (icon_view),
-                          GTK_WIDGET (editable));
+    gtk_container_remove(GTK_CONTAINER(icon_view), GTK_WIDGET(editable));
 
-    path = gtk_tree_path_new_from_string (gtk_cell_area_get_current_path_string (area));
-    xiconview_queue_draw_path (icon_view, path);
-    gtk_tree_path_free (path);
+    path = gtk_tree_path_new_from_string(gtk_cell_area_get_current_path_string(area));
+    xiconview_queue_draw_path(icon_view, path);
+    gtk_tree_path_free(path);
+}
+
+PXGtkIconViewItem _xiconview_get_nth_item(XGtkIconView *icon_view, size_t N)
+{
+    if (icon_view->priv->llItems.size() > N)
+    {
+        auto it = std::next(icon_view->priv->llItems.begin(), N);
+        return *it;
+    }
+
+    return nullptr;
 }
 
 /**
@@ -2174,44 +2058,43 @@ xiconview_remove_editable (GtkCellArea            *area,
  *
  * Since: 2.8
  **/
-void
-xiconview_set_cursor (XGtkIconView     *icon_view,
-                          GtkTreePath     *path,
-                          GtkCellRenderer *cell,
-                          gboolean         start_editing)
+void xiconview_set_cursor(XGtkIconView *icon_view, GtkTreePath *path, GtkCellRenderer *cell, gboolean start_editing)
 {
-    XGtkIconViewItem *item = NULL;
+    PXGtkIconViewItem pItem = NULL;
 
-    g_return_if_fail (IS_XICONVIEW (icon_view));
-    g_return_if_fail (path != NULL);
-    g_return_if_fail (cell == NULL || GTK_IS_CELL_RENDERER (cell));
+    g_return_if_fail(IS_XICONVIEW(icon_view));
+    g_return_if_fail(path != NULL);
+    g_return_if_fail(cell == NULL || GTK_IS_CELL_RENDERER(cell));
 
     if (icon_view->priv->cell_area)
-        gtk_cell_area_stop_editing (icon_view->priv->cell_area, TRUE);
+        gtk_cell_area_stop_editing(icon_view->priv->cell_area, TRUE);
 
-    if (gtk_tree_path_get_depth (path) == 1)
-        item = (XGtkIconViewItem *)g_list_nth_data (icon_view->priv->items,
-                                gtk_tree_path_get_indices(path)[0]);
+    if (gtk_tree_path_get_depth(path) == 1)
+        pItem = _xiconview_get_nth_item(icon_view, gtk_tree_path_get_indices(path)[0]);
+//     {
+//         item = (XGtkIconViewItem *)g_list_nth_data(icon_view->priv->items,
+//                                                    );
+//         }
+//     }
 
-    if (!item)
+    if (!pItem);
         return;
 
-    _xiconview_set_cursor_item (icon_view, item, cell);
-    xiconview_scroll_to_path (icon_view, path, FALSE, 0.0, 0.0);
+    _xiconview_set_cursor_item(icon_view, pItem, cell);
+    xiconview_scroll_to_path(icon_view, path, FALSE, 0.0, 0.0);
 
-    if (start_editing &&
-            icon_view->priv->cell_area)
+    if (start_editing && icon_view->priv->cell_area)
     {
         GtkCellAreaContext *context;
 
-        context = (GtkCellAreaContext *)g_ptr_array_index (icon_view->priv->row_contexts, item->row);
-        _xiconview_set_cell_data (icon_view, item);
-        gtk_cell_area_activate (icon_view->priv->cell_area,
-                                context,
-                                GTK_WIDGET (icon_view),
-                                &item->cell_area,
-                                (GtkCellRendererState)0 /* XXX flags */,
-                                TRUE);
+        context = (GtkCellAreaContext *)g_ptr_array_index(icon_view->priv->row_contexts, pItem->row);
+        _xiconview_set_cell_data(icon_view, pItem);
+        gtk_cell_area_activate(icon_view->priv->cell_area,
+                               context,
+                               GTK_WIDGET(icon_view),
+                               &pItem->cell_area,
+                               (GtkCellRendererState)0 /* XXX flags */,
+                               TRUE);
     }
 }
 
@@ -2233,37 +2116,30 @@ xiconview_set_cursor (XGtkIconView     *icon_view,
  *
  * Since: 2.8
  **/
-gboolean
-xiconview_get_cursor (XGtkIconView      *icon_view,
-                          GtkTreePath     **path,
-                          GtkCellRenderer **cell)
+gboolean xiconview_get_cursor(XGtkIconView *icon_view, GtkTreePath **path, GtkCellRenderer **cell)
 {
-    XGtkIconViewItem *item;
+    g_return_val_if_fail(IS_XICONVIEW(icon_view), FALSE);
 
-    g_return_val_if_fail (IS_XICONVIEW (icon_view), FALSE);
-
-    item = icon_view->priv->cursor_item;
+    auto pItem = icon_view->priv->cursor_item;
 
     if (path != NULL)
     {
-        if (item != NULL)
-            *path = gtk_tree_path_new_from_indices (item->index, -1);
+        if (pItem)
+            *path = gtk_tree_path_new_from_indices(pItem->index, -1);
         else
             *path = NULL;
     }
 
-    if (cell != NULL && item != NULL && icon_view->priv->cell_area != NULL)
-        *cell = gtk_cell_area_get_focus_cell (icon_view->priv->cell_area);
+    if (cell != NULL && pItem && icon_view->priv->cell_area != NULL)
+        *cell = gtk_cell_area_get_focus_cell(icon_view->priv->cell_area);
 
-    return (item != NULL);
+    return (pItem != nullptr);
 }
 
-static gboolean
-xiconview_button_press (GtkWidget      *widget,
-                            GdkEventButton *event)
+static gboolean xiconview_button_press(GtkWidget *widget, GdkEventButton *event)
 {
     XGtkIconView *icon_view;
-    XGtkIconViewItem *item;
+    PXGtkIconViewItem pItem;
     gboolean dirty = FALSE;
     GtkCellRenderer *cell = NULL, *cursor_cell = NULL;
 
@@ -2272,78 +2148,70 @@ xiconview_button_press (GtkWidget      *widget,
     if (event->window != icon_view->priv->bin_window)
         return FALSE;
 
-    if (!gtk_widget_has_focus (widget))
-        gtk_widget_grab_focus (widget);
+    if (!gtk_widget_has_focus(widget))
+        gtk_widget_grab_focus(widget);
 
     if (event->button == GDK_BUTTON_PRIMARY && event->type == GDK_BUTTON_PRESS)
     {
         GdkModifierType extend_mod_mask;
         GdkModifierType modify_mod_mask;
 
-        extend_mod_mask =
-            gtk_widget_get_modifier_mask (widget, GDK_MODIFIER_INTENT_EXTEND_SELECTION);
+        extend_mod_mask = gtk_widget_get_modifier_mask(widget, GDK_MODIFIER_INTENT_EXTEND_SELECTION);
 
-        modify_mod_mask =
-            gtk_widget_get_modifier_mask (widget, GDK_MODIFIER_INTENT_MODIFY_SELECTION);
+        modify_mod_mask = gtk_widget_get_modifier_mask(widget, GDK_MODIFIER_INTENT_MODIFY_SELECTION);
 
-        item = _xiconview_get_item_at_coords (icon_view,
-                event->x, event->y,
-                FALSE,
-                &cell);
+        pItem = _xiconview_get_item_at_coords(icon_view, event->x, event->y, FALSE, &cell);
 
         /*
          * We consider only the cells' area as the item area if the
          * item is not selected, but if it *is* selected, the complete
          * selection rectangle is considered to be part of the item.
          */
-        if (item != NULL && (cell != NULL || item->selected))
+        if (pItem && (cell != NULL || pItem->selected))
         {
             if (cell != NULL)
             {
-                if (gtk_cell_renderer_is_activatable (cell))
+                if (gtk_cell_renderer_is_activatable(cell))
                     cursor_cell = cell;
             }
 
-            xiconview_scroll_to_item (icon_view, item);
+            xiconview_scroll_to_item(icon_view, pItem);
 
             if (icon_view->priv->selection_mode == GTK_SELECTION_NONE)
             {
-                _xiconview_set_cursor_item (icon_view, item, cursor_cell);
+                _xiconview_set_cursor_item(icon_view, pItem, cursor_cell);
             }
-            else if (icon_view->priv->selection_mode == GTK_SELECTION_MULTIPLE &&
-                     (event->state & extend_mod_mask))
+            else if (icon_view->priv->selection_mode == GTK_SELECTION_MULTIPLE && (event->state & extend_mod_mask))
             {
-                xiconview_unselect_all_internal (icon_view);
+                xiconview_unselect_all_internal(icon_view);
 
-                _xiconview_set_cursor_item (icon_view, item, cursor_cell);
+                _xiconview_set_cursor_item(icon_view, pItem, cursor_cell);
                 if (!icon_view->priv->anchor_item)
-                    icon_view->priv->anchor_item = item;
+                    icon_view->priv->anchor_item = pItem;
                 else
-                    xiconview_select_all_between (icon_view,
-                                                      icon_view->priv->anchor_item,
-                                                      item);
+                    xiconview_select_all_between(icon_view, icon_view->priv->anchor_item, pItem);
                 dirty = TRUE;
             }
             else
             {
-                if ((icon_view->priv->selection_mode == GTK_SELECTION_MULTIPLE ||
-                        ((icon_view->priv->selection_mode == GTK_SELECTION_SINGLE) && item->selected)) &&
-                        (event->state & modify_mod_mask))
+                if ((icon_view->priv->selection_mode == GTK_SELECTION_MULTIPLE
+                     || ((icon_view->priv->selection_mode == GTK_SELECTION_SINGLE) && pItem->selected))
+                    && (event->state & modify_mod_mask))
                 {
-                    item->selected = !item->selected;
-                    xiconview_queue_draw_item (icon_view, item);
+                    pItem->selected = !pItem->selected;
+                    xiconview_queue_draw_item(icon_view, pItem);
                     dirty = TRUE;
                 }
                 else
                 {
-                    xiconview_unselect_all_internal (icon_view);
+                    xiconview_unselect_all_internal(icon_view);
 
-                    item->selected = TRUE;
-                    xiconview_queue_draw_item (icon_view, item);
+                    pItem->selected = TRUE;
+                    xiconview_queue_draw_item(icon_view, pItem);
                     dirty = TRUE;
                 }
-                _xiconview_set_cursor_item (icon_view, item, cursor_cell);
-                icon_view->priv->anchor_item = item;
+                _xiconview_set_cursor_item(icon_view, pItem, cursor_cell);
+                icon_view->priv->anchor_item = pItem;
             }
 
             /* Save press to possibly begin a drag */
@@ -2354,54 +2222,52 @@ xiconview_button_press (GtkWidget      *widget,
                 icon_view->priv->press_start_y = event->y;
             }
 
-            icon_view->priv->last_single_clicked = item;
+            icon_view->priv->last_single_clicked = pItem;
 
             /* cancel the current editing, if it exists */
-            gtk_cell_area_stop_editing (icon_view->priv->cell_area, TRUE);
+            gtk_cell_area_stop_editing(icon_view->priv->cell_area, TRUE);
 
-            if (cell != NULL && gtk_cell_renderer_is_activatable (cell))
+            if (cell != NULL && gtk_cell_renderer_is_activatable(cell))
             {
-                GtkCellAreaContext *context = (GtkCellAreaContext *)g_ptr_array_index (icon_view->priv->row_contexts, item->row);
+                GtkCellAreaContext *context =
+                    (GtkCellAreaContext *)g_ptr_array_index(icon_view->priv->row_contexts, pItem->row);
 
-                _xiconview_set_cell_data (icon_view, item);
-                gtk_cell_area_activate (icon_view->priv->cell_area, context,
-                                        GTK_WIDGET (icon_view),
-                                        &item->cell_area,
-                                        (GtkCellRendererState)0/* XXX flags */, FALSE);
+                _xiconview_set_cell_data(icon_view, pItem);
+                gtk_cell_area_activate(icon_view->priv->cell_area,
+                                       context,
+                                       GTK_WIDGET(icon_view),
+                                       &pItem->cell_area,
+                                       (GtkCellRendererState)0 /* XXX flags */,
+                                       FALSE);
             }
         }
         else
         {
-            if (icon_view->priv->selection_mode != GTK_SELECTION_BROWSE &&
-                    !(event->state & modify_mod_mask))
+            if (icon_view->priv->selection_mode != GTK_SELECTION_BROWSE && !(event->state & modify_mod_mask))
             {
-                dirty = xiconview_unselect_all_internal (icon_view);
+                dirty = xiconview_unselect_all_internal(icon_view);
             }
 
             if (icon_view->priv->selection_mode == GTK_SELECTION_MULTIPLE)
-                xiconview_start_rubberbanding (icon_view, event->device, event->x, event->y);
+                xiconview_start_rubberbanding(icon_view, event->device, event->x, event->y);
         }
 
         /* don't draw keyboard focus around an clicked-on item */
         icon_view->priv->draw_focus = FALSE;
     }
 
-    if (!icon_view->priv->activate_on_single_click
-            && event->button == GDK_BUTTON_PRIMARY
-            && event->type == GDK_2BUTTON_PRESS)
+    if (!icon_view->priv->activate_on_single_click && event->button == GDK_BUTTON_PRIMARY
+        && event->type == GDK_2BUTTON_PRESS)
     {
-        item = _xiconview_get_item_at_coords (icon_view,
-                event->x, event->y,
-                FALSE,
-                NULL);
+        pItem = _xiconview_get_item_at_coords(icon_view, event->x, event->y, FALSE, NULL);
 
-        if (item && item == icon_view->priv->last_single_clicked)
+        if (pItem && pItem == icon_view->priv->last_single_clicked)
         {
             GtkTreePath *path;
 
-            path = gtk_tree_path_new_from_indices (item->index, -1);
-            xiconview_item_activated (icon_view, path);
-            gtk_tree_path_free (path);
+            path = gtk_tree_path_new_from_indices(pItem->index, -1);
+            xiconview_item_activated(icon_view, path);
+            gtk_tree_path_free(path);
         }
 
         icon_view->priv->last_single_clicked = NULL;
@@ -2409,20 +2275,17 @@ xiconview_button_press (GtkWidget      *widget,
     }
 
     if (dirty)
-        g_signal_emit (icon_view, icon_view_signals[SELECTION_CHANGED], 0);
+        g_signal_emit(icon_view, icon_view_signals[SELECTION_CHANGED], 0);
 
     return event->button == GDK_BUTTON_PRIMARY;
 }
 
-static gboolean
-button_event_modifies_selection (GdkEventButton *event)
+static gboolean button_event_modifies_selection(GdkEventButton *event)
 {
     return (event->state & (GDK_CONTROL_MASK | GDK_SHIFT_MASK)) != 0;
 }
 
-static gboolean
-xiconview_button_release (GtkWidget      *widget,
-                              GdkEventButton *event)
+static gboolean xiconview_button_release(GtkWidget *widget, GdkEventButton *event)
 {
     XGtkIconView *icon_view;
 
@@ -2431,27 +2294,21 @@ xiconview_button_release (GtkWidget      *widget,
     if (icon_view->priv->pressed_button == event->button)
         icon_view->priv->pressed_button = -1;
 
-    xiconview_stop_rubberbanding (icon_view);
+    xiconview_stop_rubberbanding(icon_view);
 
-    remove_scroll_timeout (icon_view);
+    remove_scroll_timeout(icon_view);
 
-    if (event->button == GDK_BUTTON_PRIMARY
-            && icon_view->priv->activate_on_single_click
-            && !button_event_modifies_selection (event)
-            && icon_view->priv->last_single_clicked != NULL)
+    if (event->button == GDK_BUTTON_PRIMARY && icon_view->priv->activate_on_single_click
+        && !button_event_modifies_selection(event)
+        && icon_view->priv->last_single_clicked != NULL)
     {
-        XGtkIconViewItem *item;
-
-        item = _xiconview_get_item_at_coords (icon_view,
-                event->x, event->y,
-                FALSE,
-                NULL);
-        if (item == icon_view->priv->last_single_clicked)
+        auto pItem = _xiconview_get_item_at_coords(icon_view, event->x, event->y, FALSE, NULL);
+        if (pItem == icon_view->priv->last_single_clicked)
         {
             GtkTreePath *path;
-            path = gtk_tree_path_new_from_indices (item->index, -1);
-            xiconview_item_activated (icon_view, path);
-            gtk_tree_path_free (path);
+            path = gtk_tree_path_new_from_indices(pItem->index, -1);
+            xiconview_item_activated(icon_view, path);
+            gtk_tree_path_free(path);
         }
 
         icon_view->priv->last_single_clicked = NULL;
@@ -2460,37 +2317,32 @@ xiconview_button_release (GtkWidget      *widget,
     return TRUE;
 }
 
-static gboolean
-xiconview_key_press (GtkWidget      *widget,
-                         GdkEventKey    *event)
+static gboolean xiconview_key_press(GtkWidget *widget, GdkEventKey *event)
 {
     XGtkIconView *icon_view = XICONVIEW(widget);
 
     if (icon_view->priv->doing_rubberband)
     {
         if (event->keyval == GDK_KEY_Escape)
-            xiconview_stop_rubberbanding (icon_view);
+            xiconview_stop_rubberbanding(icon_view);
 
         return TRUE;
     }
 
-    return GTK_WIDGET_CLASS (xiconview_parent_class)->key_press_event (widget, event);
+    return GTK_WIDGET_CLASS(xiconview_parent_class)->key_press_event(widget, event);
 }
 
-static gboolean
-xiconview_key_release (GtkWidget      *widget,
-                           GdkEventKey    *event)
+static gboolean xiconview_key_release(GtkWidget *widget, GdkEventKey *event)
 {
     XGtkIconView *icon_view = XICONVIEW(widget);
 
     if (icon_view->priv->doing_rubberband)
         return TRUE;
 
-    return GTK_WIDGET_CLASS (xiconview_parent_class)->key_release_event (widget, event);
+    return GTK_WIDGET_CLASS(xiconview_parent_class)->key_release_event(widget, event);
 }
 
-static void
-xiconview_update_rubberband (gpointer data)
+static void xiconview_update_rubberband(gpointer data)
 {
     XGtkIconView *icon_view;
     gint x, y;
@@ -2500,58 +2352,48 @@ xiconview_update_rubberband (gpointer data)
 
     icon_view = XICONVIEW(data);
 
-    gdk_window_get_device_position (icon_view->priv->bin_window,
-                                    icon_view->priv->rubberband_device,
-                                    &x, &y, NULL);
+    gdk_window_get_device_position(icon_view->priv->bin_window, icon_view->priv->rubberband_device, &x, &y, NULL);
 
-    x = MAX (x, 0);
-    y = MAX (y, 0);
+    x = MAX(x, 0);
+    y = MAX(y, 0);
 
-    old_area.x = MIN (icon_view->priv->rubberband_x1,
-                      icon_view->priv->rubberband_x2);
-    old_area.y = MIN (icon_view->priv->rubberband_y1,
-                      icon_view->priv->rubberband_y2);
-    old_area.width = ABS (icon_view->priv->rubberband_x2 -
-                          icon_view->priv->rubberband_x1) + 1;
-    old_area.height = ABS (icon_view->priv->rubberband_y2 -
-                           icon_view->priv->rubberband_y1) + 1;
+    old_area.x = MIN(icon_view->priv->rubberband_x1, icon_view->priv->rubberband_x2);
+    old_area.y = MIN(icon_view->priv->rubberband_y1, icon_view->priv->rubberband_y2);
+    old_area.width = ABS(icon_view->priv->rubberband_x2 - icon_view->priv->rubberband_x1) + 1;
+    old_area.height = ABS(icon_view->priv->rubberband_y2 - icon_view->priv->rubberband_y1) + 1;
 
-    new_area.x = MIN (icon_view->priv->rubberband_x1, x);
-    new_area.y = MIN (icon_view->priv->rubberband_y1, y);
-    new_area.width = ABS (x - icon_view->priv->rubberband_x1) + 1;
-    new_area.height = ABS (y - icon_view->priv->rubberband_y1) + 1;
+    new_area.x = MIN(icon_view->priv->rubberband_x1, x);
+    new_area.y = MIN(icon_view->priv->rubberband_y1, y);
+    new_area.width = ABS(x - icon_view->priv->rubberband_x1) + 1;
+    new_area.height = ABS(y - icon_view->priv->rubberband_y1) + 1;
 
-    invalid_region = cairo_region_create_rectangle (&old_area);
-    cairo_region_union_rectangle (invalid_region, &new_area);
+    invalid_region = cairo_region_create_rectangle(&old_area);
+    cairo_region_union_rectangle(invalid_region, &new_area);
 
-    gdk_window_invalidate_region (icon_view->priv->bin_window, invalid_region, TRUE);
+    gdk_window_invalidate_region(icon_view->priv->bin_window, invalid_region, TRUE);
 
-    cairo_region_destroy (invalid_region);
+    cairo_region_destroy(invalid_region);
 
     icon_view->priv->rubberband_x2 = x;
     icon_view->priv->rubberband_y2 = y;
 
-    xiconview_update_rubberband_selection (icon_view);
+    xiconview_update_rubberband_selection(icon_view);
 }
 
-static void
-xiconview_start_rubberbanding (XGtkIconView  *icon_view,
-                                   GdkDevice    *device,
-                                   gint          x,
-                                   gint          y)
+static void xiconview_start_rubberbanding(XGtkIconView *icon_view, GdkDevice *device, gint x, gint y)
 {
     XGtkIconViewPrivate *priv = icon_view->priv;
-    GList *items;
-//     GtkCssNode *widget_node;
+//     GList *items;
+    //     GtkCssNode *widget_node;
 
     if (priv->rubberband_device)
         return;
 
-    for (items = priv->items; items; items = items->next)
+    for (auto &pItem : priv->llItems)
+//     for (items = priv->items; items; items = items->next)
     {
-        XGtkIconViewItem *item = (XGtkIconViewItem *)items->data;
-
-        item->selected_before_rubberbanding = item->selected;
+//         XGtkIconViewItem *item = &i; // (XGtkIconViewItem *)items->data;
+        pItem->selected_before_rubberbanding = pItem->selected;
     }
 
     priv->rubberband_x1 = x;
@@ -2562,16 +2404,17 @@ xiconview_start_rubberbanding (XGtkIconView  *icon_view,
     priv->doing_rubberband = TRUE;
     priv->rubberband_device = device;
 
-//     widget_node = gtk_widget_get_css_node (GTK_WIDGET (icon_view));
-//     priv->rubberband_node = gtk_css_node_new ();
-//     gtk_css_node_set_name (priv->rubberband_node, I_("rubberband"));
-//     gtk_css_node_set_parent (priv->rubberband_node, widget_node);
-//     gtk_css_node_set_state (priv->rubberband_node, gtk_css_node_get_state (widget_node));
-//     g_object_unref (priv->rubberband_node);
+    //     widget_node = gtk_widget_get_css_node (GTK_WIDGET (icon_view));
+    //     priv->rubberband_node = gtk_css_node_new ();
+    //     gtk_css_node_set_name (priv->rubberband_node, I_("rubberband"));
+    //     gtk_css_node_set_parent (priv->rubberband_node, widget_node);
+    //     gtk_css_node_set_state (priv->rubberband_node,
+    //     gtk_css_node_get_state
+    //     (widget_node));
+    //     g_object_unref (priv->rubberband_node);
 }
 
-static void
-xiconview_stop_rubberbanding (XGtkIconView *icon_view)
+static void xiconview_stop_rubberbanding(XGtkIconView *icon_view)
 {
     XGtkIconViewPrivate *priv = icon_view->priv;
 
@@ -2580,149 +2423,132 @@ xiconview_stop_rubberbanding (XGtkIconView *icon_view)
 
     priv->doing_rubberband = FALSE;
     priv->rubberband_device = NULL;
-//     gtk_css_node_set_parent (priv->rubberband_node, NULL);
-//     priv->rubberband_node = NULL;
+    //     gtk_css_node_set_parent (priv->rubberband_node, NULL);
+    //     priv->rubberband_node = NULL;
 
-    gtk_widget_queue_draw (GTK_WIDGET (icon_view));
+    gtk_widget_queue_draw(GTK_WIDGET(icon_view));
 }
 
-static void
-xiconview_update_rubberband_selection (XGtkIconView *icon_view)
+static void xiconview_update_rubberband_selection(XGtkIconView *icon_view)
 {
-    GList *items;
+//     GList *items;
     gint x, y, width, height;
     gboolean dirty = FALSE;
 
-    x = MIN (icon_view->priv->rubberband_x1,
-             icon_view->priv->rubberband_x2);
-    y = MIN (icon_view->priv->rubberband_y1,
-             icon_view->priv->rubberband_y2);
-    width = ABS (icon_view->priv->rubberband_x1 -
-                 icon_view->priv->rubberband_x2);
-    height = ABS (icon_view->priv->rubberband_y1 -
-                  icon_view->priv->rubberband_y2);
+    x = MIN(icon_view->priv->rubberband_x1, icon_view->priv->rubberband_x2);
+    y = MIN(icon_view->priv->rubberband_y1, icon_view->priv->rubberband_y2);
+    width = ABS(icon_view->priv->rubberband_x1 - icon_view->priv->rubberband_x2);
+    height = ABS(icon_view->priv->rubberband_y1 - icon_view->priv->rubberband_y2);
 
-    for (items = icon_view->priv->items; items; items = items->next)
+    // for (items = icon_view->priv->items; items; items = items->next)
+    for (auto &pItem : icon_view->priv->llItems)
     {
-        XGtkIconViewItem *item = (XGtkIconViewItem *)items->data;
+//         XGtkIconViewItem *item = &i; // (XGtkIconViewItem *)items->data;
         gboolean is_in;
         gboolean selected;
 
-        is_in = xiconview_item_hit_test (icon_view, item,
-                                             x, y, width, height);
+        is_in = xiconview_item_hit_test(icon_view, pItem, x, y, width, height);
 
-        selected = is_in ^ item->selected_before_rubberbanding;
+        selected = is_in ^ pItem->selected_before_rubberbanding;
 
-        if (item->selected != selected)
+        if (pItem->selected != selected)
         {
-            item->selected = selected;
+            pItem->selected = selected;
             dirty = TRUE;
-            xiconview_queue_draw_item (icon_view, item);
+            xiconview_queue_draw_item(icon_view, pItem);
         }
     }
 
     if (dirty)
-        g_signal_emit (icon_view, icon_view_signals[SELECTION_CHANGED], 0);
+        g_signal_emit(icon_view, icon_view_signals[SELECTION_CHANGED], 0);
 }
 
-
-typedef struct {
+typedef struct
+{
     GdkRectangle hit_rect;
-    gboolean     hit;
+    gboolean hit;
 } HitTestData;
 
-static gboolean
-hit_test (GtkCellRenderer    *renderer,
-          const GdkRectangle *cell_area,
-          const GdkRectangle *cell_background,
-          HitTestData        *data)
+static gboolean hit_test(GtkCellRenderer *renderer,
+                         const GdkRectangle *cell_area,
+                         const GdkRectangle *cell_background,
+                         HitTestData *data)
 {
-    if (MIN (data->hit_rect.x + data->hit_rect.width, cell_area->x + cell_area->width) -
-            MAX (data->hit_rect.x, cell_area->x) > 0 &&
-            MIN (data->hit_rect.y + data->hit_rect.height, cell_area->y + cell_area->height) -
-            MAX (data->hit_rect.y, cell_area->y) > 0)
+    if (MIN(data->hit_rect.x + data->hit_rect.width, cell_area->x + cell_area->width)
+                - MAX(data->hit_rect.x, cell_area->x)
+            > 0
+        && MIN(data->hit_rect.y + data->hit_rect.height, cell_area->y + cell_area->height)
+                   - MAX(data->hit_rect.y, cell_area->y)
+               > 0)
         data->hit = TRUE;
 
     return (data->hit != FALSE);
 }
 
 static gboolean
-xiconview_item_hit_test (XGtkIconView      *icon_view,
-                             XGtkIconViewItem  *item,
-                             gint              x,
-                             gint              y,
-                             gint              width,
-                             gint              height)
+xiconview_item_hit_test(XGtkIconView *icon_view, PXGtkIconViewItem pItem, gint x, gint y, gint width, gint height)
 {
     HitTestData data = { { x, y, width, height }, FALSE };
     GtkCellAreaContext *context;
-    GdkRectangle *item_area = &item->cell_area;
+    GdkRectangle *item_area = &pItem->cell_area;
 
-    if (MIN (x + width, item_area->x + item_area->width) - MAX (x, item_area->x) <= 0 ||
-            MIN (y + height, item_area->y + item_area->height) - MAX (y, item_area->y) <= 0)
+    if (MIN(x + width, item_area->x + item_area->width) - MAX(x, item_area->x) <= 0
+        || MIN(y + height, item_area->y + item_area->height) - MAX(y, item_area->y) <= 0)
         return FALSE;
 
-    context = (GtkCellAreaContext *)g_ptr_array_index (icon_view->priv->row_contexts, item->row);
+    context = (GtkCellAreaContext *)g_ptr_array_index(icon_view->priv->row_contexts, pItem->row);
 
-    _xiconview_set_cell_data (icon_view, item);
-    gtk_cell_area_foreach_alloc (icon_view->priv->cell_area, context,
-                                 GTK_WIDGET (icon_view),
-                                 item_area, item_area,
-                                 (GtkCellAllocCallback)hit_test, &data);
+    _xiconview_set_cell_data(icon_view, pItem);
+    gtk_cell_area_foreach_alloc(icon_view->priv->cell_area,
+                                context,
+                                GTK_WIDGET(icon_view),
+                                item_area,
+                                item_area,
+                                (GtkCellAllocCallback)hit_test,
+                                &data);
 
     return data.hit;
 }
 
-static gboolean
-xiconview_unselect_all_internal (XGtkIconView  *icon_view)
+static gboolean xiconview_unselect_all_internal(XGtkIconView *icon_view)
 {
     gboolean dirty = FALSE;
-    GList *items;
+//     GList *items;
 
     if (icon_view->priv->selection_mode == GTK_SELECTION_NONE)
         return FALSE;
 
-    for (items = icon_view->priv->items; items; items = items->next)
+    // for (items = icon_view->priv->items; items; items = items->next)
+    for (auto &pItem : icon_view->priv->llItems)
     {
-        XGtkIconViewItem *item = (XGtkIconViewItem *)items->data;
+//         XGtkIconViewItem *item = &i; // (XGtkIconViewItem *)items->data;
 
-        if (item->selected)
+        if (pItem->selected)
         {
-            item->selected = FALSE;
+            pItem->selected = FALSE;
             dirty = TRUE;
-            xiconview_queue_draw_item (icon_view, item);
-            xiconview_item_selected_changed (icon_view, item);
+            xiconview_queue_draw_item(icon_view, pItem);
+            xiconview_item_selected_changed(icon_view, pItem);
         }
     }
 
     return dirty;
 }
 
-
 /* XGtkIconView signals */
-static void
-xiconview_real_select_all (XGtkIconView *icon_view)
-{
-    xiconview_select_all (icon_view);
-}
+static void xiconview_real_select_all(XGtkIconView *icon_view) { xiconview_select_all(icon_view); }
 
-static void
-xiconview_real_unselect_all (XGtkIconView *icon_view)
-{
-    xiconview_unselect_all (icon_view);
-}
+static void xiconview_real_unselect_all(XGtkIconView *icon_view) { xiconview_unselect_all(icon_view); }
 
-static void
-xiconview_real_select_cursor_item (XGtkIconView *icon_view)
+static void xiconview_real_select_cursor_item(XGtkIconView *icon_view)
 {
-    xiconview_unselect_all (icon_view);
+    xiconview_unselect_all(icon_view);
 
     if (icon_view->priv->cursor_item != NULL)
-        _xiconview_select_item (icon_view, icon_view->priv->cursor_item);
+        _xiconview_select_item(icon_view, icon_view->priv->cursor_item);
 }
 
-static gboolean
-xiconview_real_activate_cursor_item (XGtkIconView *icon_view)
+static gboolean xiconview_real_activate_cursor_item(XGtkIconView *icon_view)
 {
     GtkTreePath *path;
     GtkCellAreaContext *context;
@@ -2730,55 +2556,54 @@ xiconview_real_activate_cursor_item (XGtkIconView *icon_view)
     if (!icon_view->priv->cursor_item)
         return FALSE;
 
-    context = (GtkCellAreaContext *)g_ptr_array_index (icon_view->priv->row_contexts, icon_view->priv->cursor_item->row);
+    context = (GtkCellAreaContext *)g_ptr_array_index(icon_view->priv->row_contexts, icon_view->priv->cursor_item->row);
 
-    _xiconview_set_cell_data (icon_view, icon_view->priv->cursor_item);
-    gtk_cell_area_activate (icon_view->priv->cell_area, context,
-                            GTK_WIDGET (icon_view),
-                            &icon_view->priv->cursor_item->cell_area,
-                            (GtkCellRendererState)0 /* XXX flags */,
-                            FALSE);
+    _xiconview_set_cell_data(icon_view, icon_view->priv->cursor_item);
+    gtk_cell_area_activate(icon_view->priv->cell_area,
+                           context,
+                           GTK_WIDGET(icon_view),
+                           &icon_view->priv->cursor_item->cell_area,
+                           (GtkCellRendererState)0 /* XXX flags */,
+                           FALSE);
 
-    path = gtk_tree_path_new_from_indices (icon_view->priv->cursor_item->index, -1);
-    xiconview_item_activated (icon_view, path);
-    gtk_tree_path_free (path);
+    path = gtk_tree_path_new_from_indices(icon_view->priv->cursor_item->index, -1);
+    xiconview_item_activated(icon_view, path);
+    gtk_tree_path_free(path);
 
     return TRUE;
 }
 
-static void
-xiconview_real_toggle_cursor_item (XGtkIconView *icon_view)
+static void xiconview_real_toggle_cursor_item(XGtkIconView *icon_view)
 {
     if (!icon_view->priv->cursor_item)
         return;
 
     switch (icon_view->priv->selection_mode)
     {
-    case GTK_SELECTION_NONE:
-        break;
-    case GTK_SELECTION_BROWSE:
-        _xiconview_select_item (icon_view, icon_view->priv->cursor_item);
-        break;
-    case GTK_SELECTION_SINGLE:
-        if (icon_view->priv->cursor_item->selected)
-            _xiconview_unselect_item (icon_view, icon_view->priv->cursor_item);
-        else
-            _xiconview_select_item (icon_view, icon_view->priv->cursor_item);
-        break;
-    case GTK_SELECTION_MULTIPLE:
-        icon_view->priv->cursor_item->selected = !icon_view->priv->cursor_item->selected;
-        g_signal_emit (icon_view, icon_view_signals[SELECTION_CHANGED], 0);
+        case GTK_SELECTION_NONE:
+            break;
+        case GTK_SELECTION_BROWSE:
+            _xiconview_select_item(icon_view, icon_view->priv->cursor_item);
+            break;
+        case GTK_SELECTION_SINGLE:
+            if (icon_view->priv->cursor_item->selected)
+                _xiconview_unselect_item(icon_view, icon_view->priv->cursor_item);
+            else
+                _xiconview_select_item(icon_view, icon_view->priv->cursor_item);
+            break;
+        case GTK_SELECTION_MULTIPLE:
+            icon_view->priv->cursor_item->selected = !icon_view->priv->cursor_item->selected;
+            g_signal_emit(icon_view, icon_view_signals[SELECTION_CHANGED], 0);
 
-        xiconview_item_selected_changed (icon_view, icon_view->priv->cursor_item);
-        xiconview_queue_draw_item (icon_view, icon_view->priv->cursor_item);
-        break;
+            xiconview_item_selected_changed(icon_view, icon_view->priv->cursor_item);
+            xiconview_queue_draw_item(icon_view, icon_view->priv->cursor_item);
+            break;
     }
 }
 
-static void
-xiconview_set_hadjustment_values (XGtkIconView *icon_view)
+static void xiconview_set_hadjustment_values(XGtkIconView *icon_view)
 {
-    GtkAllocation  allocation;
+    GtkAllocation allocation;
     GtkAdjustment *adj = icon_view->priv->hadjustment;
     gdouble old_page_size;
     gdouble old_upper;
@@ -2786,61 +2611,58 @@ xiconview_set_hadjustment_values (XGtkIconView *icon_view)
     gdouble new_value;
     gdouble new_upper;
 
-    gtk_widget_get_allocation (GTK_WIDGET (icon_view), &allocation);
+    gtk_widget_get_allocation(GTK_WIDGET(icon_view), &allocation);
 
-    old_value = gtk_adjustment_get_value (adj);
-    old_upper = gtk_adjustment_get_upper (adj);
-    old_page_size = gtk_adjustment_get_page_size (adj);
-    new_upper = MAX (allocation.width, icon_view->priv->width);
+    old_value = gtk_adjustment_get_value(adj);
+    old_upper = gtk_adjustment_get_upper(adj);
+    old_page_size = gtk_adjustment_get_page_size(adj);
+    new_upper = MAX(allocation.width, icon_view->priv->width);
 
-    if (gtk_widget_get_direction (GTK_WIDGET (icon_view)) == GTK_TEXT_DIR_RTL)
+    if (gtk_widget_get_direction(GTK_WIDGET(icon_view)) == GTK_TEXT_DIR_RTL)
     {
-        /* Make sure no scrolling occurs for RTL locales also (if possible) */
+        /* Make sure no scrolling occurs for RTL locales also (if
+         * possible) */
         /* Quick explanation:
-         *   In LTR locales, leftmost portion of visible rectangle should stay
-         *   fixed, which means left edge of scrollbar thumb should remain fixed
+         *   In LTR locales, leftmost portion of visible rectangle
+         * should stay
+         *   fixed, which means left edge of scrollbar thumb should
+         * remain fixed
          *   and thus adjustment's value should stay the same.
          *
-         *   In RTL locales, we want to keep rightmost portion of visible
-         *   rectangle fixed. This means right edge of thumb should remain fixed.
-         *   In this case, upper - value - page_size should remain constant.
+         *   In RTL locales, we want to keep rightmost portion of
+         * visible
+         *   rectangle fixed. This means right edge of thumb should
+         * remain fixed.
+         *   In this case, upper - value - page_size should remain
+         * constant.
          */
-        new_value = (new_upper - allocation.width) -
-                    (old_upper - old_value - old_page_size);
-        new_value = CLAMP (new_value, 0, new_upper - allocation.width);
+        new_value = (new_upper - allocation.width) - (old_upper - old_value - old_page_size);
+        new_value = CLAMP(new_value, 0, new_upper - allocation.width);
     }
     else
-        new_value = CLAMP (old_value, 0, new_upper - allocation.width);
+        new_value = CLAMP(old_value, 0, new_upper - allocation.width);
 
-    gtk_adjustment_configure (adj,
-                              new_value,
-                              0.0,
-                              new_upper,
-                              allocation.width * 0.1,
-                              allocation.width * 0.9,
-                              allocation.width);
+    gtk_adjustment_configure(
+        adj, new_value, 0.0, new_upper, allocation.width * 0.1, allocation.width * 0.9, allocation.width);
 }
 
-static void
-xiconview_set_vadjustment_values (XGtkIconView *icon_view)
+static void xiconview_set_vadjustment_values(XGtkIconView *icon_view)
 {
-    GtkAllocation  allocation;
+    GtkAllocation allocation;
     GtkAdjustment *adj = icon_view->priv->vadjustment;
 
-    gtk_widget_get_allocation (GTK_WIDGET (icon_view), &allocation);
+    gtk_widget_get_allocation(GTK_WIDGET(icon_view), &allocation);
 
-    gtk_adjustment_configure (adj,
-                              gtk_adjustment_get_value (adj),
-                              0.0,
-                              MAX (allocation.height, icon_view->priv->height),
-                              allocation.height * 0.1,
-                              allocation.height * 0.9,
-                              allocation.height);
+    gtk_adjustment_configure(adj,
+                             gtk_adjustment_get_value(adj),
+                             0.0,
+                             MAX(allocation.height, icon_view->priv->height),
+                             allocation.height * 0.1,
+                             allocation.height * 0.9,
+                             allocation.height);
 }
 
-static void
-xiconview_set_hadjustment (XGtkIconView   *icon_view,
-                               GtkAdjustment *adjustment)
+static void xiconview_set_hadjustment(XGtkIconView *icon_view, GtkAdjustment *adjustment)
 {
     XGtkIconViewPrivate *priv = icon_view->priv;
 
@@ -2849,27 +2671,21 @@ xiconview_set_hadjustment (XGtkIconView   *icon_view,
 
     if (priv->hadjustment != NULL)
     {
-        g_signal_handlers_disconnect_matched (priv->hadjustment,
-                                              G_SIGNAL_MATCH_DATA,
-                                              0, 0, NULL, NULL, icon_view);
-        g_object_unref (priv->hadjustment);
+        g_signal_handlers_disconnect_matched(priv->hadjustment, G_SIGNAL_MATCH_DATA, 0, 0, NULL, NULL, icon_view);
+        g_object_unref(priv->hadjustment);
     }
 
     if (!adjustment)
-        adjustment = gtk_adjustment_new (0.0, 0.0, 0.0,
-                                         0.0, 0.0, 0.0);
+        adjustment = gtk_adjustment_new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
 
-    g_signal_connect (adjustment, "value-changed",
-                      G_CALLBACK (xiconview_adjustment_changed), icon_view);
-    priv->hadjustment = (GtkAdjustment*)g_object_ref_sink (adjustment);
-    xiconview_set_hadjustment_values (icon_view);
+    g_signal_connect(adjustment, "value-changed", G_CALLBACK(xiconview_adjustment_changed), icon_view);
+    priv->hadjustment = (GtkAdjustment *)g_object_ref_sink(adjustment);
+    xiconview_set_hadjustment_values(icon_view);
 
-    g_object_notify (G_OBJECT (icon_view), "hadjustment");
+    g_object_notify(G_OBJECT(icon_view), "hadjustment");
 }
 
-static void
-xiconview_set_vadjustment (XGtkIconView   *icon_view,
-                               GtkAdjustment *adjustment)
+static void xiconview_set_vadjustment(XGtkIconView *icon_view, GtkAdjustment *adjustment)
 {
     XGtkIconViewPrivate *priv = icon_view->priv;
 
@@ -2878,162 +2694,162 @@ xiconview_set_vadjustment (XGtkIconView   *icon_view,
 
     if (priv->vadjustment != NULL)
     {
-        g_signal_handlers_disconnect_matched (priv->vadjustment,
-                                              G_SIGNAL_MATCH_DATA,
-                                              0, 0, NULL, NULL, icon_view);
-        g_object_unref (priv->vadjustment);
+        g_signal_handlers_disconnect_matched(priv->vadjustment, G_SIGNAL_MATCH_DATA, 0, 0, NULL, NULL, icon_view);
+        g_object_unref(priv->vadjustment);
     }
 
     if (!adjustment)
-        adjustment = gtk_adjustment_new (0.0, 0.0, 0.0,
-                                         0.0, 0.0, 0.0);
+        adjustment = gtk_adjustment_new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
 
-    g_signal_connect (adjustment, "value-changed",
-                      G_CALLBACK (xiconview_adjustment_changed), icon_view);
-    priv->vadjustment = (GtkAdjustment*)g_object_ref_sink (adjustment);
-    xiconview_set_vadjustment_values (icon_view);
+    g_signal_connect(adjustment, "value-changed", G_CALLBACK(xiconview_adjustment_changed), icon_view);
+    priv->vadjustment = (GtkAdjustment *)g_object_ref_sink(adjustment);
+    xiconview_set_vadjustment_values(icon_view);
 
-    g_object_notify (G_OBJECT (icon_view), "vadjustment");
+    g_object_notify(G_OBJECT(icon_view), "vadjustment");
 }
 
-static void
-xiconview_adjustment_changed (GtkAdjustment *adjustment,
-                                  XGtkIconView   *icon_view)
+static void xiconview_adjustment_changed(GtkAdjustment *adjustment, XGtkIconView *icon_view)
 {
     XGtkIconViewPrivate *priv = icon_view->priv;
 
-    if (gtk_widget_get_realized (GTK_WIDGET (icon_view)))
+    if (gtk_widget_get_realized(GTK_WIDGET(icon_view)))
     {
-        gdk_window_move (priv->bin_window,
-                         - gtk_adjustment_get_value (priv->hadjustment),
-                         - gtk_adjustment_get_value (priv->vadjustment));
+        gdk_window_move(priv->bin_window,
+                        -gtk_adjustment_get_value(priv->hadjustment),
+                        -gtk_adjustment_get_value(priv->vadjustment));
 
         if (icon_view->priv->doing_rubberband)
-            xiconview_update_rubberband (GTK_WIDGET (icon_view));
+            xiconview_update_rubberband(GTK_WIDGET(icon_view));
 
-//         _xiconview_accessible_adjustment_changed (icon_view);
+        //         _xiconview_accessible_adjustment_changed (icon_view);
     }
 }
 
-static gint
-compare_sizes (gconstpointer p1,
-               gconstpointer p2,
-               gpointer      unused)
+static gint compare_sizes(gconstpointer p1, gconstpointer p2, gpointer unused)
 {
-    return GPOINTER_TO_INT (((const GtkRequestedSize *) p1)->data)
-           - GPOINTER_TO_INT (((const GtkRequestedSize *) p2)->data);
+    return GPOINTER_TO_INT(((const GtkRequestedSize *)p1)->data)
+           - GPOINTER_TO_INT(((const GtkRequestedSize *)p2)->data);
 }
 
-static void
-xiconview_layout (XGtkIconView *icon_view)
+// TODO TODO TODO this is the biggie
+static void xiconview_layout(XGtkIconView *icon_view)
 {
     XGtkIconViewPrivate *priv = icon_view->priv;
-    GtkWidget *widget = GTK_WIDGET (icon_view);
-    GList *items;
+    GtkWidget *widget = GTK_WIDGET(icon_view);
+//     GList *items;
     gint item_width; /* this doesn't include item_padding */
     gint n_columns, n_rows, n_items;
     gint col, row;
     GtkRequestedSize *sizes;
     gboolean rtl;
 
-    if (xiconview_is_empty (icon_view))
+    if (xiconview_is_empty(icon_view))
         return;
 
-    rtl = gtk_widget_get_direction (GTK_WIDGET (icon_view)) == GTK_TEXT_DIR_RTL;
-    n_items = xiconview_get_n_items (icon_view);
+    rtl = gtk_widget_get_direction(GTK_WIDGET(icon_view)) == GTK_TEXT_DIR_RTL;
+    n_items = xiconview_get_n_items(icon_view);
 
-    xiconview_compute_n_items_for_size (icon_view,
-                                            GTK_ORIENTATION_HORIZONTAL,
-                                            gtk_widget_get_allocated_width (widget),
-                                            NULL, NULL,
-                                            &n_columns, &item_width);
+    xiconview_compute_n_items_for_size(icon_view,
+                                       GTK_ORIENTATION_HORIZONTAL,
+                                       gtk_widget_get_allocated_width(widget),
+                                       NULL,
+                                       NULL,
+                                       &n_columns,
+                                       &item_width);
     n_rows = (n_items + n_columns - 1) / n_columns;
 
     priv->width = n_columns * (item_width + 2 * priv->item_padding + priv->column_spacing) - priv->column_spacing;
     priv->width += 2 * priv->margin;
-    priv->width = MAX (priv->width, gtk_widget_get_allocated_width (widget));
+    priv->width = MAX(priv->width, gtk_widget_get_allocated_width(widget));
 
     /* Clear the per row contexts */
-    g_ptr_array_set_size (icon_view->priv->row_contexts, 0);
+    g_ptr_array_set_size(icon_view->priv->row_contexts, 0);
 
-    gtk_cell_area_context_reset (priv->cell_area_context);
+    gtk_cell_area_context_reset(priv->cell_area_context);
     /* because layouting is complicated. We designed an API
      * that is O(N²) and nonsensical.
      * And we're proud of it. */
-    for (items = priv->items; items; items = items->next)
+    // for (items = priv->items; items; items = items->next)
+    for (auto &pItem : priv->llItems)
     {
-        _xiconview_set_cell_data (icon_view, (XGtkIconViewItem *)items->data);
-        gtk_cell_area_get_preferred_width (priv->cell_area,
-                                           priv->cell_area_context,
-                                           widget,
-                                           NULL, NULL);
+//         XGtkIconViewItem *item = &i;
+        _xiconview_set_cell_data(icon_view, pItem);
+        gtk_cell_area_get_preferred_width(priv->cell_area,
+                                          priv->cell_area_context,
+                                          widget,
+                                          NULL,
+                                          NULL);
     }
 
-    sizes = g_newa (GtkRequestedSize, n_rows);
-    items = priv->items;
+    sizes = g_newa(GtkRequestedSize, n_rows);
+    // items = priv->items;
+    auto itItems = priv->llItems.begin();
     priv->height = priv->margin;
 
     /* Collect the heights for all rows */
     for (row = 0; row < n_rows; row++)
     {
-        GtkCellAreaContext *context = gtk_cell_area_copy_context (priv->cell_area, priv->cell_area_context);
-        g_ptr_array_add (priv->row_contexts, context);
+        GtkCellAreaContext *context = gtk_cell_area_copy_context(priv->cell_area, priv->cell_area_context);
+        g_ptr_array_add(priv->row_contexts, context);
 
-        for (col = 0; col < n_columns && items; col++, items = items->next)
+        for (col = 0;
+            (col < n_columns) && (itItems != priv->llItems.end());
+            ++col, ++itItems)
         {
-            XGtkIconViewItem *item = (XGtkIconViewItem *)items->data;
+            PXGtkIconViewItem &pItem = *itItems; // (XGtkIconViewItem *)items->data;
 
-            _xiconview_set_cell_data (icon_view, item);
-            gtk_cell_area_get_preferred_height_for_width (priv->cell_area,
-                    context,
-                    widget,
-                    item_width,
-                    NULL, NULL);
+            _xiconview_set_cell_data(icon_view, pItem);
+            gtk_cell_area_get_preferred_height_for_width(priv->cell_area,
+                                                         context,
+                                                         widget,
+                                                         item_width,
+                                                         NULL,
+                                                         NULL);
         }
 
-        sizes[row].data = GINT_TO_POINTER (row);
-        gtk_cell_area_context_get_preferred_height_for_width (context,
-                item_width,
-                &sizes[row].minimum_size,
-                &sizes[row].natural_size);
+        sizes[row].data = GINT_TO_POINTER(row);
+        gtk_cell_area_context_get_preferred_height_for_width(
+            context, item_width, &sizes[row].minimum_size, &sizes[row].natural_size);
         priv->height += sizes[row].minimum_size + 2 * priv->item_padding + priv->row_spacing;
     }
 
     priv->height -= priv->row_spacing;
     priv->height += priv->margin;
-    priv->height = MIN (priv->height, gtk_widget_get_allocated_height (widget));
+    priv->height = MIN(priv->height, gtk_widget_get_allocated_height(widget));
 
-    gtk_distribute_natural_allocation (gtk_widget_get_allocated_height (widget) - priv->height,
-                                       n_rows,
-                                       sizes);
+    gtk_distribute_natural_allocation(gtk_widget_get_allocated_height(widget) - priv->height, n_rows, sizes);
 
     /* Actually allocate the rows */
-    g_qsort_with_data (sizes, n_rows, sizeof (GtkRequestedSize), compare_sizes, NULL);
+    g_qsort_with_data(sizes, n_rows, sizeof(GtkRequestedSize), compare_sizes, NULL);
 
-    items = priv->items;
+    itItems = priv->llItems.begin();
+    // items = priv->items;
     priv->height = priv->margin;
 
     for (row = 0; row < n_rows; row++)
     {
-        GtkCellAreaContext *context = (GtkCellAreaContext *)g_ptr_array_index (priv->row_contexts, row);
-        gtk_cell_area_context_allocate (context, item_width, sizes[row].minimum_size);
+        GtkCellAreaContext *context = (GtkCellAreaContext *)g_ptr_array_index(priv->row_contexts, row);
+        gtk_cell_area_context_allocate(context, item_width, sizes[row].minimum_size);
 
         priv->height += priv->item_padding;
 
-        for (col = 0; col < n_columns && items; col++, items = items->next)
+        for (col = 0;
+             (col < n_columns) && (itItems != priv->llItems.end()); // items;
+             ++col, ++itItems) // items = items->next)
         {
-            XGtkIconViewItem *item = (XGtkIconViewItem *)items->data;
+            PXGtkIconViewItem &pItem = *itItems; // (XGtkIconViewItem *)items->data;
 
-            item->cell_area.x = priv->margin + (col * 2 + 1) * priv->item_padding + col * (priv->column_spacing + item_width);
-            item->cell_area.width = item_width;
-            item->cell_area.y = priv->height;
-            item->cell_area.height = sizes[row].minimum_size;
-            item->row = row;
-            item->col = col;
+            pItem->cell_area.x =
+                priv->margin + (col * 2 + 1) * priv->item_padding + col * (priv->column_spacing + item_width);
+            pItem->cell_area.width = item_width;
+            pItem->cell_area.y = priv->height;
+            pItem->cell_area.height = sizes[row].minimum_size;
+            pItem->row = row;
+            pItem->col = col;
             if (rtl)
             {
-                item->cell_area.x = priv->width - item_width - item->cell_area.x;
-                item->col = n_columns - 1 - col;
+                pItem->cell_area.x = priv->width - item_width - pItem->cell_area.x;
+                pItem->col = n_columns - 1 - col;
             }
         }
 
@@ -3042,171 +2858,162 @@ xiconview_layout (XGtkIconView *icon_view)
 
     priv->height -= priv->row_spacing;
     priv->height += priv->margin;
-    priv->height = MAX (priv->height, gtk_widget_get_allocated_height (widget));
+    priv->height = MAX(priv->height, gtk_widget_get_allocated_height(widget));
 }
 
-static void
-xiconview_invalidate_sizes (XGtkIconView *icon_view)
+static void xiconview_invalidate_sizes(XGtkIconView *icon_view)
 {
     /* Clear all item sizes */
-    g_list_foreach (icon_view->priv->items,
-                    (GFunc)xiconview_item_invalidate_size, NULL);
+    for (auto &pItem : icon_view->priv->llItems)
+        xiconview_item_invalidate_size(pItem);
+
+//     g_list_foreach(icon_view->priv->items,
+//                    (GFunc)xiconview_item_invalidate_size,
+//                    NULL);
 
     /* Re-layout the items */
-    gtk_widget_queue_resize (GTK_WIDGET (icon_view));
+    gtk_widget_queue_resize(GTK_WIDGET(icon_view));
 }
 
-static void
-xiconview_item_invalidate_size (XGtkIconViewItem *item)
+static void xiconview_item_invalidate_size(PXGtkIconViewItem &pItem)
 {
-    item->cell_area.width = -1;
-    item->cell_area.height = -1;
+    pItem->cell_area.width = -1;
+    pItem->cell_area.height = -1;
 }
 
 static void
-xiconview_paint_item (XGtkIconView     *icon_view,
-                          cairo_t         *cr,
-                          XGtkIconViewItem *item,
-                          gint             x,
-                          gint             y,
-                          gboolean         draw_focus)
+xiconview_paint_item(XGtkIconView *icon_view,
+                     cairo_t *cr,
+                     PXGtkIconViewItem pItem,
+                     gint x,
+                     gint y,
+                     gboolean draw_focus)
 {
     GdkRectangle cell_area;
     GtkStateFlags state = (GtkStateFlags)0;
     GtkCellRendererState flags = (GtkCellRendererState)0;
     GtkStyleContext *style_context;
-    GtkWidget *widget = GTK_WIDGET (icon_view);
+    GtkWidget *widget = GTK_WIDGET(icon_view);
     XGtkIconViewPrivate *priv = icon_view->priv;
     GtkCellAreaContext *context;
 
-    if (priv->model == NULL || item->cell_area.width <= 0 || item->cell_area.height <= 0)
+    if (priv->model == NULL || pItem->cell_area.width <= 0 || pItem->cell_area.height <= 0)
         return;
 
-    _xiconview_set_cell_data (icon_view, item);
+    _xiconview_set_cell_data(icon_view, pItem);
 
-    style_context = gtk_widget_get_style_context (widget);
-    state = gtk_widget_get_state_flags (widget);
+    style_context = gtk_widget_get_style_context(widget);
+    state = gtk_widget_get_state_flags(widget);
 
-    gtk_style_context_save (style_context);
-    gtk_style_context_add_class (style_context, GTK_STYLE_CLASS_CELL);
+    gtk_style_context_save(style_context);
+    gtk_style_context_add_class(style_context, GTK_STYLE_CLASS_CELL);
 
     state = (GtkStateFlags)((int)state & (~(GTK_STATE_FLAG_SELECTED | GTK_STATE_FLAG_PRELIGHT)));
 
-    if ((state & GTK_STATE_FLAG_FOCUSED) &&
-            item == icon_view->priv->cursor_item)
+    if ((state & GTK_STATE_FLAG_FOCUSED) && pItem == icon_view->priv->cursor_item)
         flags = (GtkCellRendererState)((int)flags | GTK_CELL_RENDERER_FOCUSED);
 
-    if (item->selected)
+    if (pItem->selected)
     {
         state = (GtkStateFlags)((int)state | GTK_STATE_FLAG_SELECTED);
         flags = (GtkCellRendererState)((int)flags | GTK_CELL_RENDERER_SELECTED);
     }
 
-    if (item == priv->last_prelight)
+    if (pItem == priv->last_prelight)
     {
         state = (GtkStateFlags)((int)state | GTK_STATE_FLAG_PRELIGHT);
         flags = (GtkCellRendererState)((int)flags | GTK_CELL_RENDERER_PRELIT);
     }
 
-    gtk_style_context_set_state (style_context, state);
+    gtk_style_context_set_state(style_context, state);
 
-    gtk_render_background (style_context, cr,
-                           x - priv->item_padding,
-                           y - priv->item_padding,
-                           item->cell_area.width  + priv->item_padding * 2,
-                           item->cell_area.height + priv->item_padding * 2);
-    gtk_render_frame (style_context, cr,
-                      x - priv->item_padding,
-                      y - priv->item_padding,
-                      item->cell_area.width  + priv->item_padding * 2,
-                      item->cell_area.height + priv->item_padding * 2);
+    gtk_render_background(style_context,
+                          cr,
+                          x - priv->item_padding,
+                          y - priv->item_padding,
+                          pItem->cell_area.width + priv->item_padding * 2,
+                          pItem->cell_area.height + priv->item_padding * 2);
+    gtk_render_frame(style_context,
+                     cr,
+                     x - priv->item_padding,
+                     y - priv->item_padding,
+                     pItem->cell_area.width + priv->item_padding * 2,
+                     pItem->cell_area.height + priv->item_padding * 2);
 
-    cell_area.x      = x;
-    cell_area.y      = y;
-    cell_area.width  = item->cell_area.width;
-    cell_area.height = item->cell_area.height;
+    cell_area.x = x;
+    cell_area.y = y;
+    cell_area.width = pItem->cell_area.width;
+    cell_area.height = pItem->cell_area.height;
 
-    context = (GtkCellAreaContext*)g_ptr_array_index (priv->row_contexts, item->row);
-    gtk_cell_area_render (priv->cell_area, context,
-                          widget, cr, &cell_area, &cell_area, flags,
-                          draw_focus);
+    context = (GtkCellAreaContext *)g_ptr_array_index(priv->row_contexts, pItem->row);
+    gtk_cell_area_render(priv->cell_area, context, widget, cr, &cell_area, &cell_area, flags, draw_focus);
 
-    gtk_style_context_restore (style_context);
+    gtk_style_context_restore(style_context);
 }
 
-static void
-xiconview_paint_rubberband (XGtkIconView *icon_view,
-                                cairo_t     *cr)
+static void xiconview_paint_rubberband(XGtkIconView *icon_view, cairo_t *cr)
 {
     XGtkIconViewPrivate *priv = icon_view->priv;
     GtkStyleContext *context;
     GdkRectangle rect;
 
-    cairo_save (cr);
+    cairo_save(cr);
 
-    rect.x = MIN (priv->rubberband_x1, priv->rubberband_x2);
-    rect.y = MIN (priv->rubberband_y1, priv->rubberband_y2);
-    rect.width = ABS (priv->rubberband_x1 - priv->rubberband_x2) + 1;
-    rect.height = ABS (priv->rubberband_y1 - priv->rubberband_y2) + 1;
+    rect.x = MIN(priv->rubberband_x1, priv->rubberband_x2);
+    rect.y = MIN(priv->rubberband_y1, priv->rubberband_y2);
+    rect.width = ABS(priv->rubberband_x1 - priv->rubberband_x2) + 1;
+    rect.height = ABS(priv->rubberband_y1 - priv->rubberband_y2) + 1;
 
-    context = gtk_widget_get_style_context (GTK_WIDGET (icon_view));
+    context = gtk_widget_get_style_context(GTK_WIDGET(icon_view));
 
-//     gtk_style_context_save_to_node (context, priv->rubberband_node);
+    //     gtk_style_context_save_to_node (context, priv->rubberband_node);
 
-    gdk_cairo_rectangle (cr, &rect);
-    cairo_clip (cr);
+    gdk_cairo_rectangle(cr, &rect);
+    cairo_clip(cr);
 
-    gtk_render_background (context, cr,
-                           rect.x, rect.y,
-                           rect.width, rect.height);
-    gtk_render_frame (context, cr,
-                      rect.x, rect.y,
-                      rect.width, rect.height);
+    gtk_render_background(context, cr, rect.x, rect.y, rect.width, rect.height);
+    gtk_render_frame(context, cr, rect.x, rect.y, rect.width, rect.height);
 
-    gtk_style_context_restore (context);
-    cairo_restore (cr);
+    gtk_style_context_restore(context);
+    cairo_restore(cr);
 }
 
-static void
-xiconview_queue_draw_path (XGtkIconView *icon_view,
-                               GtkTreePath *path)
+static void xiconview_queue_draw_path(XGtkIconView *icon_view, GtkTreePath *path)
 {
-    GList *l;
+//     GList *l;
     gint index;
 
-    index = gtk_tree_path_get_indices (path)[0];
+    index = gtk_tree_path_get_indices(path)[0];
 
-    for (l = icon_view->priv->items; l; l = l->next)
+    // for (l = icon_view->priv->items; l; l = l->next)
+    for (auto &pItem : icon_view->priv->llItems)
     {
-        XGtkIconViewItem *item = (XGtkIconViewItem *)l->data;
+//         XGtkIconViewItem *item = &i; // (XGtkIconViewItem *)l->data;
 
-        if (item->index == index)
+        if (pItem->index == index)
         {
-            xiconview_queue_draw_item (icon_view, item);
+            xiconview_queue_draw_item(icon_view, pItem);
             break;
         }
     }
 }
 
-static void
-xiconview_queue_draw_item (XGtkIconView     *icon_view,
-                               XGtkIconViewItem *item)
+static void xiconview_queue_draw_item(XGtkIconView *icon_view, PXGtkIconViewItem pItem)
 {
-    GdkRectangle  rect;
-    GdkRectangle *item_area = &item->cell_area;
+    GdkRectangle rect;
+    GdkRectangle *item_area = &pItem->cell_area;
 
-    rect.x      = item_area->x - icon_view->priv->item_padding;
-    rect.y      = item_area->y - icon_view->priv->item_padding;
-    rect.width  = item_area->width  + icon_view->priv->item_padding * 2;
+    rect.x = item_area->x - icon_view->priv->item_padding;
+    rect.y = item_area->y - icon_view->priv->item_padding;
+    rect.width = item_area->width + icon_view->priv->item_padding * 2;
     rect.height = item_area->height + icon_view->priv->item_padding * 2;
 
     if (icon_view->priv->bin_window)
-        gdk_window_invalidate_rect (icon_view->priv->bin_window, &rect, TRUE);
+        gdk_window_invalidate_rect(icon_view->priv->bin_window, &rect, TRUE);
 }
 
-void
-_xiconview_set_cursor_item (XGtkIconView     *icon_view,
-                                XGtkIconViewItem *item,
+void _xiconview_set_cursor_item(XGtkIconView *icon_view,
+                                PXGtkIconViewItem pItem,
                                 GtkCellRenderer *cursor_cell)
 {
     AtkObject *obj;
@@ -3218,192 +3025,179 @@ _xiconview_set_cursor_item (XGtkIconView     *icon_view,
      * but we still need to queue the draw here (in the case
      * that the focus cell changes but not the cursor item).
      */
-    xiconview_queue_draw_item (icon_view, item);
+    xiconview_queue_draw_item(icon_view, pItem);
 
-    if (icon_view->priv->cursor_item == item &&
-            (cursor_cell == NULL || cursor_cell == gtk_cell_area_get_focus_cell (icon_view->priv->cell_area)))
+    if (    icon_view->priv->cursor_item == pItem
+         && (cursor_cell == NULL || cursor_cell == gtk_cell_area_get_focus_cell(icon_view->priv->cell_area))
+       )
         return;
 
-    obj = gtk_widget_get_accessible (GTK_WIDGET (icon_view));
+    obj = gtk_widget_get_accessible(GTK_WIDGET(icon_view));
     if (icon_view->priv->cursor_item != NULL)
     {
-        xiconview_queue_draw_item (icon_view, icon_view->priv->cursor_item);
+        xiconview_queue_draw_item(icon_view, icon_view->priv->cursor_item);
         if (obj != NULL)
         {
-            cursor_item_obj = atk_object_ref_accessible_child (obj, icon_view->priv->cursor_item->index);
+            cursor_item_obj = atk_object_ref_accessible_child(obj, icon_view->priv->cursor_item->index);
             if (cursor_item_obj != NULL)
-                atk_object_notify_state_change (cursor_item_obj, ATK_STATE_FOCUSED, FALSE);
+                atk_object_notify_state_change(cursor_item_obj, ATK_STATE_FOCUSED, FALSE);
         }
     }
-    icon_view->priv->cursor_item = item;
+    icon_view->priv->cursor_item = pItem;
 
     if (cursor_cell)
-        gtk_cell_area_set_focus_cell (icon_view->priv->cell_area, cursor_cell);
+        gtk_cell_area_set_focus_cell(icon_view->priv->cell_area, cursor_cell);
     else
     {
         /* Make sure there is a cell in focus initially */
-        if (!gtk_cell_area_get_focus_cell (icon_view->priv->cell_area))
-            gtk_cell_area_focus (icon_view->priv->cell_area, GTK_DIR_TAB_FORWARD);
+        if (!gtk_cell_area_get_focus_cell(icon_view->priv->cell_area))
+            gtk_cell_area_focus(icon_view->priv->cell_area, GTK_DIR_TAB_FORWARD);
     }
 
     /* Notify that accessible focus object has changed */
-    item_obj = atk_object_ref_accessible_child (obj, item->index);
+    item_obj = atk_object_ref_accessible_child(obj, pItem->index);
 
     if (item_obj != NULL)
     {
         G_GNUC_BEGIN_IGNORE_DEPRECATIONS;
-        atk_focus_tracker_notify (item_obj);
+        atk_focus_tracker_notify(item_obj);
         G_GNUC_END_IGNORE_DEPRECATIONS;
-        atk_object_notify_state_change (item_obj, ATK_STATE_FOCUSED, TRUE);
-        g_object_unref (item_obj);
+        atk_object_notify_state_change(item_obj, ATK_STATE_FOCUSED, TRUE);
+        g_object_unref(item_obj);
     }
 }
 
-
-static XGtkIconViewItem *
-xiconview_item_new (void)
+static PXGtkIconViewItem xiconview_item_new(void)
 {
-    XGtkIconViewItem *item;
+//     XGtkIconViewItem *item;
 
-    item = g_slice_new0 (XGtkIconViewItem);
-
-    item->cell_area.width  = -1;
-    item->cell_area.height = -1;
-
-    return item;
+    return std::make_shared<XGtkIconViewItem>(); // g_slice_new0(XGtkIconViewItem);;
 }
 
-static void
-xiconview_item_free (XGtkIconViewItem *item)
-{
-    g_return_if_fail (item != NULL);
+// static void xiconview_item_free(XGtkIconViewItem *item)
+// {
+//     g_return_if_fail(item != NULL);
+//
+//     g_slice_free(XGtkIconViewItem, item);
+// }
 
-    g_slice_free (XGtkIconViewItem, item);
-}
-
-XGtkIconViewItem *
-_xiconview_get_item_at_coords (XGtkIconView          *icon_view,
-                                   gint                  x,
-                                   gint                  y,
-                                   gboolean              only_in_cell,
-                                   GtkCellRenderer     **cell_at_pos)
+PXGtkIconViewItem _xiconview_get_item_at_coords(XGtkIconView *icon_view,
+                                                gint x,
+                                                gint y,
+                                                gboolean only_in_cell,
+                                                GtkCellRenderer **cell_at_pos)
 {
-    GList *items;
+//     GList *items;
 
     if (cell_at_pos)
         *cell_at_pos = NULL;
 
-    for (items = icon_view->priv->items; items; items = items->next)
+    // for (items = icon_view->priv->items; items; items = items->next)
+    for (auto &pItem : icon_view->priv->llItems)
     {
-        XGtkIconViewItem *item = (XGtkIconViewItem *)items->data;
-        GdkRectangle    *item_area = &item->cell_area;
+//         XGtkIconViewItem *item = &i; // (XGtkIconViewItem *)items->data;
+        GdkRectangle *item_area = &pItem->cell_area;
 
-        if (x >= item_area->x - icon_view->priv->column_spacing/2 &&
-                x <= item_area->x + item_area->width + icon_view->priv->column_spacing/2 &&
-                y >= item_area->y - icon_view->priv->row_spacing/2 &&
-                y <= item_area->y + item_area->height + icon_view->priv->row_spacing/2)
+        if (x >= item_area->x - icon_view->priv->column_spacing / 2
+            && x <= item_area->x + item_area->width + icon_view->priv->column_spacing / 2
+            && y >= item_area->y - icon_view->priv->row_spacing / 2
+            && y <= item_area->y + item_area->height + icon_view->priv->row_spacing / 2)
         {
             if (only_in_cell || cell_at_pos)
             {
                 GtkCellRenderer *cell = NULL;
-                GtkCellAreaContext *context = (GtkCellAreaContext *)g_ptr_array_index (icon_view->priv->row_contexts, item->row);
-                _xiconview_set_cell_data (icon_view, item);
+                GtkCellAreaContext *context =
+                    (GtkCellAreaContext *)g_ptr_array_index(icon_view->priv->row_contexts, pItem->row);
+                _xiconview_set_cell_data(icon_view, pItem);
 
-                if (x >= item_area->x && x <= item_area->x + item_area->width &&
-                        y >= item_area->y && y <= item_area->y + item_area->height)
-                    cell = gtk_cell_area_get_cell_at_position (icon_view->priv->cell_area, context,
-                            GTK_WIDGET (icon_view),
-                            item_area,
-                            x, y, NULL);
+                if (x >= item_area->x && x <= item_area->x + item_area->width && y >= item_area->y
+                    && y <= item_area->y + item_area->height)
+                    cell = gtk_cell_area_get_cell_at_position(
+                        icon_view->priv->cell_area, context, GTK_WIDGET(icon_view), item_area, x, y, NULL);
 
                 if (cell_at_pos)
                     *cell_at_pos = cell;
 
                 if (only_in_cell)
-                    return cell != NULL ? item : NULL;
+                    return cell != NULL ? pItem : NULL;
                 else
-                    return item;
+                    return pItem;
             }
-            return item;
+            return pItem;
         }
     }
-    return NULL;
+    return nullptr;
 }
 
-void
-_xiconview_select_item (XGtkIconView      *icon_view,
-                            XGtkIconViewItem  *item)
+void _xiconview_select_item(XGtkIconView *icon_view,
+                            PXGtkIconViewItem pItem)
 {
-    g_return_if_fail (IS_XICONVIEW (icon_view));
-    g_return_if_fail (item != NULL);
+    g_return_if_fail(IS_XICONVIEW(icon_view));
+    g_return_if_fail(pItem != NULL);
 
-    if (item->selected)
+    if (pItem->selected)
         return;
 
     if (icon_view->priv->selection_mode == GTK_SELECTION_NONE)
         return;
     else if (icon_view->priv->selection_mode != GTK_SELECTION_MULTIPLE)
-        xiconview_unselect_all_internal (icon_view);
+        xiconview_unselect_all_internal(icon_view);
 
-    item->selected = TRUE;
+    pItem->selected = TRUE;
 
-    xiconview_item_selected_changed (icon_view, item);
-    g_signal_emit (icon_view, icon_view_signals[SELECTION_CHANGED], 0);
+    xiconview_item_selected_changed(icon_view, pItem);
+    g_signal_emit(icon_view, icon_view_signals[SELECTION_CHANGED], 0);
 
-    xiconview_queue_draw_item (icon_view, item);
+    xiconview_queue_draw_item(icon_view, pItem);
 }
 
-
-void
-_xiconview_unselect_item (XGtkIconView      *icon_view,
-                              XGtkIconViewItem  *item)
+void _xiconview_unselect_item(XGtkIconView *icon_view,
+                              PXGtkIconViewItem pItem)
 {
-    g_return_if_fail (IS_XICONVIEW (icon_view));
-    g_return_if_fail (item != NULL);
+    g_return_if_fail(IS_XICONVIEW(icon_view));
+    g_return_if_fail(pItem != NULL);
 
-    if (!item->selected)
+    if (!pItem->selected)
         return;
 
-    if (icon_view->priv->selection_mode == GTK_SELECTION_NONE ||
-            icon_view->priv->selection_mode == GTK_SELECTION_BROWSE)
+    if (icon_view->priv->selection_mode == GTK_SELECTION_NONE
+        || icon_view->priv->selection_mode == GTK_SELECTION_BROWSE)
         return;
 
-    item->selected = FALSE;
+    pItem->selected = FALSE;
 
-    xiconview_item_selected_changed (icon_view, item);
-    g_signal_emit (icon_view, icon_view_signals[SELECTION_CHANGED], 0);
+    xiconview_item_selected_changed(icon_view, pItem);
+    g_signal_emit(icon_view, icon_view_signals[SELECTION_CHANGED], 0);
 
-    xiconview_queue_draw_item (icon_view, item);
+    xiconview_queue_draw_item(icon_view, pItem);
 }
 
-static void
-verify_items (XGtkIconView *icon_view)
+static void verify_items(XGtkIconView *icon_view)
 {
-    GList *items;
-    int i = 0;
-
-    for (items = icon_view->priv->items; items; items = items->next)
-    {
-        XGtkIconViewItem *item = (XGtkIconViewItem *)items->data;
-
-        if (item->index != i)
-            g_error ("List item does not match its index: "
-                     "item index %d and list index %d\n", item->index, i);
-
-        i++;
-    }
+//     GList *items;
+//     int i = 0;
+//
+//     // for (items = icon_view->priv->items; items; items = items->next)
+//     for (auto &i : icon_view->priv->llItems)
+//     {
+//         XGtkIconViewItem *item = &i; // (XGtkIconViewItem *)items->data;
+//
+//         if (item->index != i)
+//             g_error("List item does not match its index: "
+//                     "item index %d and list index %d\n",
+//                     item->index,
+//                     i);
+//
+//         i++;
+//     }
 }
 
-static void
-xiconview_row_changed (GtkTreeModel *model,
-                           GtkTreePath  *path,
-                           GtkTreeIter  *iter,
-                           gpointer      data)
+static void xiconview_row_changed(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter *iter, gpointer data)
 {
     XGtkIconView *icon_view = XICONVIEW(data);
 
     /* ignore changes in branches */
-    if (gtk_tree_path_get_depth (path) > 1)
+    if (gtk_tree_path_get_depth(path) > 1)
         return;
 
     /* An icon view subclass might add it's own model and populate
@@ -3411,7 +3205,7 @@ xiconview_row_changed (GtkTreeModel *model,
      * to be called
      */
     if (icon_view->priv->cell_area)
-        gtk_cell_area_stop_editing (icon_view->priv->cell_area, TRUE);
+        gtk_cell_area_stop_editing(icon_view->priv->cell_area, TRUE);
 
     /* Here we can use a "grow-only" strategy for optimization
      * and only invalidate a single item and queue a relayout
@@ -3421,244 +3215,252 @@ xiconview_row_changed (GtkTreeModel *model,
      * so just invalidate the whole thing when the model
      * changes.
      */
-    xiconview_invalidate_sizes (icon_view);
+    xiconview_invalidate_sizes(icon_view);
 
-    verify_items (icon_view);
+    verify_items(icon_view);
 }
 
-static void
-xiconview_row_inserted (GtkTreeModel *model,
-                            GtkTreePath  *path,
-                            GtkTreeIter  *iter,
-                            gpointer      data)
+static void xiconview_row_inserted(GtkTreeModel *model,
+                                   GtkTreePath *path,
+                                   GtkTreeIter *iter,
+                                   gpointer data)
 {
     XGtkIconView *icon_view = XICONVIEW(data);
     gint index;
-    XGtkIconViewItem *item;
-    GList *list;
+//     XGtkIconViewItem *item;
+//     GList *list;
 
     /* ignore changes in branches */
-    if (gtk_tree_path_get_depth (path) > 1)
+    if (gtk_tree_path_get_depth(path) > 1)
         return;
 
     index = gtk_tree_path_get_indices(path)[0];
 
-    item = xiconview_item_new ();
+    auto pItem = xiconview_item_new();
 
-    item->index = index;
+    pItem->index = index;
+
+    int i = 0;
+    std::list<PXGtkIconViewItem>::iterator itInsert = icon_view->priv->llItems.end();
+    for (auto it = icon_view->priv->llItems.begin();
+         it != icon_view->priv->llItems.end();
+         ++it, ++i)
+        if (i == index)
+        {
+            itInsert = it;
+            break;
+        }
+
+    auto itInserted = icon_view->priv->llItems.insert(itInsert, pItem);
+
+//          l.insert(i, 10);
 
     /* FIXME: We can be more efficient here,
        we can store a tail pointer and use that when
        appending (which is a rather common operation)
     */
-    icon_view->priv->items = g_list_insert (icon_view->priv->items,
-                                            item, index);
+//     icon_view->priv->items = g_list_insert(icon_view->priv->items, item, index);
 
-    list = g_list_nth (icon_view->priv->items, index + 1);
-    for (; list; list = list->next)
+    // list = g_list_nth(icon_view->priv->items, index + 1);
+
+    ++itInserted;
+    for (;
+         itInserted != icon_view->priv->llItems.end();
+         ++itInserted)
+//     for (; list; list = list->next)
     {
-        item = (XGtkIconViewItem *)list->data;
-
-        item->index++;
+//         item = (XGtkIconViewItem *)list->data;
+        (*itInserted)->index++;
     }
 
-    verify_items (icon_view);
+    verify_items(icon_view);
 
-    gtk_widget_queue_resize (GTK_WIDGET (icon_view));
+    gtk_widget_queue_resize(GTK_WIDGET(icon_view));
 }
 
-static void
-xiconview_row_deleted (GtkTreeModel *model,
-                           GtkTreePath  *path,
-                           gpointer      data)
+static void xiconview_row_deleted(GtkTreeModel *model, GtkTreePath *path, gpointer data)
 {
     XGtkIconView *icon_view = XICONVIEW(data);
-    gint index;
-    XGtkIconViewItem *item;
-    GList *list, *next;
+    PXGtkIconViewItem pItem;
+//     GList *list, *next;
     gboolean emit = FALSE;
 
     /* ignore changes in branches */
-    if (gtk_tree_path_get_depth (path) > 1)
+    if (gtk_tree_path_get_depth(path) > 1)
         return;
 
-    index = gtk_tree_path_get_indices(path)[0];
-
-    list = g_list_nth (icon_view->priv->items, index);
-    item = (XGtkIconViewItem *)list->data;
-
-    if (icon_view->priv->cell_area)
-        gtk_cell_area_stop_editing (icon_view->priv->cell_area, TRUE);
-
-    if (item == icon_view->priv->anchor_item)
-        icon_view->priv->anchor_item = NULL;
-
-    if (item == icon_view->priv->cursor_item)
-        icon_view->priv->cursor_item = NULL;
-
-    if (item == icon_view->priv->last_prelight)
-        icon_view->priv->last_prelight = NULL;
-
-    if (item->selected)
-        emit = TRUE;
-
-    xiconview_item_free (item);
-
-    for (next = list->next; next; next = next->next)
+    size_t index = gtk_tree_path_get_indices(path)[0];
+    if (icon_view->priv->llItems.size() > index)
     {
-        item = (XGtkIconViewItem *)next->data;
+        auto itRemove = std::next(icon_view->priv->llItems.begin(), index);
+        pItem = *itRemove;
 
-        item->index--;
+//     list = g_list_nth(icon_view->priv->items, index);
+//     item = (XGtkIconViewItem *)list->data;
+
+        if (icon_view->priv->cell_area)
+            gtk_cell_area_stop_editing(icon_view->priv->cell_area, TRUE);
+
+        if (pItem == icon_view->priv->anchor_item)
+            icon_view->priv->anchor_item = NULL;
+
+        if (pItem == icon_view->priv->cursor_item)
+            icon_view->priv->cursor_item = NULL;
+
+        if (pItem == icon_view->priv->last_prelight)
+            icon_view->priv->last_prelight = NULL;
+
+        if (pItem->selected)
+            emit = TRUE;
+
+//         xiconview_item_free(pItem);
+
+        auto itFix = itRemove;
+        ++itFix;
+        for (;
+             itFix != icon_view->priv->llItems.end();
+             ++itFix)
+        {
+            (*itFix)->index--;
+        }
+
+//         icon_view->priv->items = g_list_delete_link(icon_view->priv->items, list);
+        icon_view->priv->llItems.erase(itRemove);
+
+        verify_items(icon_view);
+
+        gtk_widget_queue_resize(GTK_WIDGET(icon_view));
+
+        if (emit)
+            g_signal_emit(icon_view, icon_view_signals[SELECTION_CHANGED], 0);
     }
-
-    icon_view->priv->items = g_list_delete_link (icon_view->priv->items, list);
-
-    verify_items (icon_view);
-
-    gtk_widget_queue_resize (GTK_WIDGET (icon_view));
-
-    if (emit)
-        g_signal_emit (icon_view, icon_view_signals[SELECTION_CHANGED], 0);
 }
 
-static void
-xiconview_rows_reordered (GtkTreeModel *model,
-                              GtkTreePath  *parent,
-                              GtkTreeIter  *iter,
-                              gint         *new_order,
-                              gpointer      data)
-{
-    XGtkIconView *icon_view = XICONVIEW(data);
-    int i;
-    int length;
-    GList *items = NULL, *list;
-    XGtkIconViewItem **item_array;
-    gint *order;
+// static void
+// xiconview_rows_reordered(GtkTreeModel *model,
+//                          GtkTreePath *parent,
+//                          GtkTreeIter *iter,
+//                          gint *new_order,
+//                          gpointer data)
+// {
+//     XGtkIconView *icon_view = XICONVIEW(data);
+//     int i;
+//     int length;
+//     GList *items = NULL, *list;
+//     XGtkIconViewItem **item_array;
+//     gint *order;
+//
+//     /* ignore changes in branches */
+//     if (iter != NULL)
+//         return;
+//
+//     if (icon_view->priv->cell_area)
+//         gtk_cell_area_stop_editing(icon_view->priv->cell_area, TRUE);
+//
+//     length = gtk_tree_model_iter_n_children(model, NULL);
+//
+//     order = g_new(gint, length);
+//     for (i = 0; i < length; i++)
+//         order[new_order[i]] = i;
+//
+//     item_array = g_new(XGtkIconViewItem *, length);
+//     for (i = 0, list = icon_view->priv->items; list != NULL; list = list->next, i++)
+//         item_array[order[i]] = (XGtkIconViewItem *)list->data;
+//     g_free(order);
+//
+//     for (i = length - 1; i >= 0; i--)
+//     {
+//         item_array[i]->index = i;
+//         items = g_list_prepend(items, item_array[i]);
+//     }
+//
+//     g_free(item_array);
+//     g_list_free(icon_view->priv->items);
+//     icon_view->priv->items = items;
+//
+//     gtk_widget_queue_resize(GTK_WIDGET(icon_view));
+//
+//     verify_items(icon_view);
+// }
 
-    /* ignore changes in branches */
-    if (iter != NULL)
-        return;
-
-    if (icon_view->priv->cell_area)
-        gtk_cell_area_stop_editing (icon_view->priv->cell_area, TRUE);
-
-    length = gtk_tree_model_iter_n_children (model, NULL);
-
-    order = g_new (gint, length);
-    for (i = 0; i < length; i++)
-        order [new_order[i]] = i;
-
-    item_array = g_new (XGtkIconViewItem *, length);
-    for (i = 0, list = icon_view->priv->items; list != NULL; list = list->next, i++)
-        item_array[order[i]] = (XGtkIconViewItem *)list->data;
-    g_free (order);
-
-    for (i = length - 1; i >= 0; i--)
-    {
-        item_array[i]->index = i;
-        items = g_list_prepend (items, item_array[i]);
-    }
-
-    g_free (item_array);
-    g_list_free (icon_view->priv->items);
-    icon_view->priv->items = items;
-
-    gtk_widget_queue_resize (GTK_WIDGET (icon_view));
-
-    verify_items (icon_view);
-}
-
-static void
-xiconview_build_items (XGtkIconView *icon_view)
+static void xiconview_build_items(XGtkIconView *icon_view)
 {
     GtkTreeIter iter;
     int i;
-    GList *items = NULL;
+//     GList *items = NULL;
 
-    if (!gtk_tree_model_get_iter_first (icon_view->priv->model,
-                                        &iter))
+    if (!gtk_tree_model_get_iter_first(icon_view->priv->model, &iter))
         return;
 
     i = 0;
 
     do
     {
-        XGtkIconViewItem *item = xiconview_item_new ();
+        PXGtkIconViewItem pItem = xiconview_item_new();
+        pItem->index = i++;
+        icon_view->priv->llItems.push_back(pItem);
 
-        item->index = i;
 
-        i++;
+//         i++;
 
-        items = g_list_prepend (items, item);
+//         items = g_list_prepend(items, item);
 
-    } while (gtk_tree_model_iter_next (icon_view->priv->model, &iter));
+    } while (gtk_tree_model_iter_next(icon_view->priv->model, &iter));
 
-    icon_view->priv->items = g_list_reverse (items);
+//     icon_view->priv->items = g_list_reverse(items);
 }
 
 static void
-xiconview_add_move_binding (GtkBindingSet  *binding_set,
-                                guint           keyval,
-                                guint           modmask,
-                                GtkMovementStep step,
-                                gint            count)
+xiconview_add_move_binding(GtkBindingSet *binding_set, guint keyval, guint modmask, GtkMovementStep step, gint count)
 {
 
-    gtk_binding_entry_add_signal (binding_set, keyval, (GdkModifierType)modmask,
-                                  I_("move-cursor"), 2,
-                                  G_TYPE_ENUM, step,
-                                  G_TYPE_INT, count);
+    gtk_binding_entry_add_signal(
+        binding_set, keyval, (GdkModifierType)modmask, I_("move-cursor"), 2, G_TYPE_ENUM, step, G_TYPE_INT, count);
 
-    gtk_binding_entry_add_signal (binding_set, keyval, (GdkModifierType)GDK_SHIFT_MASK,
-                                  "move-cursor", 2,
-                                  G_TYPE_ENUM, step,
-                                  G_TYPE_INT, count);
+    gtk_binding_entry_add_signal(
+        binding_set, keyval, (GdkModifierType)GDK_SHIFT_MASK, "move-cursor", 2, G_TYPE_ENUM, step, G_TYPE_INT, count);
 
     if ((modmask & GDK_CONTROL_MASK) == GDK_CONTROL_MASK)
         return;
 
-    gtk_binding_entry_add_signal (binding_set, keyval, (GdkModifierType)(GDK_CONTROL_MASK | GDK_SHIFT_MASK),
-                                  "move-cursor", 2,
-                                  G_TYPE_ENUM, step,
-                                  G_TYPE_INT, count);
+    gtk_binding_entry_add_signal(binding_set,
+                                 keyval,
+                                 (GdkModifierType)(GDK_CONTROL_MASK | GDK_SHIFT_MASK),
+                                 "move-cursor",
+                                 2,
+                                 G_TYPE_ENUM,
+                                 step,
+                                 G_TYPE_INT,
+                                 count);
 
-    gtk_binding_entry_add_signal (binding_set, keyval, (GdkModifierType)GDK_CONTROL_MASK,
-                                  "move-cursor", 2,
-                                  G_TYPE_ENUM, step,
-                                  G_TYPE_INT, count);
+    gtk_binding_entry_add_signal(
+        binding_set, keyval, (GdkModifierType)GDK_CONTROL_MASK, "move-cursor", 2, G_TYPE_ENUM, step, G_TYPE_INT, count);
 }
 
-static gboolean
-xiconview_real_move_cursor (XGtkIconView     *icon_view,
-                                GtkMovementStep  step,
-                                gint             count)
+static gboolean xiconview_real_move_cursor(XGtkIconView *icon_view, GtkMovementStep step, gint count)
 {
     GdkModifierType state;
 
-    g_return_val_if_fail (XICONVIEW(icon_view), FALSE);
-    g_return_val_if_fail (step == GTK_MOVEMENT_LOGICAL_POSITIONS ||
-                          step == GTK_MOVEMENT_VISUAL_POSITIONS ||
-                          step == GTK_MOVEMENT_DISPLAY_LINES ||
-                          step == GTK_MOVEMENT_PAGES ||
-                          step == GTK_MOVEMENT_BUFFER_ENDS, FALSE);
+    g_return_val_if_fail(XICONVIEW(icon_view), FALSE);
+    g_return_val_if_fail(step == GTK_MOVEMENT_LOGICAL_POSITIONS || step == GTK_MOVEMENT_VISUAL_POSITIONS
+                             || step == GTK_MOVEMENT_DISPLAY_LINES
+                             || step == GTK_MOVEMENT_PAGES
+                             || step == GTK_MOVEMENT_BUFFER_ENDS,
+                         FALSE);
 
-    if (!gtk_widget_has_focus (GTK_WIDGET (icon_view)))
+    if (!gtk_widget_has_focus(GTK_WIDGET(icon_view)))
         return FALSE;
 
-    gtk_cell_area_stop_editing (icon_view->priv->cell_area, FALSE);
-    gtk_widget_grab_focus (GTK_WIDGET (icon_view));
+    gtk_cell_area_stop_editing(icon_view->priv->cell_area, FALSE);
+    gtk_widget_grab_focus(GTK_WIDGET(icon_view));
 
-    if (gtk_get_current_event_state (&state))
+    if (gtk_get_current_event_state(&state))
     {
         GdkModifierType extend_mod_mask;
         GdkModifierType modify_mod_mask;
 
-        extend_mod_mask =
-            gtk_widget_get_modifier_mask (GTK_WIDGET (icon_view),
-                                          GDK_MODIFIER_INTENT_EXTEND_SELECTION);
-        modify_mod_mask =
-            gtk_widget_get_modifier_mask (GTK_WIDGET (icon_view),
-                                          GDK_MODIFIER_INTENT_MODIFY_SELECTION);
+        extend_mod_mask = gtk_widget_get_modifier_mask(GTK_WIDGET(icon_view), GDK_MODIFIER_INTENT_EXTEND_SELECTION);
+        modify_mod_mask = gtk_widget_get_modifier_mask(GTK_WIDGET(icon_view), GDK_MODIFIER_INTENT_MODIFY_SELECTION);
 
         if ((state & modify_mod_mask) == modify_mod_mask)
             icon_view->priv->modify_selection_pressed = TRUE;
@@ -3669,21 +3471,21 @@ xiconview_real_move_cursor (XGtkIconView     *icon_view,
 
     switch (step)
     {
-    case GTK_MOVEMENT_LOGICAL_POSITIONS:
-    case GTK_MOVEMENT_VISUAL_POSITIONS:
-        xiconview_move_cursor_left_right (icon_view, count);
-        break;
-    case GTK_MOVEMENT_DISPLAY_LINES:
-        xiconview_move_cursor_up_down (icon_view, count);
-        break;
-    case GTK_MOVEMENT_PAGES:
-        xiconview_move_cursor_page_up_down (icon_view, count);
-        break;
-    case GTK_MOVEMENT_BUFFER_ENDS:
-        xiconview_move_cursor_start_end (icon_view, count);
-        break;
-    default:
-        g_assert_not_reached ();
+        case GTK_MOVEMENT_LOGICAL_POSITIONS:
+        case GTK_MOVEMENT_VISUAL_POSITIONS:
+            xiconview_move_cursor_left_right(icon_view, count);
+            break;
+        case GTK_MOVEMENT_DISPLAY_LINES:
+            xiconview_move_cursor_up_down(icon_view, count);
+            break;
+        case GTK_MOVEMENT_PAGES:
+            xiconview_move_cursor_page_up_down(icon_view, count);
+            break;
+        case GTK_MOVEMENT_BUFFER_ENDS:
+            xiconview_move_cursor_start_end(icon_view, count);
+            break;
+        default:
+            g_assert_not_reached();
     }
 
     icon_view->priv->modify_selection_pressed = FALSE;
@@ -3694,87 +3496,120 @@ xiconview_real_move_cursor (XGtkIconView     *icon_view,
     return TRUE;
 }
 
-static XGtkIconViewItem *
-find_item (XGtkIconView     *icon_view,
-           XGtkIconViewItem *current,
-           gint             row_ofs,
-           gint             col_ofs)
+static PXGtkIconViewItem find_item(XGtkIconView *icon_view,
+                                   PXGtkIconViewItem pCurrent,
+                                   gint row_ofs,
+                                   gint col_ofs)
 {
     gint row, col;
-    GList *items;
-    XGtkIconViewItem *item;
+//     GList *items;
+//     XGtkIconViewItem *item;
 
     /* FIXME: this could be more efficient
      */
-    row = current->row + row_ofs;
-    col = current->col + col_ofs;
+    row = pCurrent->row + row_ofs;
+    col = pCurrent->col + col_ofs;
 
-    for (items = icon_view->priv->items; items; items = items->next)
-    {
-        item = (XGtkIconViewItem *)items->data;
-        if (item->row == row && item->col == col)
-            return item;
-    }
+    for (auto &pItem : icon_view->priv->llItems)
+        if (    pItem->row == row
+             && pItem->col == col
+           )
+           return pItem;
 
-    return NULL;
+//     for (items = icon_view->priv->items;
+//          items;
+//          items = items->next)
+//     {
+//         item = (XGtkIconViewItem *)items->data;
+//         if (item->row == row && item->col == col)
+//             return item;
+//     }
+
+    return nullptr;
 }
 
-static XGtkIconViewItem *
-find_item_page_up_down (XGtkIconView     *icon_view,
-                        XGtkIconViewItem *current,
-                        gint             count)
+static PXGtkIconViewItem find_item_page_up_down(XGtkIconView *icon_view,
+                                                PXGtkIconViewItem pCurrent,
+                                                gint count)
 {
-    GList *item, *next;
+    // GList *item, *next;
     gint y, col;
 
-    col = current->col;
-    y = current->cell_area.y + count * gtk_adjustment_get_page_size (icon_view->priv->vadjustment);
+    col = pCurrent->col;
+    y = pCurrent->cell_area.y + count * gtk_adjustment_get_page_size(icon_view->priv->vadjustment);
 
-    item = g_list_find (icon_view->priv->items, current);
+    PXGtkIconViewItem pItem;
+
+    // item = g_list_find(icon_view->priv->items, current);
+    auto it = std::find(icon_view->priv->llItems.begin(), icon_view->priv->llItems.end(), pCurrent);
     if (count > 0)
     {
-        while (item)
+        while (it != icon_view->priv->llItems.end())
         {
-            for (next = item->next; next; next = next->next)
+            ++it;
+            if (    ((*it)->col == col)
+                 && ((*it)->cell_area.y > y)
+               )
             {
-                if (((XGtkIconViewItem *)next->data)->col == col)
-                    break;
-            }
-            if (!next || ((XGtkIconViewItem *)next->data)->cell_area.y > y)
+                pItem = *it;
                 break;
-
-            item = next;
+            }
         }
+
+//         while (item)
+//         {
+//             for (next = item->next; next; next = next->next)
+//             {
+//                 if (((XGtkIconViewItem *)next->data)->col == col)
+//                     break;
+//             }
+//             if (!next || ((XGtkIconViewItem *)next->data)->cell_area.y > y)
+//                 break;
+//
+//             item = next;
+//         }
     }
     else
     {
-        while (item)
+        while (it != icon_view->priv->llItems.begin())
         {
-            for (next = item->prev; next; next = next->prev)
+            --it;
+            if (    ((*it)->col == col)
+                 && ((*it)->cell_area.y < y)
+               )
             {
-                if (((XGtkIconViewItem *)next->data)->col == col)
-                    break;
-            }
-            if (!next || ((XGtkIconViewItem *)next->data)->cell_area.y < y)
+                pItem = *it;
                 break;
-
-            item = next;
+            }
         }
+//         while (item)
+//         {
+//             for (next = item->prev; next; next = next->prev)
+//             {
+//                 if (((XGtkIconViewItem *)next->data)->col == col)
+//                     break;
+//             }
+//             if (!next || ((XGtkIconViewItem *)next->data)->cell_area.y < y)
+//                 break;
+//
+//             item = next;
+//         }
     }
 
-    if (item)
-        return (XGtkIconViewItem *)item->data;
-
-    return NULL;
+//     if (item)
+//         return (XGtkIconViewItem *)item->data;
+//
+//     return NULL;
+    return pItem;
 }
 
 static gboolean
-xiconview_select_all_between (XGtkIconView     *icon_view,
-                                  XGtkIconViewItem *anchor,
-                                  XGtkIconViewItem *cursor)
+xiconview_select_all_between(XGtkIconView *icon_view,
+                             PXGtkIconViewItem anchor,
+                             PXGtkIconViewItem cursor)
 {
-    GList *items;
-    XGtkIconViewItem *item;
+//     GList *items;
+//     XGtkIconViewItem *item;
     gint row1, row2, col1, col2;
     gboolean dirty = FALSE;
 
@@ -3800,320 +3635,316 @@ xiconview_select_all_between (XGtkIconView     *icon_view,
         col2 = anchor->col;
     }
 
-    for (items = icon_view->priv->items; items; items = items->next)
+    // for (items = icon_view->priv->items; items; items = items->next)
+    for (auto &pItem : icon_view->priv->llItems)
     {
-        item = (XGtkIconViewItem *)items->data;
+//         item = (XGtkIconViewItem *)items->data;
 
-        if (row1 <= item->row && item->row <= row2 &&
-                col1 <= item->col && item->col <= col2)
+        if (    row1 <= pItem->row
+             && pItem->row <= row2
+             && col1 <= pItem->col
+             && pItem->col <= col2)
         {
-            if (!item->selected)
+            if (!pItem->selected)
             {
                 dirty = TRUE;
-                item->selected = TRUE;
-                xiconview_item_selected_changed (icon_view, item);
+                pItem->selected = TRUE;
+                xiconview_item_selected_changed(icon_view, pItem);
             }
-            xiconview_queue_draw_item (icon_view, item);
+            xiconview_queue_draw_item(icon_view, pItem);
         }
     }
 
     return dirty;
 }
 
-static void
-xiconview_move_cursor_up_down (XGtkIconView *icon_view,
-                                   gint         count)
+static void xiconview_move_cursor_up_down(XGtkIconView *icon_view, gint count)
 {
-    XGtkIconViewItem *item;
+    PXGtkIconViewItem pItem;
     GtkCellRenderer *cell = NULL;
     gboolean dirty = FALSE;
     gint step;
     GtkDirectionType direction;
 
-    if (!gtk_widget_has_focus (GTK_WIDGET (icon_view)))
+    if (!gtk_widget_has_focus(GTK_WIDGET(icon_view)))
         return;
 
     direction = count < 0 ? GTK_DIR_UP : GTK_DIR_DOWN;
 
     if (!icon_view->priv->cursor_item)
     {
-        GList *list;
-
-        if (count > 0)
-            list = icon_view->priv->items;
-        else
-            list = g_list_last (icon_view->priv->items);
-
-        if (list)
+//         GList *list;
+//
+        if (!icon_view->priv->llItems.empty())
         {
-            item = (XGtkIconViewItem *)list->data;
-
+            if (count > 0)
+                pItem = icon_view->priv->llItems.front();
+            else
+                pItem = icon_view->priv->llItems.back();
+        }
+//             list = icon_view->priv->items;
+//         else
+//             list = g_list_last(icon_view->priv->items);
+//
+//         if (list)
+//         {
+//             item = (XGtkIconViewItem *)list->data;
+//
+        if (pItem)
+        {
             /* Give focus to the first cell initially */
-            _xiconview_set_cell_data (icon_view, item);
-            gtk_cell_area_focus (icon_view->priv->cell_area, direction);
+            _xiconview_set_cell_data(icon_view, pItem);
+            gtk_cell_area_focus(icon_view->priv->cell_area, direction);
         }
-        else
-        {
-            item = NULL;
-        }
+//         }
+//         else
+//         {
+//             item = NULL;
+//         }
     }
     else
     {
-        item = icon_view->priv->cursor_item;
+        pItem = icon_view->priv->cursor_item;
         step = count > 0 ? 1 : -1;
 
         /* Save the current focus cell in case we hit the edge */
-        cell = gtk_cell_area_get_focus_cell (icon_view->priv->cell_area);
+        cell = gtk_cell_area_get_focus_cell(icon_view->priv->cell_area);
 
-        while (item)
+        while (pItem)
         {
-            _xiconview_set_cell_data (icon_view, item);
+            _xiconview_set_cell_data(icon_view, pItem);
 
-            if (gtk_cell_area_focus (icon_view->priv->cell_area, direction))
+            if (gtk_cell_area_focus(icon_view->priv->cell_area, direction))
                 break;
 
-            item = find_item (icon_view, item, step, 0);
+            pItem = find_item(icon_view, pItem, step, 0);
         }
     }
 
-    if (!item)
+    if (!pItem)
     {
-        if (!gtk_widget_keynav_failed (GTK_WIDGET (icon_view), direction))
+        if (!gtk_widget_keynav_failed(GTK_WIDGET(icon_view), direction))
         {
-            GtkWidget *toplevel = gtk_widget_get_toplevel (GTK_WIDGET (icon_view));
+            GtkWidget *toplevel = gtk_widget_get_toplevel(GTK_WIDGET(icon_view));
             if (toplevel)
-                gtk_widget_child_focus (toplevel,
-                                        direction == GTK_DIR_UP ?
-                                        GTK_DIR_TAB_BACKWARD :
-                                        GTK_DIR_TAB_FORWARD);
-
+                gtk_widget_child_focus(toplevel, direction == GTK_DIR_UP ? GTK_DIR_TAB_BACKWARD : GTK_DIR_TAB_FORWARD);
         }
 
-        gtk_cell_area_set_focus_cell (icon_view->priv->cell_area, cell);
+        gtk_cell_area_set_focus_cell(icon_view->priv->cell_area, cell);
         return;
     }
 
-    if (icon_view->priv->modify_selection_pressed ||
-            !icon_view->priv->extend_selection_pressed ||
-            !icon_view->priv->anchor_item ||
-            icon_view->priv->selection_mode != GTK_SELECTION_MULTIPLE)
-        icon_view->priv->anchor_item = item;
+    if (    icon_view->priv->modify_selection_pressed
+         || !icon_view->priv->extend_selection_pressed
+         || !icon_view->priv->anchor_item
+         || icon_view->priv->selection_mode != GTK_SELECTION_MULTIPLE
+       )
+        icon_view->priv->anchor_item = pItem;
 
-    cell = gtk_cell_area_get_focus_cell (icon_view->priv->cell_area);
-    _xiconview_set_cursor_item (icon_view, item, cell);
+    cell = gtk_cell_area_get_focus_cell(icon_view->priv->cell_area);
+    _xiconview_set_cursor_item(icon_view, pItem, cell);
 
-    if (!icon_view->priv->modify_selection_pressed &&
-            icon_view->priv->selection_mode != GTK_SELECTION_NONE)
+    if (!icon_view->priv->modify_selection_pressed && icon_view->priv->selection_mode != GTK_SELECTION_NONE)
     {
-        dirty = xiconview_unselect_all_internal (icon_view);
-        dirty = xiconview_select_all_between (icon_view,
-                icon_view->priv->anchor_item,
-                item) || dirty;
+        dirty = xiconview_unselect_all_internal(icon_view);
+        dirty = xiconview_select_all_between(icon_view, icon_view->priv->anchor_item, pItem) || dirty;
     }
 
-    xiconview_scroll_to_item (icon_view, item);
+    xiconview_scroll_to_item(icon_view, pItem);
 
     if (dirty)
-        g_signal_emit (icon_view, icon_view_signals[SELECTION_CHANGED], 0);
+        g_signal_emit(icon_view, icon_view_signals[SELECTION_CHANGED], 0);
 }
 
-static void
-xiconview_move_cursor_page_up_down (XGtkIconView *icon_view,
-                                        gint         count)
+static void xiconview_move_cursor_page_up_down(XGtkIconView *icon_view, gint count)
 {
-    XGtkIconViewItem *item;
+    PXGtkIconViewItem pItem;
     gboolean dirty = FALSE;
 
-    if (!gtk_widget_has_focus (GTK_WIDGET (icon_view)))
+    if (!gtk_widget_has_focus(GTK_WIDGET(icon_view)))
         return;
 
     if (!icon_view->priv->cursor_item)
     {
-        GList *list;
+//         GList *list;
 
-        if (count > 0)
-            list = icon_view->priv->items;
-        else
-            list = g_list_last (icon_view->priv->items);
+        if (!icon_view->priv->llItems.empty())
+        {
+            if (count > 0)
+                pItem = icon_view->priv->llItems.front(); // list = icon_view->priv->items;
+            else
+                pItem = icon_view->priv->llItems.back(); // // list = g_list_last(icon_view->priv->items);
+        }
 
-        item = list ? (XGtkIconViewItem *)list->data : NULL;
+//         item = list ? (XGtkIconViewItem *)list->data : NULL;
     }
     else
-        item = find_item_page_up_down (icon_view,
-                                       icon_view->priv->cursor_item,
-                                       count);
+        pItem = find_item_page_up_down(icon_view, icon_view->priv->cursor_item, count);
 
-    if (item == icon_view->priv->cursor_item)
-        gtk_widget_error_bell (GTK_WIDGET (icon_view));
+    if (pItem == icon_view->priv->cursor_item)
+        gtk_widget_error_bell(GTK_WIDGET(icon_view));
 
-    if (!item)
+    if (!pItem)
         return;
 
-    if (icon_view->priv->modify_selection_pressed ||
-            !icon_view->priv->extend_selection_pressed ||
-            !icon_view->priv->anchor_item ||
-            icon_view->priv->selection_mode != GTK_SELECTION_MULTIPLE)
-        icon_view->priv->anchor_item = item;
+    if (    icon_view->priv->modify_selection_pressed
+         || !icon_view->priv->extend_selection_pressed
+         || !icon_view->priv->anchor_item
+         || icon_view->priv->selection_mode != GTK_SELECTION_MULTIPLE
+       )
+        icon_view->priv->anchor_item = pItem;
 
-    _xiconview_set_cursor_item (icon_view, item, NULL);
+    _xiconview_set_cursor_item(icon_view, pItem, NULL);
 
-    if (!icon_view->priv->modify_selection_pressed &&
-            icon_view->priv->selection_mode != GTK_SELECTION_NONE)
+    if (!icon_view->priv->modify_selection_pressed && icon_view->priv->selection_mode != GTK_SELECTION_NONE)
     {
-        dirty = xiconview_unselect_all_internal (icon_view);
-        dirty = xiconview_select_all_between (icon_view,
-                icon_view->priv->anchor_item,
-                item) || dirty;
+        dirty = xiconview_unselect_all_internal(icon_view);
+        dirty = xiconview_select_all_between(icon_view, icon_view->priv->anchor_item, pItem) || dirty;
     }
 
-    xiconview_scroll_to_item (icon_view, item);
+    xiconview_scroll_to_item(icon_view, pItem);
 
     if (dirty)
-        g_signal_emit (icon_view, icon_view_signals[SELECTION_CHANGED], 0);
+        g_signal_emit(icon_view, icon_view_signals[SELECTION_CHANGED], 0);
 }
 
-static void
-xiconview_move_cursor_left_right (XGtkIconView *icon_view,
-                                      gint         count)
+static void xiconview_move_cursor_left_right(XGtkIconView *icon_view, gint count)
 {
-    XGtkIconViewItem *item;
+    PXGtkIconViewItem pItem;
     GtkCellRenderer *cell = NULL;
     gboolean dirty = FALSE;
     gint step;
     GtkDirectionType direction;
 
-    if (!gtk_widget_has_focus (GTK_WIDGET (icon_view)))
+    if (!gtk_widget_has_focus(GTK_WIDGET(icon_view)))
         return;
 
     direction = count < 0 ? GTK_DIR_LEFT : GTK_DIR_RIGHT;
 
     if (!icon_view->priv->cursor_item)
     {
-        GList *list;
+//         GList *list;
 
-        if (count > 0)
-            list = icon_view->priv->items;
-        else
-            list = g_list_last (icon_view->priv->items);
-
-        if (list)
+        if (!icon_view->priv->llItems.empty())
         {
-            item = (XGtkIconViewItem *)list->data;
+            if (count > 0)
+                pItem = icon_view->priv->llItems.front(); // list = icon_view->priv->items;
+            else
+                pItem = icon_view->priv->llItems.back(); // list = g_list_last(icon_view->priv->items);
+        }
+
+        if (pItem)
+        {
+//             item = (XGtkIconViewItem *)list->data;
 
             /* Give focus to the first cell initially */
-            _xiconview_set_cell_data (icon_view, item);
-            gtk_cell_area_focus (icon_view->priv->cell_area, direction);
+            _xiconview_set_cell_data(icon_view, pItem);
+            gtk_cell_area_focus(icon_view->priv->cell_area, direction);
         }
-        else
-        {
-            item = NULL;
-        }
+//         else
+//         {
+//             item = NULL;
+//         }
     }
     else
     {
-        item = icon_view->priv->cursor_item;
+        pItem = icon_view->priv->cursor_item;
         step = count > 0 ? 1 : -1;
 
         /* Save the current focus cell in case we hit the edge */
-        cell = gtk_cell_area_get_focus_cell (icon_view->priv->cell_area);
+        cell = gtk_cell_area_get_focus_cell(icon_view->priv->cell_area);
 
-        while (item)
+        while (pItem)
         {
-            _xiconview_set_cell_data (icon_view, item);
+            _xiconview_set_cell_data(icon_view, pItem);
 
-            if (gtk_cell_area_focus (icon_view->priv->cell_area, direction))
+            if (gtk_cell_area_focus(icon_view->priv->cell_area, direction))
                 break;
 
-            item = find_item (icon_view, item, 0, step);
+            pItem = find_item(icon_view, pItem, 0, step);
         }
     }
 
-    if (!item)
+    if (!pItem)
     {
-        if (!gtk_widget_keynav_failed (GTK_WIDGET (icon_view), direction))
+        if (!gtk_widget_keynav_failed(GTK_WIDGET(icon_view), direction))
         {
-            GtkWidget *toplevel = gtk_widget_get_toplevel (GTK_WIDGET (icon_view));
+            GtkWidget *toplevel = gtk_widget_get_toplevel(GTK_WIDGET(icon_view));
             if (toplevel)
-                gtk_widget_child_focus (toplevel,
-                                        direction == GTK_DIR_LEFT ?
-                                        GTK_DIR_TAB_BACKWARD :
-                                        GTK_DIR_TAB_FORWARD);
-
+                gtk_widget_child_focus(toplevel,
+                                       direction == GTK_DIR_LEFT ? GTK_DIR_TAB_BACKWARD : GTK_DIR_TAB_FORWARD);
         }
 
-        gtk_cell_area_set_focus_cell (icon_view->priv->cell_area, cell);
+        gtk_cell_area_set_focus_cell(icon_view->priv->cell_area, cell);
         return;
     }
 
-    if (icon_view->priv->modify_selection_pressed ||
-            !icon_view->priv->extend_selection_pressed ||
-            !icon_view->priv->anchor_item ||
-            icon_view->priv->selection_mode != GTK_SELECTION_MULTIPLE)
-        icon_view->priv->anchor_item = item;
+    if (    icon_view->priv->modify_selection_pressed
+         || !icon_view->priv->extend_selection_pressed
+         || !icon_view->priv->anchor_item
+         || icon_view->priv->selection_mode != GTK_SELECTION_MULTIPLE
+       )
+        icon_view->priv->anchor_item = pItem;
 
-    cell = gtk_cell_area_get_focus_cell (icon_view->priv->cell_area);
-    _xiconview_set_cursor_item (icon_view, item, cell);
+    cell = gtk_cell_area_get_focus_cell(icon_view->priv->cell_area);
+    _xiconview_set_cursor_item(icon_view, pItem, cell);
 
-    if (!icon_view->priv->modify_selection_pressed &&
-            icon_view->priv->selection_mode != GTK_SELECTION_NONE)
+    if (!icon_view->priv->modify_selection_pressed && icon_view->priv->selection_mode != GTK_SELECTION_NONE)
     {
-        dirty = xiconview_unselect_all_internal (icon_view);
-        dirty = xiconview_select_all_between (icon_view,
-                icon_view->priv->anchor_item,
-                item) || dirty;
+        dirty = xiconview_unselect_all_internal(icon_view);
+        dirty = xiconview_select_all_between(icon_view, icon_view->priv->anchor_item, pItem) || dirty;
     }
 
-    xiconview_scroll_to_item (icon_view, item);
+    xiconview_scroll_to_item(icon_view, pItem);
 
     if (dirty)
-        g_signal_emit (icon_view, icon_view_signals[SELECTION_CHANGED], 0);
+        g_signal_emit(icon_view, icon_view_signals[SELECTION_CHANGED], 0);
 }
 
-static void
-xiconview_move_cursor_start_end (XGtkIconView *icon_view,
-                                     gint         count)
+static void xiconview_move_cursor_start_end(XGtkIconView *icon_view, gint count)
 {
-    XGtkIconViewItem *item;
-    GList *list;
+    PXGtkIconViewItem pItem;
+//     GList *list;
     gboolean dirty = FALSE;
 
-    if (!gtk_widget_has_focus (GTK_WIDGET (icon_view)))
+    if (!gtk_widget_has_focus(GTK_WIDGET(icon_view)))
         return;
 
-    if (count < 0)
-        list = icon_view->priv->items;
-    else
-        list = g_list_last (icon_view->priv->items);
-
-    item = list ? (XGtkIconViewItem *)list->data : NULL;
-
-    if (item == icon_view->priv->cursor_item)
-        gtk_widget_error_bell (GTK_WIDGET (icon_view));
-
-    if (!item)
-        return;
-
-    if (icon_view->priv->modify_selection_pressed ||
-            !icon_view->priv->extend_selection_pressed ||
-            !icon_view->priv->anchor_item ||
-            icon_view->priv->selection_mode != GTK_SELECTION_MULTIPLE)
-        icon_view->priv->anchor_item = item;
-
-    _xiconview_set_cursor_item (icon_view, item, NULL);
-
-    if (!icon_view->priv->modify_selection_pressed &&
-            icon_view->priv->selection_mode != GTK_SELECTION_NONE)
+    if (!icon_view->priv->llItems.empty())
     {
-        dirty = xiconview_unselect_all_internal (icon_view);
-        dirty = xiconview_select_all_between (icon_view,
-                icon_view->priv->anchor_item,
-                item) || dirty;
+        if (count < 0)
+            pItem = icon_view->priv->llItems.front(); // icon_view->priv->items;
+        else
+            pItem = icon_view->priv->llItems.back(); // list = g_list_last(icon_view->priv->items);
     }
 
-    xiconview_scroll_to_item (icon_view, item);
+//     item = list ? (XGtkIconViewItem *)list->data : NULL;
+
+    if (pItem == icon_view->priv->cursor_item)
+        gtk_widget_error_bell(GTK_WIDGET(icon_view));
+
+    if (!pItem)
+        return;
+
+    if (    icon_view->priv->modify_selection_pressed
+         || !icon_view->priv->extend_selection_pressed
+         || !icon_view->priv->anchor_item
+         || icon_view->priv->selection_mode != GTK_SELECTION_MULTIPLE
+       )
+        icon_view->priv->anchor_item = pItem;
+
+    _xiconview_set_cursor_item(icon_view, pItem, NULL);
+
+    if (!icon_view->priv->modify_selection_pressed && icon_view->priv->selection_mode != GTK_SELECTION_NONE)
+    {
+        dirty = xiconview_unselect_all_internal(icon_view);
+        dirty = xiconview_select_all_between(icon_view, icon_view->priv->anchor_item, pItem) || dirty;
+    }
+
+    xiconview_scroll_to_item(icon_view, pItem);
 
     if (dirty)
-        g_signal_emit (icon_view, icon_view_signals[SELECTION_CHANGED], 0);
+        g_signal_emit(icon_view, icon_view_signals[SELECTION_CHANGED], 0);
 }
 
 /**
@@ -4141,37 +3972,37 @@ xiconview_move_cursor_start_end (XGtkIconView *icon_view,
  *
  * Since: 2.8
  **/
-void
-xiconview_scroll_to_path (XGtkIconView *icon_view,
+void xiconview_scroll_to_path(XGtkIconView *icon_view,
                               GtkTreePath *path,
-                              gboolean     use_align,
-                              gfloat       row_align,
-                              gfloat       col_align)
+                              gboolean use_align,
+                              gfloat row_align,
+                              gfloat col_align)
 {
-    XGtkIconViewItem *item = NULL;
+    PXGtkIconViewItem pItem;
     GtkWidget *widget;
 
-    g_return_if_fail (IS_XICONVIEW (icon_view));
-    g_return_if_fail (path != NULL);
-    g_return_if_fail (row_align >= 0.0 && row_align <= 1.0);
-    g_return_if_fail (col_align >= 0.0 && col_align <= 1.0);
+    g_return_if_fail(IS_XICONVIEW(icon_view));
+    g_return_if_fail(path != NULL);
+    g_return_if_fail(row_align >= 0.0 && row_align <= 1.0);
+    g_return_if_fail(col_align >= 0.0 && col_align <= 1.0);
 
-    widget = GTK_WIDGET (icon_view);
+    widget = GTK_WIDGET(icon_view);
 
-    if (gtk_tree_path_get_depth (path) > 0)
-        item = (XGtkIconViewItem *)g_list_nth_data (icon_view->priv->items,
-                                gtk_tree_path_get_indices(path)[0]);
+    if (gtk_tree_path_get_depth(path) > 0)
+        pItem = _xiconview_get_nth_item(icon_view, gtk_tree_path_get_indices(path)[0]);
 
-    if (!item || item->cell_area.width < 0 ||
-            !gtk_widget_get_realized (widget))
+    if (    !pItem
+         || pItem->cell_area.width < 0
+         || !gtk_widget_get_realized(widget))
     {
         if (icon_view->priv->scroll_to_path)
-            gtk_tree_row_reference_free (icon_view->priv->scroll_to_path);
+            gtk_tree_row_reference_free(icon_view->priv->scroll_to_path);
 
         icon_view->priv->scroll_to_path = NULL;
 
         if (path)
-            icon_view->priv->scroll_to_path = gtk_tree_row_reference_new_proxy (G_OBJECT (icon_view), icon_view->priv->model, path);
+            icon_view->priv->scroll_to_path =
+                gtk_tree_row_reference_new_proxy(G_OBJECT(icon_view), icon_view->priv->model, path);
 
         icon_view->priv->scroll_to_use_align = use_align;
         icon_view->priv->scroll_to_row_align = row_align;
@@ -4185,80 +4016,66 @@ xiconview_scroll_to_path (XGtkIconView *icon_view,
         GtkAllocation allocation;
         gint x, y;
         gfloat offset;
-        GdkRectangle item_area =
-        {
-            item->cell_area.x - icon_view->priv->item_padding,
-            item->cell_area.y - icon_view->priv->item_padding,
-            item->cell_area.width  + icon_view->priv->item_padding * 2,
-            item->cell_area.height + icon_view->priv->item_padding * 2
-        };
+        GdkRectangle item_area = { pItem->cell_area.x - icon_view->priv->item_padding,
+                                   pItem->cell_area.y - icon_view->priv->item_padding,
+                                   pItem->cell_area.width + icon_view->priv->item_padding * 2,
+                                   pItem->cell_area.height + icon_view->priv->item_padding * 2 };
 
-        gdk_window_get_position (icon_view->priv->bin_window, &x, &y);
+        gdk_window_get_position(icon_view->priv->bin_window, &x, &y);
 
-        gtk_widget_get_allocation (widget, &allocation);
+        gtk_widget_get_allocation(widget, &allocation);
 
         offset = y + item_area.y - row_align * (allocation.height - item_area.height);
 
-        gtk_adjustment_set_value (icon_view->priv->vadjustment,
-                                  gtk_adjustment_get_value (icon_view->priv->vadjustment) + offset);
+        gtk_adjustment_set_value(icon_view->priv->vadjustment,
+                                 gtk_adjustment_get_value(icon_view->priv->vadjustment) + offset);
 
         offset = x + item_area.x - col_align * (allocation.width - item_area.width);
 
-        gtk_adjustment_set_value (icon_view->priv->hadjustment,
-                                  gtk_adjustment_get_value (icon_view->priv->hadjustment) + offset);
+        gtk_adjustment_set_value(icon_view->priv->hadjustment,
+                                 gtk_adjustment_get_value(icon_view->priv->hadjustment) + offset);
     }
     else
-        xiconview_scroll_to_item (icon_view, item);
+        xiconview_scroll_to_item(icon_view, pItem);
 }
 
-
-static void
-xiconview_scroll_to_item (XGtkIconView     *icon_view,
-                              XGtkIconViewItem *item)
+static void xiconview_scroll_to_item(XGtkIconView *icon_view, PXGtkIconViewItem pItem)
 {
     XGtkIconViewPrivate *priv = icon_view->priv;
-    GtkWidget *widget = GTK_WIDGET (icon_view);
+    GtkWidget *widget = GTK_WIDGET(icon_view);
     GtkAdjustment *hadj, *vadj;
     GtkAllocation allocation;
     gint x, y;
     GdkRectangle item_area;
 
-    item_area.x = item->cell_area.x - priv->item_padding;
-    item_area.y = item->cell_area.y - priv->item_padding;
-    item_area.width = item->cell_area.width  + priv->item_padding * 2;
-    item_area.height = item->cell_area.height + priv->item_padding * 2;
+    item_area.x = pItem->cell_area.x - priv->item_padding;
+    item_area.y = pItem->cell_area.y - priv->item_padding;
+    item_area.width = pItem->cell_area.width + priv->item_padding * 2;
+    item_area.height = pItem->cell_area.height + priv->item_padding * 2;
 
-    gdk_window_get_position (icon_view->priv->bin_window, &x, &y);
-    gtk_widget_get_allocation (widget, &allocation);
+    gdk_window_get_position(icon_view->priv->bin_window, &x, &y);
+    gtk_widget_get_allocation(widget, &allocation);
 
     hadj = icon_view->priv->hadjustment;
     vadj = icon_view->priv->vadjustment;
 
 #define gtk_adjustment_animate_to_value(a, b) gtk_adjustment_set_value((a), (b))
     if (y + item_area.y < 0)
-        gtk_adjustment_animate_to_value (vadj,
-                                         gtk_adjustment_get_value (vadj)
-                                         + y + item_area.y);
+        gtk_adjustment_animate_to_value(vadj, gtk_adjustment_get_value(vadj) + y + item_area.y);
     else if (y + item_area.y + item_area.height > allocation.height)
-        gtk_adjustment_animate_to_value (vadj,
-                                         gtk_adjustment_get_value (vadj)
-                                         + y + item_area.y + item_area.height - allocation.height);
+        gtk_adjustment_animate_to_value(
+            vadj, gtk_adjustment_get_value(vadj) + y + item_area.y + item_area.height - allocation.height);
 
     if (x + item_area.x < 0)
-        gtk_adjustment_animate_to_value (hadj,
-                                         gtk_adjustment_get_value (hadj)
-                                         + x + item_area.x);
+        gtk_adjustment_animate_to_value(hadj, gtk_adjustment_get_value(hadj) + x + item_area.x);
     else if (x + item_area.x + item_area.width > allocation.width)
-        gtk_adjustment_animate_to_value (hadj,
-                                         gtk_adjustment_get_value (hadj)
-                                         + x + item_area.x + item_area.width - allocation.width);
+        gtk_adjustment_animate_to_value(
+            hadj, gtk_adjustment_get_value(hadj) + x + item_area.x + item_area.width - allocation.width);
 }
 
 /* GtkCellLayout implementation */
 
-static void
-xiconview_ensure_cell_area (XGtkIconView *icon_view,
-                                GtkCellArea *cell_area)
+static void xiconview_ensure_cell_area(XGtkIconView *icon_view, GtkCellArea *cell_area)
 {
     XGtkIconViewPrivate *priv = icon_view->priv;
 
@@ -4268,59 +4085,50 @@ xiconview_ensure_cell_area (XGtkIconView *icon_view,
     if (cell_area)
         priv->cell_area = cell_area;
     else
-        priv->cell_area = gtk_cell_area_box_new ();
+        priv->cell_area = gtk_cell_area_box_new();
 
-    g_object_ref_sink (priv->cell_area);
+    g_object_ref_sink(priv->cell_area);
 
-    if (GTK_IS_ORIENTABLE (priv->cell_area))
-        gtk_orientable_set_orientation (GTK_ORIENTABLE (priv->cell_area), priv->item_orientation);
+    if (GTK_IS_ORIENTABLE(priv->cell_area))
+        gtk_orientable_set_orientation(GTK_ORIENTABLE(priv->cell_area), priv->item_orientation);
 
-    priv->cell_area_context = gtk_cell_area_create_context (priv->cell_area);
+    priv->cell_area_context = gtk_cell_area_create_context(priv->cell_area);
 
     priv->add_editable_id =
-        g_signal_connect (priv->cell_area, "add-editable",
-                          G_CALLBACK (xiconview_add_editable), icon_view);
+        g_signal_connect(priv->cell_area, "add-editable", G_CALLBACK(xiconview_add_editable), icon_view);
     priv->remove_editable_id =
-        g_signal_connect (priv->cell_area, "remove-editable",
-                          G_CALLBACK (xiconview_remove_editable), icon_view);
+        g_signal_connect(priv->cell_area, "remove-editable", G_CALLBACK(xiconview_remove_editable), icon_view);
 
-    update_text_cell (icon_view);
-    update_pixbuf_cell (icon_view);
+    update_text_cell(icon_view);
+    update_pixbuf_cell(icon_view);
 }
 
-static GtkCellArea *
-xiconview_cell_layout_get_area (GtkCellLayout *cell_layout)
+static GtkCellArea *xiconview_cell_layout_get_area(GtkCellLayout *cell_layout)
 {
     XGtkIconView *icon_view = XICONVIEW(cell_layout);
     XGtkIconViewPrivate *priv = icon_view->priv;
 
-    if (G_UNLIKELY (!priv->cell_area))
-        xiconview_ensure_cell_area (icon_view, NULL);
+    if (G_UNLIKELY(!priv->cell_area))
+        xiconview_ensure_cell_area(icon_view, NULL);
 
     return icon_view->priv->cell_area;
 }
 
-void
-_xiconview_set_cell_data (XGtkIconView     *icon_view,
-                              XGtkIconViewItem *item)
+void _xiconview_set_cell_data(XGtkIconView *icon_view,
+                              PXGtkIconViewItem pItem)
 {
     GtkTreeIter iter;
     GtkTreePath *path;
 
-    path = gtk_tree_path_new_from_indices (item->index, -1);
-    if (!gtk_tree_model_get_iter (icon_view->priv->model, &iter, path))
+    path = gtk_tree_path_new_from_indices(pItem->index, -1);
+    if (!gtk_tree_model_get_iter(icon_view->priv->model, &iter, path))
         return;
-    gtk_tree_path_free (path);
+    gtk_tree_path_free(path);
 
-    gtk_cell_area_apply_attributes (icon_view->priv->cell_area,
-                                    icon_view->priv->model,
-                                    &iter, FALSE, FALSE);
+    gtk_cell_area_apply_attributes(icon_view->priv->cell_area, icon_view->priv->model, &iter, FALSE, FALSE);
 }
 
-
-
 /* Public API */
-
 
 /**
  * xiconview_new:
@@ -4331,11 +4139,7 @@ _xiconview_set_cell_data (XGtkIconView     *icon_view,
  *
  * Since: 2.6
  **/
-GtkWidget *
-xiconview_new (void)
-{
-    return (GtkWidget*)g_object_new (GTK_TYPE_ICON_VIEW, NULL);
-}
+GtkWidget *xiconview_new(void) { return (GtkWidget *)g_object_new(GTK_TYPE_ICON_VIEW, NULL); }
 
 /**
  * xiconview_new_with_area:
@@ -4348,10 +4152,9 @@ xiconview_new (void)
  *
  * Since: 3.0
  **/
-GtkWidget *
-xiconview_new_with_area (GtkCellArea *area)
+GtkWidget *xiconview_new_with_area(GtkCellArea *area)
 {
-    return (GtkWidget*)g_object_new (GTK_TYPE_ICON_VIEW, "cell-area", area, NULL);
+    return (GtkWidget *)g_object_new(GTK_TYPE_ICON_VIEW, "cell-area", area, NULL);
 }
 
 /**
@@ -4364,10 +4167,9 @@ xiconview_new_with_area (GtkCellArea *area)
  *
  * Since: 2.6
  **/
-GtkWidget *
-xiconview_new_with_model (GtkTreeModel *model)
+GtkWidget *xiconview_new_with_model(GtkTreeModel *model)
 {
-    return (GtkWidget*)g_object_new (GTK_TYPE_ICON_VIEW, "model", model, NULL);
+    return (GtkWidget *)g_object_new(GTK_TYPE_ICON_VIEW, "model", model, NULL);
 }
 
 /**
@@ -4383,19 +4185,14 @@ xiconview_new_with_model (GtkTreeModel *model)
  *
  * Since: 2.12
  */
-void
-xiconview_convert_widget_to_bin_window_coords (XGtkIconView *icon_view,
-        gint         wx,
-        gint         wy,
-        gint        *bx,
-        gint        *by)
+void xiconview_convert_widget_to_bin_window_coords(XGtkIconView *icon_view, gint wx, gint wy, gint *bx, gint *by)
 {
     gint x, y;
 
-    g_return_if_fail (IS_XICONVIEW (icon_view));
+    g_return_if_fail(IS_XICONVIEW(icon_view));
 
     if (icon_view->priv->bin_window)
-        gdk_window_get_position (icon_view->priv->bin_window, &x, &y);
+        gdk_window_get_position(icon_view->priv->bin_window, &x, &y);
     else
         x = y = 0;
 
@@ -4422,22 +4219,19 @@ xiconview_convert_widget_to_bin_window_coords (XGtkIconView *icon_view,
  *
  * Since: 2.6
  **/
-GtkTreePath *
-xiconview_get_path_at_pos (XGtkIconView *icon_view,
-                               gint         x,
-                               gint         y)
+GtkTreePath *xiconview_get_path_at_pos(XGtkIconView *icon_view, gint x, gint y)
 {
-    XGtkIconViewItem *item;
+    PXGtkIconViewItem pItem;
     GtkTreePath *path;
 
-    g_return_val_if_fail (IS_XICONVIEW (icon_view), NULL);
+    g_return_val_if_fail(IS_XICONVIEW(icon_view), NULL);
 
-    item = _xiconview_get_item_at_coords (icon_view, x, y, TRUE, NULL);
+    pItem = _xiconview_get_item_at_coords(icon_view, x, y, TRUE, NULL);
 
-    if (!item)
+    if (!pItem)
         return NULL;
 
-    path = gtk_tree_path_new_from_indices (item->index, -1);
+    path = gtk_tree_path_new_from_indices(pItem->index, -1);
 
     return path;
 }
@@ -4462,24 +4256,19 @@ xiconview_get_path_at_pos (XGtkIconView *icon_view,
  *
  * Since: 2.8
  **/
-gboolean
-xiconview_get_item_at_pos (XGtkIconView      *icon_view,
-                               gint              x,
-                               gint              y,
-                               GtkTreePath     **path,
-                               GtkCellRenderer **cell)
+gboolean xiconview_get_item_at_pos(XGtkIconView *icon_view, gint x, gint y, GtkTreePath **path, GtkCellRenderer **cell)
 {
-    XGtkIconViewItem *item;
+    PXGtkIconViewItem pItem;
     GtkCellRenderer *renderer = NULL;
 
-    g_return_val_if_fail (IS_XICONVIEW (icon_view), FALSE);
+    g_return_val_if_fail(IS_XICONVIEW(icon_view), FALSE);
 
-    item = _xiconview_get_item_at_coords (icon_view, x, y, TRUE, &renderer);
+    pItem = _xiconview_get_item_at_coords(icon_view, x, y, TRUE, &renderer);
 
     if (path != NULL)
     {
-        if (item != NULL)
-            *path = gtk_tree_path_new_from_indices (item->index, -1);
+        if (pItem != NULL)
+            *path = gtk_tree_path_new_from_indices(pItem->index, -1);
         else
             *path = NULL;
     }
@@ -4487,7 +4276,7 @@ xiconview_get_item_at_pos (XGtkIconView      *icon_view,
     if (cell != NULL)
         *cell = renderer;
 
-    return (item != NULL);
+    return (pItem != NULL);
 }
 
 /**
@@ -4506,44 +4295,38 @@ xiconview_get_item_at_pos (XGtkIconView      *icon_view,
  *
  * Since: 3.6
  */
-gboolean
-xiconview_get_cell_rect (XGtkIconView     *icon_view,
-                             GtkTreePath     *path,
-                             GtkCellRenderer *cell,
-                             GdkRectangle    *rect)
+gboolean xiconview_get_cell_rect(XGtkIconView *icon_view, GtkTreePath *path, GtkCellRenderer *cell, GdkRectangle *rect)
 {
-    XGtkIconViewItem *item = NULL;
+    PXGtkIconViewItem pItem = NULL;
     gint x, y;
 
-    g_return_val_if_fail (IS_XICONVIEW (icon_view), FALSE);
-    g_return_val_if_fail (cell == NULL || GTK_IS_CELL_RENDERER (cell), FALSE);
+    g_return_val_if_fail(IS_XICONVIEW(icon_view), FALSE);
+    g_return_val_if_fail(cell == NULL || GTK_IS_CELL_RENDERER(cell), FALSE);
 
-    if (gtk_tree_path_get_depth (path) > 0)
-        item = (XGtkIconViewItem *)g_list_nth_data (icon_view->priv->items,
-                                gtk_tree_path_get_indices(path)[0]);
+    if (gtk_tree_path_get_depth(path) > 0)
+        pItem = _xiconview_get_nth_item(icon_view, gtk_tree_path_get_indices(path)[0]);
 
-    if (!item)
+    if (!pItem)
         return FALSE;
 
     if (cell)
     {
-        GtkCellAreaContext *context = (GtkCellAreaContext *)g_ptr_array_index (icon_view->priv->row_contexts, item->row);
-        _xiconview_set_cell_data (icon_view, item);
-        gtk_cell_area_get_cell_allocation (icon_view->priv->cell_area, context,
-                                           GTK_WIDGET (icon_view),
-                                           cell, &item->cell_area, rect);
+        GtkCellAreaContext *context = (GtkCellAreaContext *)g_ptr_array_index(icon_view->priv->row_contexts, pItem->row);
+        _xiconview_set_cell_data(icon_view, pItem);
+        gtk_cell_area_get_cell_allocation(
+            icon_view->priv->cell_area, context, GTK_WIDGET(icon_view), cell, &pItem->cell_area, rect);
     }
     else
     {
-        rect->x = item->cell_area.x - icon_view->priv->item_padding;
-        rect->y = item->cell_area.y - icon_view->priv->item_padding;
-        rect->width  = item->cell_area.width  + icon_view->priv->item_padding * 2;
-        rect->height = item->cell_area.height + icon_view->priv->item_padding * 2;
+        rect->x = pItem->cell_area.x - icon_view->priv->item_padding;
+        rect->y = pItem->cell_area.y - icon_view->priv->item_padding;
+        rect->width = pItem->cell_area.width + icon_view->priv->item_padding * 2;
+        rect->height = pItem->cell_area.height + icon_view->priv->item_padding * 2;
     }
 
     if (icon_view->priv->bin_window)
     {
-        gdk_window_get_position (icon_view->priv->bin_window, &x, &y);
+        gdk_window_get_position(icon_view->priv->bin_window, &x, &y);
         rect->x += x;
         rect->y += y;
     }
@@ -4563,15 +4346,12 @@ xiconview_get_cell_rect (XGtkIconView     *icon_view,
  *
  * Since: 2.12
  */
-void
-xiconview_set_tooltip_item (XGtkIconView     *icon_view,
-                                GtkTooltip      *tooltip,
-                                GtkTreePath     *path)
+void xiconview_set_tooltip_item(XGtkIconView *icon_view, GtkTooltip *tooltip, GtkTreePath *path)
 {
-    g_return_if_fail (IS_XICONVIEW (icon_view));
-    g_return_if_fail (GTK_IS_TOOLTIP (tooltip));
+    g_return_if_fail(IS_XICONVIEW(icon_view));
+    g_return_if_fail(GTK_IS_TOOLTIP(tooltip));
 
-    xiconview_set_tooltip_cell (icon_view, tooltip, path, NULL);
+    xiconview_set_tooltip_cell(icon_view, tooltip, path, NULL);
 }
 
 /**
@@ -4588,24 +4368,19 @@ xiconview_set_tooltip_item (XGtkIconView     *icon_view,
  *
  * Since: 2.12
  */
-void
-xiconview_set_tooltip_cell (XGtkIconView     *icon_view,
-                                GtkTooltip      *tooltip,
-                                GtkTreePath     *path,
-                                GtkCellRenderer *cell)
+void xiconview_set_tooltip_cell(XGtkIconView *icon_view, GtkTooltip *tooltip, GtkTreePath *path, GtkCellRenderer *cell)
 {
     GdkRectangle rect;
 
-    g_return_if_fail (IS_XICONVIEW (icon_view));
-    g_return_if_fail (GTK_IS_TOOLTIP (tooltip));
-    g_return_if_fail (cell == NULL || GTK_IS_CELL_RENDERER (cell));
+    g_return_if_fail(IS_XICONVIEW(icon_view));
+    g_return_if_fail(GTK_IS_TOOLTIP(tooltip));
+    g_return_if_fail(cell == NULL || GTK_IS_CELL_RENDERER(cell));
 
-    if (!xiconview_get_cell_rect (icon_view, path, cell, &rect))
+    if (!xiconview_get_cell_rect(icon_view, path, cell, &rect))
         return;
 
-    gtk_tooltip_set_tip_area (tooltip, &rect);
+    gtk_tooltip_set_tip_area(tooltip, &rect);
 }
-
 
 /**
  * xiconview_get_tooltip_context:
@@ -4634,59 +4409,51 @@ xiconview_set_tooltip_cell (XGtkIconView     *icon_view,
  *
  * Since: 2.12
  */
-gboolean
-xiconview_get_tooltip_context (XGtkIconView   *icon_view,
-                                   gint          *x,
-                                   gint          *y,
-                                   gboolean       keyboard_tip,
-                                   GtkTreeModel **model,
-                                   GtkTreePath  **path,
-                                   GtkTreeIter   *iter)
+gboolean xiconview_get_tooltip_context(XGtkIconView *icon_view,
+                                       gint *x,
+                                       gint *y,
+                                       gboolean keyboard_tip,
+                                       GtkTreeModel **model,
+                                       GtkTreePath **path,
+                                       GtkTreeIter *iter)
 {
     GtkTreePath *tmppath = NULL;
 
-    g_return_val_if_fail (IS_XICONVIEW (icon_view), FALSE);
-    g_return_val_if_fail (x != NULL, FALSE);
-    g_return_val_if_fail (y != NULL, FALSE);
+    g_return_val_if_fail(IS_XICONVIEW(icon_view), FALSE);
+    g_return_val_if_fail(x != NULL, FALSE);
+    g_return_val_if_fail(y != NULL, FALSE);
 
     if (keyboard_tip)
     {
-        xiconview_get_cursor (icon_view, &tmppath, NULL);
+        xiconview_get_cursor(icon_view, &tmppath, NULL);
 
         if (!tmppath)
             return FALSE;
     }
     else
     {
-        xiconview_convert_widget_to_bin_window_coords (icon_view, *x, *y,
-                x, y);
+        xiconview_convert_widget_to_bin_window_coords(icon_view, *x, *y, x, y);
 
-        if (!xiconview_get_item_at_pos (icon_view, *x, *y, &tmppath, NULL))
+        if (!xiconview_get_item_at_pos(icon_view, *x, *y, &tmppath, NULL))
             return FALSE;
     }
 
     if (model)
-        *model = xiconview_get_model (icon_view);
+        *model = xiconview_get_model(icon_view);
 
     if (iter)
-        gtk_tree_model_get_iter (xiconview_get_model (icon_view),
-                                 iter, tmppath);
+        gtk_tree_model_get_iter(xiconview_get_model(icon_view), iter, tmppath);
 
     if (path)
         *path = tmppath;
     else
-        gtk_tree_path_free (tmppath);
+        gtk_tree_path_free(tmppath);
 
     return TRUE;
 }
 
-static gboolean
-xiconview_set_tooltip_query_cb (GtkWidget  *widget,
-                                    gint        x,
-                                    gint        y,
-                                    gboolean    keyboard_tip,
-                                    GtkTooltip *tooltip,
-                                    gpointer    data)
+static gboolean xiconview_set_tooltip_query_cb(
+    GtkWidget *widget, gint x, gint y, gboolean keyboard_tip, GtkTooltip *tooltip, gpointer data)
 {
     gchar *str;
     GtkTreeIter iter;
@@ -4694,29 +4461,25 @@ xiconview_set_tooltip_query_cb (GtkWidget  *widget,
     GtkTreeModel *model;
     XGtkIconView *icon_view = XICONVIEW(widget);
 
-    if (!xiconview_get_tooltip_context (XICONVIEW(widget),
-                                            &x, &y,
-                                            keyboard_tip,
-                                            &model, &path, &iter))
+    if (!xiconview_get_tooltip_context(XICONVIEW(widget), &x, &y, keyboard_tip, &model, &path, &iter))
         return FALSE;
 
-    gtk_tree_model_get (model, &iter, icon_view->priv->tooltip_column, &str, -1);
+    gtk_tree_model_get(model, &iter, icon_view->priv->tooltip_column, &str, -1);
 
     if (!str)
     {
-        gtk_tree_path_free (path);
+        gtk_tree_path_free(path);
         return FALSE;
     }
 
-    gtk_tooltip_set_markup (tooltip, str);
-    xiconview_set_tooltip_item (icon_view, tooltip, path);
+    gtk_tooltip_set_markup(tooltip, str);
+    xiconview_set_tooltip_item(icon_view, tooltip, path);
 
-    gtk_tree_path_free (path);
-    g_free (str);
+    gtk_tree_path_free(path);
+    g_free(str);
 
     return TRUE;
 }
-
 
 /**
  * xiconview_set_tooltip_column:
@@ -4736,34 +4499,29 @@ xiconview_set_tooltip_query_cb (GtkWidget  *widget,
  *
  * Since: 2.12
  */
-void
-xiconview_set_tooltip_column (XGtkIconView *icon_view,
-                                  gint         column)
+void xiconview_set_tooltip_column(XGtkIconView *icon_view, gint column)
 {
-    g_return_if_fail (IS_XICONVIEW (icon_view));
+    g_return_if_fail(IS_XICONVIEW(icon_view));
 
     if (column == icon_view->priv->tooltip_column)
         return;
 
     if (column == -1)
     {
-        g_signal_handlers_disconnect_by_func (icon_view,
-                                              (void*)xiconview_set_tooltip_query_cb,
-                                              NULL);
-        gtk_widget_set_has_tooltip (GTK_WIDGET (icon_view), FALSE);
+        g_signal_handlers_disconnect_by_func(icon_view, (void *)xiconview_set_tooltip_query_cb, NULL);
+        gtk_widget_set_has_tooltip(GTK_WIDGET(icon_view), FALSE);
     }
     else
     {
         if (icon_view->priv->tooltip_column == -1)
         {
-            g_signal_connect (icon_view, "query-tooltip",
-                              G_CALLBACK (xiconview_set_tooltip_query_cb), NULL);
-            gtk_widget_set_has_tooltip (GTK_WIDGET (icon_view), TRUE);
+            g_signal_connect(icon_view, "query-tooltip", G_CALLBACK(xiconview_set_tooltip_query_cb), NULL);
+            gtk_widget_set_has_tooltip(GTK_WIDGET(icon_view), TRUE);
         }
     }
 
     icon_view->priv->tooltip_column = column;
-    g_object_notify (G_OBJECT (icon_view), "tooltip-column");
+    g_object_notify(G_OBJECT(icon_view), "tooltip-column");
 }
 
 /**
@@ -4778,10 +4536,9 @@ xiconview_set_tooltip_column (XGtkIconView *icon_view,
  *
  * Since: 2.12
  */
-gint
-xiconview_get_tooltip_column (XGtkIconView *icon_view)
+gint xiconview_get_tooltip_column(XGtkIconView *icon_view)
 {
-    g_return_val_if_fail (IS_XICONVIEW (icon_view), 0);
+    g_return_val_if_fail(IS_XICONVIEW(icon_view), 0);
 
     return icon_view->priv->tooltip_column;
 }
@@ -4802,48 +4559,44 @@ xiconview_get_tooltip_column (XGtkIconView *icon_view)
  *
  * Since: 2.8
  **/
-gboolean
-xiconview_get_visible_range (XGtkIconView  *icon_view,
-                                 GtkTreePath **start_path,
-                                 GtkTreePath **end_path)
+gboolean xiconview_get_visible_range(XGtkIconView *icon_view, GtkTreePath **start_path, GtkTreePath **end_path)
 {
     gint start_index = -1;
     gint end_index = -1;
-    GList *icons;
+//     GList *icons;
 
-    g_return_val_if_fail (IS_XICONVIEW (icon_view), FALSE);
+    g_return_val_if_fail(IS_XICONVIEW(icon_view), FALSE);
 
-    if (icon_view->priv->hadjustment == NULL ||
-            icon_view->priv->vadjustment == NULL)
+    if (icon_view->priv->hadjustment == NULL || icon_view->priv->vadjustment == NULL)
         return FALSE;
 
     if (start_path == NULL && end_path == NULL)
         return FALSE;
 
-    for (icons = icon_view->priv->items; icons; icons = icons->next)
+    // for (icons = icon_view->priv->items; icons; icons = icons->next)
+    for (auto &pItem : icon_view->priv->llItems)
     {
-        XGtkIconViewItem *item = (XGtkIconViewItem *)icons->data;
-        GdkRectangle    *item_area = &item->cell_area;
+//         XGtkIconViewItem *item = (XGtkIconViewItem *)icons->data;
+        GdkRectangle *item_area = &pItem->cell_area;
 
-        if ((item_area->x + item_area->width >= (int)gtk_adjustment_get_value (icon_view->priv->hadjustment)) &&
-                (item_area->y + item_area->height >= (int)gtk_adjustment_get_value (icon_view->priv->vadjustment)) &&
-                (item_area->x <=
-                 (int) (gtk_adjustment_get_value (icon_view->priv->hadjustment) +
-                        gtk_adjustment_get_page_size (icon_view->priv->hadjustment))) &&
-                (item_area->y <=
-                 (int) (gtk_adjustment_get_value (icon_view->priv->vadjustment) +
-                        gtk_adjustment_get_page_size (icon_view->priv->vadjustment))))
+        if (    (item_area->x + item_area->width >= (int)gtk_adjustment_get_value(icon_view->priv->hadjustment))
+             && (item_area->y + item_area->height >= (int)gtk_adjustment_get_value(icon_view->priv->vadjustment))
+             && (item_area->x <= (int)(gtk_adjustment_get_value(icon_view->priv->hadjustment)
+                                      + gtk_adjustment_get_page_size(icon_view->priv->hadjustment)))
+             && (item_area->y <= (int)(gtk_adjustment_get_value(icon_view->priv->vadjustment)
+                                      + gtk_adjustment_get_page_size(icon_view->priv->vadjustment)))
+           )
         {
             if (start_index == -1)
-                start_index = item->index;
-            end_index = item->index;
+                start_index = pItem->index;
+            end_index = pItem->index;
         }
     }
 
     if (start_path && start_index != -1)
-        *start_path = gtk_tree_path_new_from_indices (start_index, -1);
+        *start_path = gtk_tree_path_new_from_indices(start_index, -1);
     if (end_path && end_index != -1)
-        *end_path = gtk_tree_path_new_from_indices (end_index, -1);
+        *end_path = gtk_tree_path_new_from_indices(end_index, -1);
 
     return start_index != -1;
 }
@@ -4859,22 +4612,20 @@ xiconview_get_visible_range (XGtkIconView  *icon_view,
  *
  * Since: 2.6
  **/
-void
-xiconview_selected_foreach (XGtkIconView           *icon_view,
-                                XGtkIconViewForeachFunc func,
-                                gpointer               data)
+void xiconview_selected_foreach(XGtkIconView *icon_view, XGtkIconViewForeachFunc func, gpointer data)
 {
-    GList *list;
+//     GList *list;
 
-    for (list = icon_view->priv->items; list; list = list->next)
+    // for (list = icon_view->priv->items; list; list = list->next)
+    for (auto &pItem : icon_view->priv->llItems)
     {
-        XGtkIconViewItem *item = (XGtkIconViewItem *)list->data;
-        GtkTreePath *path = gtk_tree_path_new_from_indices (item->index, -1);
+//         XGtkIconViewItem *item = (XGtkIconViewItem *)list->data;
+        GtkTreePath *path = gtk_tree_path_new_from_indices(pItem->index, -1);
 
-        if (item->selected)
-            (* func) (icon_view, path, data);
+        if (pItem->selected)
+            (*func)(icon_view, path, data);
 
-        gtk_tree_path_free (path);
+        gtk_tree_path_free(path);
     }
 }
 
@@ -4887,22 +4638,19 @@ xiconview_selected_foreach (XGtkIconView           *icon_view,
  *
  * Since: 2.6
  **/
-void
-xiconview_set_selection_mode (XGtkIconView      *icon_view,
-                                  GtkSelectionMode  mode)
+void xiconview_set_selection_mode(XGtkIconView *icon_view, GtkSelectionMode mode)
 {
-    g_return_if_fail (IS_XICONVIEW (icon_view));
+    g_return_if_fail(IS_XICONVIEW(icon_view));
 
     if (mode == icon_view->priv->selection_mode)
         return;
 
-    if (mode == GTK_SELECTION_NONE ||
-            icon_view->priv->selection_mode == GTK_SELECTION_MULTIPLE)
-        xiconview_unselect_all (icon_view);
+    if (mode == GTK_SELECTION_NONE || icon_view->priv->selection_mode == GTK_SELECTION_MULTIPLE)
+        xiconview_unselect_all(icon_view);
 
     icon_view->priv->selection_mode = mode;
 
-    g_object_notify (G_OBJECT (icon_view), "selection-mode");
+    g_object_notify(G_OBJECT(icon_view), "selection-mode");
 }
 
 /**
@@ -4915,10 +4663,9 @@ xiconview_set_selection_mode (XGtkIconView      *icon_view,
  *
  * Since: 2.6
  **/
-GtkSelectionMode
-xiconview_get_selection_mode (XGtkIconView *icon_view)
+GtkSelectionMode xiconview_get_selection_mode(XGtkIconView *icon_view)
 {
-    g_return_val_if_fail (IS_XICONVIEW (icon_view), GTK_SELECTION_SINGLE);
+    g_return_val_if_fail(IS_XICONVIEW(icon_view), GTK_SELECTION_SINGLE);
 
     return icon_view->priv->selection_mode;
 }
@@ -4935,29 +4682,27 @@ xiconview_get_selection_mode (XGtkIconView *icon_view)
  *
  * Since: 2.6
  **/
-void
-xiconview_set_model (XGtkIconView *icon_view,
-                         GtkTreeModel *model)
+void xiconview_set_model(XGtkIconView *icon_view, GtkTreeModel *model)
 {
     gboolean dirty;
 
-    g_return_if_fail (IS_XICONVIEW (icon_view));
-    g_return_if_fail (model == NULL || GTK_IS_TREE_MODEL (model));
+    g_return_if_fail(IS_XICONVIEW(icon_view));
+    g_return_if_fail(model == NULL || GTK_IS_TREE_MODEL(model));
 
     if (icon_view->priv->model == model)
         return;
 
     if (icon_view->priv->scroll_to_path)
     {
-        gtk_tree_row_reference_free (icon_view->priv->scroll_to_path);
+        gtk_tree_row_reference_free(icon_view->priv->scroll_to_path);
         icon_view->priv->scroll_to_path = NULL;
     }
 
     /* The area can be NULL while disposing */
     if (icon_view->priv->cell_area)
-        gtk_cell_area_stop_editing (icon_view->priv->cell_area, TRUE);
+        gtk_cell_area_stop_editing(icon_view->priv->cell_area, TRUE);
 
-    dirty = xiconview_unselect_all_internal (icon_view);
+    dirty = xiconview_unselect_all_internal(icon_view);
 
     if (model)
     {
@@ -4965,49 +4710,38 @@ xiconview_set_model (XGtkIconView *icon_view,
 
         if (icon_view->priv->pixbuf_column != -1)
         {
-            column_type = gtk_tree_model_get_column_type (model,
-                          icon_view->priv->pixbuf_column);
+            column_type = gtk_tree_model_get_column_type(model, icon_view->priv->pixbuf_column);
 
-            g_return_if_fail (column_type == GDK_TYPE_PIXBUF);
+            g_return_if_fail(column_type == GDK_TYPE_PIXBUF);
         }
 
         if (icon_view->priv->text_column != -1)
         {
-            column_type = gtk_tree_model_get_column_type (model,
-                          icon_view->priv->text_column);
+            column_type = gtk_tree_model_get_column_type(model, icon_view->priv->text_column);
 
-            g_return_if_fail (column_type == G_TYPE_STRING);
+            g_return_if_fail(column_type == G_TYPE_STRING);
         }
 
         if (icon_view->priv->markup_column != -1)
         {
-            column_type = gtk_tree_model_get_column_type (model,
-                          icon_view->priv->markup_column);
+            column_type = gtk_tree_model_get_column_type(model, icon_view->priv->markup_column);
 
-            g_return_if_fail (column_type == G_TYPE_STRING);
+            g_return_if_fail(column_type == G_TYPE_STRING);
         }
-
     }
 
     if (icon_view->priv->model)
     {
-        g_signal_handlers_disconnect_by_func (icon_view->priv->model,
-                                              (void*)xiconview_row_changed,
-                                              icon_view);
-        g_signal_handlers_disconnect_by_func (icon_view->priv->model,
-                                              (void*)xiconview_row_inserted,
-                                              icon_view);
-        g_signal_handlers_disconnect_by_func (icon_view->priv->model,
-                                              (void*)xiconview_row_deleted,
-                                              icon_view);
-        g_signal_handlers_disconnect_by_func (icon_view->priv->model,
-                                              (void*)xiconview_rows_reordered,
-                                              icon_view);
+        g_signal_handlers_disconnect_by_func(icon_view->priv->model, (void *)xiconview_row_changed, icon_view);
+        g_signal_handlers_disconnect_by_func(icon_view->priv->model, (void *)xiconview_row_inserted, icon_view);
+        g_signal_handlers_disconnect_by_func(icon_view->priv->model, (void *)xiconview_row_deleted, icon_view);
+//         g_signal_handlers_disconnect_by_func(icon_view->priv->model, (void *)xiconview_rows_reordered, icon_view);
 
-        g_object_unref (icon_view->priv->model);
+        g_object_unref(icon_view->priv->model);
 
-        g_list_free_full (icon_view->priv->items, (GDestroyNotify) xiconview_item_free);
-        icon_view->priv->items = NULL;
+//         g_list_free_full(icon_view->priv->items, (GDestroyNotify)xiconview_item_free);
+//         icon_view->priv->items = NULL;
+        icon_view->priv->llItems.clear();
         icon_view->priv->anchor_item = NULL;
         icon_view->priv->cursor_item = NULL;
         icon_view->priv->last_single_clicked = NULL;
@@ -5020,33 +4754,21 @@ xiconview_set_model (XGtkIconView *icon_view,
 
     if (icon_view->priv->model)
     {
-        g_object_ref (icon_view->priv->model);
-        g_signal_connect (icon_view->priv->model,
-                          "row-changed",
-                          G_CALLBACK (xiconview_row_changed),
-                          icon_view);
-        g_signal_connect (icon_view->priv->model,
-                          "row-inserted",
-                          G_CALLBACK (xiconview_row_inserted),
-                          icon_view);
-        g_signal_connect (icon_view->priv->model,
-                          "row-deleted",
-                          G_CALLBACK (xiconview_row_deleted),
-                          icon_view);
-        g_signal_connect (icon_view->priv->model,
-                          "rows-reordered",
-                          G_CALLBACK (xiconview_rows_reordered),
-                          icon_view);
+        g_object_ref(icon_view->priv->model);
+        g_signal_connect(icon_view->priv->model, "row-changed", G_CALLBACK(xiconview_row_changed), icon_view);
+        g_signal_connect(icon_view->priv->model, "row-inserted", G_CALLBACK(xiconview_row_inserted), icon_view);
+        g_signal_connect(icon_view->priv->model, "row-deleted", G_CALLBACK(xiconview_row_deleted), icon_view);
+//         g_signal_connect(icon_view->priv->model, "rows-reordered", G_CALLBACK(xiconview_rows_reordered), icon_view);
 
-        xiconview_build_items (icon_view);
+        xiconview_build_items(icon_view);
     }
 
-    g_object_notify (G_OBJECT (icon_view), "model");
+    g_object_notify(G_OBJECT(icon_view), "model");
 
     if (dirty)
-        g_signal_emit (icon_view, icon_view_signals[SELECTION_CHANGED], 0);
+        g_signal_emit(icon_view, icon_view_signals[SELECTION_CHANGED], 0);
 
-    gtk_widget_queue_resize (GTK_WIDGET (icon_view));
+    gtk_widget_queue_resize(GTK_WIDGET(icon_view));
 }
 
 /**
@@ -5061,27 +4783,23 @@ xiconview_set_model (XGtkIconView *icon_view,
  *
  * Since: 2.6
  **/
-GtkTreeModel *
-xiconview_get_model (XGtkIconView *icon_view)
+GtkTreeModel *xiconview_get_model(XGtkIconView *icon_view)
 {
-    g_return_val_if_fail (IS_XICONVIEW (icon_view), NULL);
+    g_return_val_if_fail(IS_XICONVIEW(icon_view), NULL);
 
     return icon_view->priv->model;
 }
 
-static void
-update_text_cell (XGtkIconView *icon_view)
+static void update_text_cell(XGtkIconView *icon_view)
 {
     if (!icon_view->priv->cell_area)
         return;
 
-    if (icon_view->priv->text_column == -1 &&
-            icon_view->priv->markup_column == -1)
+    if (icon_view->priv->text_column == -1 && icon_view->priv->markup_column == -1)
     {
         if (icon_view->priv->text_cell != NULL)
         {
-            gtk_cell_area_remove (icon_view->priv->cell_area,
-                                  icon_view->priv->text_cell);
+            gtk_cell_area_remove(icon_view->priv->cell_area, icon_view->priv->text_cell);
             icon_view->priv->text_cell = NULL;
         }
     }
@@ -5089,41 +4807,44 @@ update_text_cell (XGtkIconView *icon_view)
     {
         if (icon_view->priv->text_cell == NULL)
         {
-            icon_view->priv->text_cell = gtk_cell_renderer_text_new ();
+            icon_view->priv->text_cell = gtk_cell_renderer_text_new();
 
-            gtk_cell_layout_pack_end (GTK_CELL_LAYOUT (icon_view), icon_view->priv->text_cell, FALSE);
+            gtk_cell_layout_pack_end(GTK_CELL_LAYOUT(icon_view), icon_view->priv->text_cell, FALSE);
         }
 
         if (icon_view->priv->markup_column != -1)
-            gtk_cell_layout_set_attributes (GTK_CELL_LAYOUT (icon_view),
-                                            icon_view->priv->text_cell,
-                                            "markup", icon_view->priv->markup_column,
-                                            NULL);
+            gtk_cell_layout_set_attributes(
+                GTK_CELL_LAYOUT(icon_view), icon_view->priv->text_cell, "markup", icon_view->priv->markup_column, NULL);
         else
-            gtk_cell_layout_set_attributes (GTK_CELL_LAYOUT (icon_view),
-                                            icon_view->priv->text_cell,
-                                            "text", icon_view->priv->text_column,
-                                            NULL);
+            gtk_cell_layout_set_attributes(
+                GTK_CELL_LAYOUT(icon_view), icon_view->priv->text_cell, "text", icon_view->priv->text_column, NULL);
 
         if (icon_view->priv->item_orientation == GTK_ORIENTATION_VERTICAL)
-            g_object_set (icon_view->priv->text_cell,
-                          "alignment", PANGO_ALIGN_CENTER,
-                          "wrap-mode", PANGO_WRAP_WORD_CHAR,
-                          "xalign", 0.5,
-                          "yalign", 0.0,
-                          NULL);
+            g_object_set(icon_view->priv->text_cell,
+                         "alignment",
+                         PANGO_ALIGN_CENTER,
+                         "wrap-mode",
+                         PANGO_WRAP_WORD_CHAR,
+                         "xalign",
+                         0.5,
+                         "yalign",
+                         0.0,
+                         NULL);
         else
-            g_object_set (icon_view->priv->text_cell,
-                          "alignment", PANGO_ALIGN_LEFT,
-                          "wrap-mode", PANGO_WRAP_WORD_CHAR,
-                          "xalign", 0.0,
-                          "yalign", 0.5,
-                          NULL);
+            g_object_set(icon_view->priv->text_cell,
+                         "alignment",
+                         PANGO_ALIGN_LEFT,
+                         "wrap-mode",
+                         PANGO_WRAP_WORD_CHAR,
+                         "xalign",
+                         0.0,
+                         "yalign",
+                         0.5,
+                         NULL);
     }
 }
 
-static void
-update_pixbuf_cell (XGtkIconView *icon_view)
+static void update_pixbuf_cell(XGtkIconView *icon_view)
 {
     if (!icon_view->priv->cell_area)
         return;
@@ -5132,8 +4853,7 @@ update_pixbuf_cell (XGtkIconView *icon_view)
     {
         if (icon_view->priv->pixbuf_cell != NULL)
         {
-            gtk_cell_area_remove (icon_view->priv->cell_area,
-                                  icon_view->priv->pixbuf_cell);
+            gtk_cell_area_remove(icon_view->priv->cell_area, icon_view->priv->pixbuf_cell);
 
             icon_view->priv->pixbuf_cell = NULL;
         }
@@ -5142,26 +4862,18 @@ update_pixbuf_cell (XGtkIconView *icon_view)
     {
         if (icon_view->priv->pixbuf_cell == NULL)
         {
-            icon_view->priv->pixbuf_cell = gtk_cell_renderer_pixbuf_new ();
+            icon_view->priv->pixbuf_cell = gtk_cell_renderer_pixbuf_new();
 
-            gtk_cell_layout_pack_start (GTK_CELL_LAYOUT (icon_view), icon_view->priv->pixbuf_cell, FALSE);
+            gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(icon_view), icon_view->priv->pixbuf_cell, FALSE);
         }
 
-        gtk_cell_layout_set_attributes (GTK_CELL_LAYOUT (icon_view),
-                                        icon_view->priv->pixbuf_cell,
-                                        "pixbuf", icon_view->priv->pixbuf_column,
-                                        NULL);
+        gtk_cell_layout_set_attributes(
+            GTK_CELL_LAYOUT(icon_view), icon_view->priv->pixbuf_cell, "pixbuf", icon_view->priv->pixbuf_column, NULL);
 
         if (icon_view->priv->item_orientation == GTK_ORIENTATION_VERTICAL)
-            g_object_set (icon_view->priv->pixbuf_cell,
-                          "xalign", 0.5,
-                          "yalign", 1.0,
-                          NULL);
+            g_object_set(icon_view->priv->pixbuf_cell, "xalign", 0.5, "yalign", 1.0, NULL);
         else
-            g_object_set (icon_view->priv->pixbuf_cell,
-                          "xalign", 0.0,
-                          "yalign", 0.0,
-                          NULL);
+            g_object_set(icon_view->priv->pixbuf_cell, "xalign", 0.0, "yalign", 0.0, NULL);
     }
 }
 
@@ -5175,9 +4887,7 @@ update_pixbuf_cell (XGtkIconView *icon_view)
  *
  * Since: 2.6
  **/
-void
-xiconview_set_text_column (XGtkIconView *icon_view,
-                               gint          column)
+void xiconview_set_text_column(XGtkIconView *icon_view, gint column)
 {
     if (column == icon_view->priv->text_column)
         return;
@@ -5190,22 +4900,22 @@ xiconview_set_text_column (XGtkIconView *icon_view,
         {
             GType column_type;
 
-            column_type = gtk_tree_model_get_column_type (icon_view->priv->model, column);
+            column_type = gtk_tree_model_get_column_type(icon_view->priv->model, column);
 
-            g_return_if_fail (column_type == G_TYPE_STRING);
+            g_return_if_fail(column_type == G_TYPE_STRING);
         }
 
         icon_view->priv->text_column = column;
     }
 
     if (icon_view->priv->cell_area)
-        gtk_cell_area_stop_editing (icon_view->priv->cell_area, TRUE);
+        gtk_cell_area_stop_editing(icon_view->priv->cell_area, TRUE);
 
-    update_text_cell (icon_view);
+    update_text_cell(icon_view);
 
-    xiconview_invalidate_sizes (icon_view);
+    xiconview_invalidate_sizes(icon_view);
 
-    g_object_notify (G_OBJECT (icon_view), "text-column");
+    g_object_notify(G_OBJECT(icon_view), "text-column");
 }
 
 /**
@@ -5218,10 +4928,9 @@ xiconview_set_text_column (XGtkIconView *icon_view,
  *
  * Since: 2.6
  */
-gint
-xiconview_get_text_column (XGtkIconView  *icon_view)
+gint xiconview_get_text_column(XGtkIconView *icon_view)
 {
-    g_return_val_if_fail (IS_XICONVIEW (icon_view), -1);
+    g_return_val_if_fail(IS_XICONVIEW(icon_view), -1);
 
     return icon_view->priv->text_column;
 }
@@ -5238,9 +4947,7 @@ xiconview_get_text_column (XGtkIconView  *icon_view)
  *
  * Since: 2.6
  **/
-void
-xiconview_set_markup_column (XGtkIconView *icon_view,
-                                 gint         column)
+void xiconview_set_markup_column(XGtkIconView *icon_view, gint column)
 {
     if (column == icon_view->priv->markup_column)
         return;
@@ -5253,22 +4960,22 @@ xiconview_set_markup_column (XGtkIconView *icon_view,
         {
             GType column_type;
 
-            column_type = gtk_tree_model_get_column_type (icon_view->priv->model, column);
+            column_type = gtk_tree_model_get_column_type(icon_view->priv->model, column);
 
-            g_return_if_fail (column_type == G_TYPE_STRING);
+            g_return_if_fail(column_type == G_TYPE_STRING);
         }
 
         icon_view->priv->markup_column = column;
     }
 
     if (icon_view->priv->cell_area)
-        gtk_cell_area_stop_editing (icon_view->priv->cell_area, TRUE);
+        gtk_cell_area_stop_editing(icon_view->priv->cell_area, TRUE);
 
-    update_text_cell (icon_view);
+    update_text_cell(icon_view);
 
-    xiconview_invalidate_sizes (icon_view);
+    xiconview_invalidate_sizes(icon_view);
 
-    g_object_notify (G_OBJECT (icon_view), "markup-column");
+    g_object_notify(G_OBJECT(icon_view), "markup-column");
 }
 
 /**
@@ -5281,10 +4988,9 @@ xiconview_set_markup_column (XGtkIconView *icon_view,
  *
  * Since: 2.6
  */
-gint
-xiconview_get_markup_column (XGtkIconView  *icon_view)
+gint xiconview_get_markup_column(XGtkIconView *icon_view)
 {
-    g_return_val_if_fail (IS_XICONVIEW (icon_view), -1);
+    g_return_val_if_fail(IS_XICONVIEW(icon_view), -1);
 
     return icon_view->priv->markup_column;
 }
@@ -5299,9 +5005,7 @@ xiconview_get_markup_column (XGtkIconView  *icon_view)
  *
  * Since: 2.6
  **/
-void
-xiconview_set_pixbuf_column (XGtkIconView *icon_view,
-                                 gint         column)
+void xiconview_set_pixbuf_column(XGtkIconView *icon_view, gint column)
 {
     if (column == icon_view->priv->pixbuf_column)
         return;
@@ -5314,23 +5018,22 @@ xiconview_set_pixbuf_column (XGtkIconView *icon_view,
         {
             GType column_type;
 
-            column_type = gtk_tree_model_get_column_type (icon_view->priv->model, column);
+            column_type = gtk_tree_model_get_column_type(icon_view->priv->model, column);
 
-            g_return_if_fail (column_type == GDK_TYPE_PIXBUF);
+            g_return_if_fail(column_type == GDK_TYPE_PIXBUF);
         }
 
         icon_view->priv->pixbuf_column = column;
     }
 
     if (icon_view->priv->cell_area)
-        gtk_cell_area_stop_editing (icon_view->priv->cell_area, TRUE);
+        gtk_cell_area_stop_editing(icon_view->priv->cell_area, TRUE);
 
-    update_pixbuf_cell (icon_view);
+    update_pixbuf_cell(icon_view);
 
-    xiconview_invalidate_sizes (icon_view);
+    xiconview_invalidate_sizes(icon_view);
 
-    g_object_notify (G_OBJECT (icon_view), "pixbuf-column");
-
+    g_object_notify(G_OBJECT(icon_view), "pixbuf-column");
 }
 
 /**
@@ -5343,10 +5046,9 @@ xiconview_set_pixbuf_column (XGtkIconView *icon_view,
  *
  * Since: 2.6
  */
-gint
-xiconview_get_pixbuf_column (XGtkIconView  *icon_view)
+gint xiconview_get_pixbuf_column(XGtkIconView *icon_view)
 {
-    g_return_val_if_fail (IS_XICONVIEW (icon_view), -1);
+    g_return_val_if_fail(IS_XICONVIEW(icon_view), -1);
 
     return icon_view->priv->pixbuf_column;
 }
@@ -5360,22 +5062,19 @@ xiconview_get_pixbuf_column (XGtkIconView  *icon_view)
  *
  * Since: 2.6
  **/
-void
-xiconview_select_path (XGtkIconView *icon_view,
-                           GtkTreePath *path)
+void xiconview_select_path(XGtkIconView *icon_view, GtkTreePath *path)
 {
-    XGtkIconViewItem *item = NULL;
+    PXGtkIconViewItem pItem;
 
-    g_return_if_fail (IS_XICONVIEW (icon_view));
-    g_return_if_fail (icon_view->priv->model != NULL);
-    g_return_if_fail (path != NULL);
+    g_return_if_fail(IS_XICONVIEW(icon_view));
+    g_return_if_fail(icon_view->priv->model != NULL);
+    g_return_if_fail(path != NULL);
 
-    if (gtk_tree_path_get_depth (path) > 0)
-        item = (XGtkIconViewItem *)g_list_nth_data (icon_view->priv->items,
-                                gtk_tree_path_get_indices(path)[0]);
+    if (gtk_tree_path_get_depth(path) > 0)
+        pItem = _xiconview_get_nth_item(icon_view, gtk_tree_path_get_indices(path)[0]);
 
-    if (item)
-        _xiconview_select_item (icon_view, item);
+    if (pItem)
+        _xiconview_select_item(icon_view, pItem);
 }
 
 /**
@@ -5387,23 +5086,21 @@ xiconview_select_path (XGtkIconView *icon_view,
  *
  * Since: 2.6
  **/
-void
-xiconview_unselect_path (XGtkIconView *icon_view,
-                             GtkTreePath *path)
+void xiconview_unselect_path(XGtkIconView *icon_view, GtkTreePath *path)
 {
-    XGtkIconViewItem *item;
+    PXGtkIconViewItem pItem;
 
-    g_return_if_fail (IS_XICONVIEW (icon_view));
-    g_return_if_fail (icon_view->priv->model != NULL);
-    g_return_if_fail (path != NULL);
+    g_return_if_fail(IS_XICONVIEW(icon_view));
+    g_return_if_fail(icon_view->priv->model != NULL);
+    g_return_if_fail(path != NULL);
 
-    item = (XGtkIconViewItem *)g_list_nth_data (icon_view->priv->items,
-                            gtk_tree_path_get_indices(path)[0]);
+//     item = (XGtkIconViewItem *)g_list_nth_data(icon_view->priv->items, gtk_tree_path_get_indices(path)[0]);
 
-    if (!item)
+    pItem = _xiconview_get_nth_item(icon_view, gtk_tree_path_get_indices(path)[0]);
+    if (!pItem)
         return;
 
-    _xiconview_unselect_item (icon_view, item);
+    _xiconview_unselect_item(icon_view, pItem);
 }
 
 /**
@@ -5420,27 +5117,28 @@ xiconview_unselect_path (XGtkIconView *icon_view,
  * g_list_free_full (list, (GDestroyNotify) gtk_tree_path_free);
  * ]|
  *
- * Returns: (element-type GtkTreePath) (transfer full): A #GList containing a #GtkTreePath for each selected row.
+ * Returns: (element-type GtkTreePath) (transfer full): A #GList containing a
+ *#GtkTreePath for each selected row.
  *
  * Since: 2.6
  **/
-GList *
-xiconview_get_selected_items (XGtkIconView *icon_view)
+GList* xiconview_get_selected_items(XGtkIconView *icon_view)
 {
-    GList *list;
+//     GList *list;
     GList *selected = NULL;
 
-    g_return_val_if_fail (IS_XICONVIEW (icon_view), NULL);
+    g_return_val_if_fail(IS_XICONVIEW(icon_view), NULL);
 
-    for (list = icon_view->priv->items; list != NULL; list = list->next)
+//     for (list = icon_view->priv->items; list != NULL; list = list->next)
+    for (auto &pItem : icon_view->priv->llItems)
     {
-        XGtkIconViewItem *item = (XGtkIconViewItem *)list->data;
+//         XGtkIconViewItem *item = (XGtkIconViewItem *)list->data;
 
-        if (item->selected)
+        if (pItem->selected)
         {
-            GtkTreePath *path = gtk_tree_path_new_from_indices (item->index, -1);
+            GtkTreePath *path = gtk_tree_path_new_from_indices(pItem->index, -1);
 
-            selected = g_list_prepend (selected, path);
+            selected = g_list_prepend(selected, path);
         }
     }
 
@@ -5456,31 +5154,31 @@ xiconview_get_selected_items (XGtkIconView *icon_view)
  *
  * Since: 2.6
  **/
-void
-xiconview_select_all (XGtkIconView *icon_view)
+void xiconview_select_all(XGtkIconView *icon_view)
 {
-    GList *items;
+//     GList *items;
     gboolean dirty = FALSE;
 
-    g_return_if_fail (IS_XICONVIEW (icon_view));
+    g_return_if_fail(IS_XICONVIEW(icon_view));
 
     if (icon_view->priv->selection_mode != GTK_SELECTION_MULTIPLE)
         return;
 
-    for (items = icon_view->priv->items; items; items = items->next)
+    // for (items = icon_view->priv->items; items; items = items->next)
+    for (auto &pItem : icon_view->priv->llItems)
     {
-        XGtkIconViewItem *item = (XGtkIconViewItem *)items->data;
+//         XGtkIconViewItem *item = (XGtkIconViewItem *)items->data;
 
-        if (!item->selected)
+        if (!pItem->selected)
         {
             dirty = TRUE;
-            item->selected = TRUE;
-            xiconview_queue_draw_item (icon_view, item);
+            pItem->selected = TRUE;
+            xiconview_queue_draw_item(icon_view, pItem);
         }
     }
 
     if (dirty)
-        g_signal_emit (icon_view, icon_view_signals[SELECTION_CHANGED], 0);
+        g_signal_emit(icon_view, icon_view_signals[SELECTION_CHANGED], 0);
 }
 
 /**
@@ -5491,20 +5189,19 @@ xiconview_select_all (XGtkIconView *icon_view)
  *
  * Since: 2.6
  **/
-void
-xiconview_unselect_all (XGtkIconView *icon_view)
+void xiconview_unselect_all(XGtkIconView *icon_view)
 {
     gboolean dirty = FALSE;
 
-    g_return_if_fail (IS_XICONVIEW (icon_view));
+    g_return_if_fail(IS_XICONVIEW(icon_view));
 
     if (icon_view->priv->selection_mode == GTK_SELECTION_BROWSE)
         return;
 
-    dirty = xiconview_unselect_all_internal (icon_view);
+    dirty = xiconview_unselect_all_internal(icon_view);
 
     if (dirty)
-        g_signal_emit (icon_view, icon_view_signals[SELECTION_CHANGED], 0);
+        g_signal_emit(icon_view, icon_view_signals[SELECTION_CHANGED], 0);
 }
 
 /**
@@ -5519,23 +5216,18 @@ xiconview_unselect_all (XGtkIconView *icon_view)
  *
  * Since: 2.6
  **/
-gboolean
-xiconview_path_is_selected (XGtkIconView *icon_view,
-                                GtkTreePath *path)
+gboolean xiconview_path_is_selected(XGtkIconView *icon_view, GtkTreePath *path)
 {
-    XGtkIconViewItem *item;
+    g_return_val_if_fail(IS_XICONVIEW(icon_view), FALSE);
+    g_return_val_if_fail(icon_view->priv->model != NULL, FALSE);
+    g_return_val_if_fail(path != NULL, FALSE);
 
-    g_return_val_if_fail (IS_XICONVIEW (icon_view), FALSE);
-    g_return_val_if_fail (icon_view->priv->model != NULL, FALSE);
-    g_return_val_if_fail (path != NULL, FALSE);
+    auto pItem = _xiconview_get_nth_item(icon_view, gtk_tree_path_get_indices(path)[0]);
 
-    item = (XGtkIconViewItem *)g_list_nth_data (icon_view->priv->items,
-                            gtk_tree_path_get_indices(path)[0]);
-
-    if (!item)
+    if (!pItem)
         return FALSE;
 
-    return item->selected;
+    return pItem->selected;
 }
 
 /**
@@ -5550,23 +5242,19 @@ xiconview_path_is_selected (XGtkIconView *icon_view,
  *
  * Since: 2.22
  */
-gint
-xiconview_get_item_row (XGtkIconView *icon_view,
-                            GtkTreePath *path)
+gint xiconview_get_item_row(XGtkIconView *icon_view, GtkTreePath *path)
 {
-    XGtkIconViewItem *item;
+    PXGtkIconViewItem pItem;
 
-    g_return_val_if_fail (IS_XICONVIEW (icon_view), -1);
-    g_return_val_if_fail (icon_view->priv->model != NULL, -1);
-    g_return_val_if_fail (path != NULL, -1);
+    g_return_val_if_fail(IS_XICONVIEW(icon_view), -1);
+    g_return_val_if_fail(icon_view->priv->model != NULL, -1);
+    g_return_val_if_fail(path != NULL, -1);
 
-    item = (XGtkIconViewItem *)g_list_nth_data (icon_view->priv->items,
-                            gtk_tree_path_get_indices(path)[0]);
-
-    if (!item)
+    pItem = _xiconview_get_nth_item(icon_view, gtk_tree_path_get_indices(path)[0]);
+    if (!pItem)
         return -1;
 
-    return item->row;
+    return pItem->row;
 }
 
 /**
@@ -5581,23 +5269,17 @@ xiconview_get_item_row (XGtkIconView *icon_view,
  *
  * Since: 2.22
  */
-gint
-xiconview_get_item_column (XGtkIconView *icon_view,
-                               GtkTreePath *path)
+gint xiconview_get_item_column(XGtkIconView *icon_view, GtkTreePath *path)
 {
-    XGtkIconViewItem *item;
+    g_return_val_if_fail(IS_XICONVIEW(icon_view), -1);
+    g_return_val_if_fail(icon_view->priv->model != NULL, -1);
+    g_return_val_if_fail(path != NULL, -1);
 
-    g_return_val_if_fail (IS_XICONVIEW (icon_view), -1);
-    g_return_val_if_fail (icon_view->priv->model != NULL, -1);
-    g_return_val_if_fail (path != NULL, -1);
-
-    item = (XGtkIconViewItem *)g_list_nth_data (icon_view->priv->items,
-                            gtk_tree_path_get_indices(path)[0]);
-
-    if (!item)
+    auto pItem = _xiconview_get_nth_item(icon_view, gtk_tree_path_get_indices(path)[0]);
+    if (!pItem)
         return -1;
 
-    return item->col;
+    return pItem->col;
 }
 
 /**
@@ -5609,14 +5291,12 @@ xiconview_get_item_column (XGtkIconView *icon_view,
  *
  * Since: 2.6
  **/
-void
-xiconview_item_activated (XGtkIconView      *icon_view,
-                              GtkTreePath      *path)
+void xiconview_item_activated(XGtkIconView *icon_view, GtkTreePath *path)
 {
-    g_return_if_fail (IS_XICONVIEW (icon_view));
-    g_return_if_fail (path != NULL);
+    g_return_if_fail(IS_XICONVIEW(icon_view));
+    g_return_if_fail(path != NULL);
 
-    g_signal_emit (icon_view, icon_view_signals[ITEM_ACTIVATED], 0, path);
+    g_signal_emit(icon_view, icon_view_signals[ITEM_ACTIVATED], 0, path);
 }
 
 /**
@@ -5629,11 +5309,9 @@ xiconview_item_activated (XGtkIconView      *icon_view,
  *
  * Since: 2.6
  **/
-void
-xiconview_set_item_orientation (XGtkIconView    *icon_view,
-                                    GtkOrientation  orientation)
+void xiconview_set_item_orientation(XGtkIconView *icon_view, GtkOrientation orientation)
 {
-    g_return_if_fail (IS_XICONVIEW (icon_view));
+    g_return_if_fail(IS_XICONVIEW(icon_view));
 
     if (icon_view->priv->item_orientation != orientation)
     {
@@ -5641,19 +5319,19 @@ xiconview_set_item_orientation (XGtkIconView    *icon_view,
 
         if (icon_view->priv->cell_area)
         {
-            if (GTK_IS_ORIENTABLE (icon_view->priv->cell_area))
-                gtk_orientable_set_orientation (GTK_ORIENTABLE (icon_view->priv->cell_area),
-                                                icon_view->priv->item_orientation);
+            if (GTK_IS_ORIENTABLE(icon_view->priv->cell_area))
+                gtk_orientable_set_orientation(GTK_ORIENTABLE(icon_view->priv->cell_area),
+                                               icon_view->priv->item_orientation);
 
-            gtk_cell_area_stop_editing (icon_view->priv->cell_area, TRUE);
+            gtk_cell_area_stop_editing(icon_view->priv->cell_area, TRUE);
         }
 
-        xiconview_invalidate_sizes (icon_view);
+        xiconview_invalidate_sizes(icon_view);
 
-        update_text_cell (icon_view);
-        update_pixbuf_cell (icon_view);
+        update_text_cell(icon_view);
+        update_pixbuf_cell(icon_view);
 
-        g_object_notify (G_OBJECT (icon_view), "item-orientation");
+        g_object_notify(G_OBJECT(icon_view), "item-orientation");
     }
 }
 
@@ -5668,11 +5346,9 @@ xiconview_set_item_orientation (XGtkIconView    *icon_view,
  *
  * Since: 2.6
  **/
-GtkOrientation
-xiconview_get_item_orientation (XGtkIconView *icon_view)
+GtkOrientation xiconview_get_item_orientation(XGtkIconView *icon_view)
 {
-    g_return_val_if_fail (IS_XICONVIEW (icon_view),
-                          GTK_ORIENTATION_VERTICAL);
+    g_return_val_if_fail(IS_XICONVIEW(icon_view), GTK_ORIENTATION_VERTICAL);
 
     return icon_view->priv->item_orientation;
 }
@@ -5689,22 +5365,20 @@ xiconview_get_item_orientation (XGtkIconView *icon_view)
  *
  * Since: 2.6
  */
-void
-xiconview_set_columns (XGtkIconView *icon_view,
-                           gint         columns)
+void xiconview_set_columns(XGtkIconView *icon_view, gint columns)
 {
-    g_return_if_fail (IS_XICONVIEW (icon_view));
+    g_return_if_fail(IS_XICONVIEW(icon_view));
 
     if (icon_view->priv->columns != columns)
     {
         icon_view->priv->columns = columns;
 
         if (icon_view->priv->cell_area)
-            gtk_cell_area_stop_editing (icon_view->priv->cell_area, TRUE);
+            gtk_cell_area_stop_editing(icon_view->priv->cell_area, TRUE);
 
-        gtk_widget_queue_resize (GTK_WIDGET (icon_view));
+        gtk_widget_queue_resize(GTK_WIDGET(icon_view));
 
-        g_object_notify (G_OBJECT (icon_view), "columns");
+        g_object_notify(G_OBJECT(icon_view), "columns");
     }
 }
 
@@ -5718,10 +5392,9 @@ xiconview_set_columns (XGtkIconView *icon_view,
  *
  * Since: 2.6
  */
-gint
-xiconview_get_columns (XGtkIconView *icon_view)
+gint xiconview_get_columns(XGtkIconView *icon_view)
 {
-    g_return_val_if_fail (IS_XICONVIEW (icon_view), -1);
+    g_return_val_if_fail(IS_XICONVIEW(icon_view), -1);
 
     return icon_view->priv->columns;
 }
@@ -5737,24 +5410,22 @@ xiconview_get_columns (XGtkIconView *icon_view)
  *
  * Since: 2.6
  */
-void
-xiconview_set_item_width (XGtkIconView *icon_view,
-                              gint         item_width)
+void xiconview_set_item_width(XGtkIconView *icon_view, gint item_width)
 {
-    g_return_if_fail (IS_XICONVIEW (icon_view));
+    g_return_if_fail(IS_XICONVIEW(icon_view));
 
     if (icon_view->priv->item_width != item_width)
     {
         icon_view->priv->item_width = item_width;
 
         if (icon_view->priv->cell_area)
-            gtk_cell_area_stop_editing (icon_view->priv->cell_area, TRUE);
+            gtk_cell_area_stop_editing(icon_view->priv->cell_area, TRUE);
 
-        xiconview_invalidate_sizes (icon_view);
+        xiconview_invalidate_sizes(icon_view);
 
-        update_text_cell (icon_view);
+        update_text_cell(icon_view);
 
-        g_object_notify (G_OBJECT (icon_view), "item-width");
+        g_object_notify(G_OBJECT(icon_view), "item-width");
     }
 }
 
@@ -5768,14 +5439,12 @@ xiconview_set_item_width (XGtkIconView *icon_view,
  *
  * Since: 2.6
  */
-gint
-xiconview_get_item_width (XGtkIconView *icon_view)
+gint xiconview_get_item_width(XGtkIconView *icon_view)
 {
-    g_return_val_if_fail (IS_XICONVIEW (icon_view), -1);
+    g_return_val_if_fail(IS_XICONVIEW(icon_view), -1);
 
     return icon_view->priv->item_width;
 }
-
 
 /**
  * xiconview_set_spacing:
@@ -5788,22 +5457,20 @@ xiconview_get_item_width (XGtkIconView *icon_view)
  *
  * Since: 2.6
  */
-void
-xiconview_set_spacing (XGtkIconView *icon_view,
-                           gint         spacing)
+void xiconview_set_spacing(XGtkIconView *icon_view, gint spacing)
 {
-    g_return_if_fail (IS_XICONVIEW (icon_view));
+    g_return_if_fail(IS_XICONVIEW(icon_view));
 
     if (icon_view->priv->spacing != spacing)
     {
         icon_view->priv->spacing = spacing;
 
         if (icon_view->priv->cell_area)
-            gtk_cell_area_stop_editing (icon_view->priv->cell_area, TRUE);
+            gtk_cell_area_stop_editing(icon_view->priv->cell_area, TRUE);
 
-        xiconview_invalidate_sizes (icon_view);
+        xiconview_invalidate_sizes(icon_view);
 
-        g_object_notify (G_OBJECT (icon_view), "spacing");
+        g_object_notify(G_OBJECT(icon_view), "spacing");
     }
 }
 
@@ -5817,10 +5484,9 @@ xiconview_set_spacing (XGtkIconView *icon_view,
  *
  * Since: 2.6
  */
-gint
-xiconview_get_spacing (XGtkIconView *icon_view)
+gint xiconview_get_spacing(XGtkIconView *icon_view)
 {
-    g_return_val_if_fail (IS_XICONVIEW (icon_view), -1);
+    g_return_val_if_fail(IS_XICONVIEW(icon_view), -1);
 
     return icon_view->priv->spacing;
 }
@@ -5835,22 +5501,20 @@ xiconview_get_spacing (XGtkIconView *icon_view)
  *
  * Since: 2.6
  */
-void
-xiconview_set_row_spacing (XGtkIconView *icon_view,
-                               gint         row_spacing)
+void xiconview_set_row_spacing(XGtkIconView *icon_view, gint row_spacing)
 {
-    g_return_if_fail (IS_XICONVIEW (icon_view));
+    g_return_if_fail(IS_XICONVIEW(icon_view));
 
     if (icon_view->priv->row_spacing != row_spacing)
     {
         icon_view->priv->row_spacing = row_spacing;
 
         if (icon_view->priv->cell_area)
-            gtk_cell_area_stop_editing (icon_view->priv->cell_area, TRUE);
+            gtk_cell_area_stop_editing(icon_view->priv->cell_area, TRUE);
 
-        xiconview_invalidate_sizes (icon_view);
+        xiconview_invalidate_sizes(icon_view);
 
-        g_object_notify (G_OBJECT (icon_view), "row-spacing");
+        g_object_notify(G_OBJECT(icon_view), "row-spacing");
     }
 }
 
@@ -5864,10 +5528,9 @@ xiconview_set_row_spacing (XGtkIconView *icon_view,
  *
  * Since: 2.6
  */
-gint
-xiconview_get_row_spacing (XGtkIconView *icon_view)
+gint xiconview_get_row_spacing(XGtkIconView *icon_view)
 {
-    g_return_val_if_fail (IS_XICONVIEW (icon_view), -1);
+    g_return_val_if_fail(IS_XICONVIEW(icon_view), -1);
 
     return icon_view->priv->row_spacing;
 }
@@ -5882,22 +5545,20 @@ xiconview_get_row_spacing (XGtkIconView *icon_view)
  *
  * Since: 2.6
  */
-void
-xiconview_set_column_spacing (XGtkIconView *icon_view,
-                                  gint         column_spacing)
+void xiconview_set_column_spacing(XGtkIconView *icon_view, gint column_spacing)
 {
-    g_return_if_fail (IS_XICONVIEW (icon_view));
+    g_return_if_fail(IS_XICONVIEW(icon_view));
 
     if (icon_view->priv->column_spacing != column_spacing)
     {
         icon_view->priv->column_spacing = column_spacing;
 
         if (icon_view->priv->cell_area)
-            gtk_cell_area_stop_editing (icon_view->priv->cell_area, TRUE);
+            gtk_cell_area_stop_editing(icon_view->priv->cell_area, TRUE);
 
-        xiconview_invalidate_sizes (icon_view);
+        xiconview_invalidate_sizes(icon_view);
 
-        g_object_notify (G_OBJECT (icon_view), "column-spacing");
+        g_object_notify(G_OBJECT(icon_view), "column-spacing");
     }
 }
 
@@ -5911,10 +5572,9 @@ xiconview_set_column_spacing (XGtkIconView *icon_view,
  *
  * Since: 2.6
  */
-gint
-xiconview_get_column_spacing (XGtkIconView *icon_view)
+gint xiconview_get_column_spacing(XGtkIconView *icon_view)
 {
-    g_return_val_if_fail (IS_XICONVIEW (icon_view), -1);
+    g_return_val_if_fail(IS_XICONVIEW(icon_view), -1);
 
     return icon_view->priv->column_spacing;
 }
@@ -5930,22 +5590,20 @@ xiconview_get_column_spacing (XGtkIconView *icon_view)
  *
  * Since: 2.6
  */
-void
-xiconview_set_margin (XGtkIconView *icon_view,
-                          gint         margin)
+void xiconview_set_margin(XGtkIconView *icon_view, gint margin)
 {
-    g_return_if_fail (IS_XICONVIEW (icon_view));
+    g_return_if_fail(IS_XICONVIEW(icon_view));
 
     if (icon_view->priv->margin != margin)
     {
         icon_view->priv->margin = margin;
 
         if (icon_view->priv->cell_area)
-            gtk_cell_area_stop_editing (icon_view->priv->cell_area, TRUE);
+            gtk_cell_area_stop_editing(icon_view->priv->cell_area, TRUE);
 
-        xiconview_invalidate_sizes (icon_view);
+        xiconview_invalidate_sizes(icon_view);
 
-        g_object_notify (G_OBJECT (icon_view), "margin");
+        g_object_notify(G_OBJECT(icon_view), "margin");
     }
 }
 
@@ -5959,10 +5617,9 @@ xiconview_set_margin (XGtkIconView *icon_view,
  *
  * Since: 2.6
  */
-gint
-xiconview_get_margin (XGtkIconView *icon_view)
+gint xiconview_get_margin(XGtkIconView *icon_view)
 {
-    g_return_val_if_fail (IS_XICONVIEW (icon_view), -1);
+    g_return_val_if_fail(IS_XICONVIEW(icon_view), -1);
 
     return icon_view->priv->margin;
 }
@@ -5977,22 +5634,20 @@ xiconview_get_margin (XGtkIconView *icon_view)
  *
  * Since: 2.18
  */
-void
-xiconview_set_item_padding (XGtkIconView *icon_view,
-                                gint         item_padding)
+void xiconview_set_item_padding(XGtkIconView *icon_view, gint item_padding)
 {
-    g_return_if_fail (IS_XICONVIEW (icon_view));
+    g_return_if_fail(IS_XICONVIEW(icon_view));
 
     if (icon_view->priv->item_padding != item_padding)
     {
         icon_view->priv->item_padding = item_padding;
 
         if (icon_view->priv->cell_area)
-            gtk_cell_area_stop_editing (icon_view->priv->cell_area, TRUE);
+            gtk_cell_area_stop_editing(icon_view->priv->cell_area, TRUE);
 
-        xiconview_invalidate_sizes (icon_view);
+        xiconview_invalidate_sizes(icon_view);
 
-        g_object_notify (G_OBJECT (icon_view), "item-padding");
+        g_object_notify(G_OBJECT(icon_view), "item-padding");
     }
 }
 
@@ -6006,10 +5661,9 @@ xiconview_set_item_padding (XGtkIconView *icon_view,
  *
  * Since: 2.18
  */
-gint
-xiconview_get_item_padding (XGtkIconView *icon_view)
+gint xiconview_get_item_padding(XGtkIconView *icon_view)
 {
-    g_return_val_if_fail (IS_XICONVIEW (icon_view), -1);
+    g_return_val_if_fail(IS_XICONVIEW(icon_view), -1);
 
     return icon_view->priv->item_padding;
 }
@@ -6018,55 +5672,42 @@ xiconview_get_item_padding (XGtkIconView *icon_view)
  * drag_data_received should thus not actually insert the data,
  * since the data doesn’t result from a drop.
  */
-static void
-set_status_pending (GdkDragContext *context,
-                    GdkDragAction   suggested_action)
+static void set_status_pending(GdkDragContext *context, GdkDragAction suggested_action)
 {
-    g_object_set_data (G_OBJECT (context),
-                       I_("gtk-icon-view-status-pending"),
-                       GINT_TO_POINTER (suggested_action));
+    g_object_set_data(G_OBJECT(context), I_("gtk-icon-view-status-pending"), GINT_TO_POINTER(suggested_action));
 }
 
-static GdkDragAction
-get_status_pending (GdkDragContext *context)
+static GdkDragAction get_status_pending(GdkDragContext *context)
 {
-    return (GdkDragAction)GPOINTER_TO_INT (g_object_get_data (G_OBJECT (context),
-                            "gtk-icon-view-status-pending"));
+    return (GdkDragAction)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(context), "gtk-icon-view-status-pending"));
 }
 
-static void
-unset_reorderable (XGtkIconView *icon_view)
+static void unset_reorderable(XGtkIconView *icon_view)
 {
     if (icon_view->priv->reorderable)
     {
         icon_view->priv->reorderable = FALSE;
-        g_object_notify (G_OBJECT (icon_view), "reorderable");
+        g_object_notify(G_OBJECT(icon_view), "reorderable");
     }
 }
 
-static void
-set_source_row (GdkDragContext *context,
-                GtkTreeModel   *model,
-                GtkTreePath    *source_row)
+static void set_source_row(GdkDragContext *context, GtkTreeModel *model, GtkTreePath *source_row)
 {
     if (source_row)
-        g_object_set_data_full (G_OBJECT (context),
-                                I_("gtk-icon-view-source-row"),
-                                gtk_tree_row_reference_new (model, source_row),
-                                (GDestroyNotify) gtk_tree_row_reference_free);
+        g_object_set_data_full(G_OBJECT(context),
+                               I_("gtk-icon-view-source-row"),
+                               gtk_tree_row_reference_new(model, source_row),
+                               (GDestroyNotify)gtk_tree_row_reference_free);
     else
-        g_object_set_data_full (G_OBJECT (context),
-                                I_("gtk-icon-view-source-row"),
-                                NULL, NULL);
+        g_object_set_data_full(G_OBJECT(context), I_("gtk-icon-view-source-row"), NULL, NULL);
 }
 
-static GtkTreePath*
-get_source_row (GdkDragContext *context)
+static GtkTreePath *get_source_row(GdkDragContext *context)
 {
-    GtkTreeRowReference *ref = (GtkTreeRowReference *)g_object_get_data (G_OBJECT (context), "gtk-icon-view-source-row");
+    GtkTreeRowReference *ref = (GtkTreeRowReference *)g_object_get_data(G_OBJECT(context), "gtk-icon-view-source-row");
 
     if (ref)
-        return gtk_tree_row_reference_get_path (ref);
+        return gtk_tree_row_reference_get_path(ref);
     else
         return NULL;
 }
@@ -6074,64 +5715,57 @@ get_source_row (GdkDragContext *context)
 typedef struct
 {
     GtkTreeRowReference *dest_row;
-    gboolean             empty_view_drop;
-    gboolean             drop_append_mode;
+    gboolean empty_view_drop;
+    gboolean drop_append_mode;
 } DestRow;
 
-static void
-dest_row_free (gpointer data)
+static void dest_row_free(gpointer data)
 {
     DestRow *dr = (DestRow *)data;
 
-    gtk_tree_row_reference_free (dr->dest_row);
-    g_free (dr);
+    gtk_tree_row_reference_free(dr->dest_row);
+    g_free(dr);
 }
 
-static void
-set_dest_row (GdkDragContext *context,
-              GtkTreeModel   *model,
-              GtkTreePath    *dest_row,
-              gboolean        empty_view_drop,
-              gboolean        drop_append_mode)
+static void set_dest_row(GdkDragContext *context,
+                         GtkTreeModel *model,
+                         GtkTreePath *dest_row,
+                         gboolean empty_view_drop,
+                         gboolean drop_append_mode)
 {
     DestRow *dr;
 
     if (!dest_row)
     {
-        g_object_set_data_full (G_OBJECT (context),
-                                I_("gtk-icon-view-dest-row"),
-                                NULL, NULL);
+        g_object_set_data_full(G_OBJECT(context), I_("gtk-icon-view-dest-row"), NULL, NULL);
         return;
     }
 
-    dr = g_new0 (DestRow, 1);
+    dr = g_new0(DestRow, 1);
 
-    dr->dest_row = gtk_tree_row_reference_new (model, dest_row);
+    dr->dest_row = gtk_tree_row_reference_new(model, dest_row);
     dr->empty_view_drop = empty_view_drop;
     dr->drop_append_mode = drop_append_mode;
-    g_object_set_data_full (G_OBJECT (context),
-                            I_("gtk-icon-view-dest-row"),
-                            dr, (GDestroyNotify) dest_row_free);
+    g_object_set_data_full(G_OBJECT(context), I_("gtk-icon-view-dest-row"), dr, (GDestroyNotify)dest_row_free);
 }
 
-static GtkTreePath*
-get_dest_row (GdkDragContext *context)
+static GtkTreePath *get_dest_row(GdkDragContext *context)
 {
-    DestRow *dr = (DestRow *)g_object_get_data (G_OBJECT (context), "gtk-icon-view-dest-row");
+    DestRow *dr = (DestRow *)g_object_get_data(G_OBJECT(context), "gtk-icon-view-dest-row");
 
     if (dr)
     {
         GtkTreePath *path = NULL;
 
         if (dr->dest_row)
-            path = gtk_tree_row_reference_get_path (dr->dest_row);
+            path = gtk_tree_row_reference_get_path(dr->dest_row);
         else if (dr->empty_view_drop)
-            path = gtk_tree_path_new_from_indices (0, -1);
+            path = gtk_tree_path_new_from_indices(0, -1);
         else
             path = NULL;
 
         if (path && dr->drop_append_mode)
-            gtk_tree_path_next (path);
+            gtk_tree_path_next(path);
 
         return path;
     }
@@ -6139,87 +5773,85 @@ get_dest_row (GdkDragContext *context)
         return NULL;
 }
 
-static gboolean
-check_model_dnd (GtkTreeModel *model,
-                 GType         required_iface,
-                 const gchar  *signal)
+static gboolean check_model_dnd(GtkTreeModel *model, GType required_iface, const gchar *signal)
 {
-    if (model == NULL || !G_TYPE_CHECK_INSTANCE_TYPE ((model), required_iface))
+    if (model == NULL || !G_TYPE_CHECK_INSTANCE_TYPE((model), required_iface))
     {
-        g_warning ("You must override the default '%s' handler "
-                   "on XGtkIconView when using models that don't support "
-                   "the %s interface and enabling drag-and-drop. The simplest way to do this "
-                   "is to connect to '%s' and call "
-                   "g_signal_stop_emission_by_name() in your signal handler to prevent "
-                   "the default handler from running. Look at the source code "
-                   "for the default handler in gtkiconview.c to get an idea what "
-                   "your handler should do. (gtkiconview.c is in the GTK+ source "
-                   "code.) If you're using GTK+ from a language other than C, "
-                   "there may be a more natural way to override default handlers, e.g. via derivation.",
-                   signal, g_type_name (required_iface), signal);
+        g_warning("You must override the default '%s' handler "
+                  "on XGtkIconView when using models that don't support "
+                  "the %s interface and enabling drag-and-drop. The simplest "
+                  "way to do "
+                  "this "
+                  "is to connect to '%s' and call "
+                  "g_signal_stop_emission_by_name() in your signal handler "
+                  "to prevent "
+                  "the default handler from running. Look at the source code "
+                  "for the default handler in gtkiconview.c to get an idea "
+                  "what "
+                  "your handler should do. (gtkiconview.c is in the GTK+ "
+                  "source "
+                  "code.) If you're using GTK+ from a language other than C, "
+                  "there may be a more natural way to override default "
+                  "handlers, e.g. "
+                  "via derivation.",
+                  signal,
+                  g_type_name(required_iface),
+                  signal);
         return FALSE;
     }
     else
         return TRUE;
 }
 
-static void
-remove_scroll_timeout (XGtkIconView *icon_view)
+static void remove_scroll_timeout(XGtkIconView *icon_view)
 {
     if (icon_view->priv->scroll_timeout_id != 0)
     {
-        g_source_remove (icon_view->priv->scroll_timeout_id);
+        g_source_remove(icon_view->priv->scroll_timeout_id);
 
         icon_view->priv->scroll_timeout_id = 0;
     }
 }
 
-static void
-xiconview_autoscroll (XGtkIconView *icon_view)
+static void xiconview_autoscroll(XGtkIconView *icon_view)
 {
     GdkWindow *window;
     gint px, py, width, height;
     gint hoffset, voffset;
 
-    window = gtk_widget_get_window (GTK_WIDGET (icon_view));
+    window = gtk_widget_get_window(GTK_WIDGET(icon_view));
 
     px = icon_view->priv->event_last_x;
     py = icon_view->priv->event_last_y;
-    gdk_window_get_geometry (window, NULL, NULL, &width, &height);
+    gdk_window_get_geometry(window, NULL, NULL, &width, &height);
 
     /* see if we are near the edge. */
     voffset = py - 2 * SCROLL_EDGE_SIZE;
     if (voffset > 0)
-        voffset = MAX (py - (height - 2 * SCROLL_EDGE_SIZE), 0);
+        voffset = MAX(py - (height - 2 * SCROLL_EDGE_SIZE), 0);
 
     hoffset = px - 2 * SCROLL_EDGE_SIZE;
     if (hoffset > 0)
-        hoffset = MAX (px - (width - 2 * SCROLL_EDGE_SIZE), 0);
+        hoffset = MAX(px - (width - 2 * SCROLL_EDGE_SIZE), 0);
 
     if (voffset != 0)
-        gtk_adjustment_set_value (icon_view->priv->vadjustment,
-                                  gtk_adjustment_get_value (icon_view->priv->vadjustment) + voffset);
+        gtk_adjustment_set_value(icon_view->priv->vadjustment,
+                                 gtk_adjustment_get_value(icon_view->priv->vadjustment) + voffset);
 
     if (hoffset != 0)
-        gtk_adjustment_set_value (icon_view->priv->hadjustment,
-                                  gtk_adjustment_get_value (icon_view->priv->hadjustment) + hoffset);
+        gtk_adjustment_set_value(icon_view->priv->hadjustment,
+                                 gtk_adjustment_get_value(icon_view->priv->hadjustment) + hoffset);
 }
 
-static gboolean
-drag_scroll_timeout (gpointer data)
+static gboolean drag_scroll_timeout(gpointer data)
 {
-    xiconview_autoscroll ((XGtkIconView*)data);
+    xiconview_autoscroll((XGtkIconView *)data);
 
     return TRUE;
 }
 
-static gboolean
-set_destination (XGtkIconView    *icon_view,
-                 GdkDragContext *context,
-                 gint            x,
-                 gint            y,
-                 GdkDragAction  *suggested_action,
-                 GdkAtom        *target)
+static gboolean set_destination(
+    XGtkIconView *icon_view, GdkDragContext *context, gint x, gint y, GdkDragAction *suggested_action, GdkAtom *target)
 {
     GtkWidget *widget;
     GtkTreePath *path = NULL;
@@ -6228,7 +5860,7 @@ set_destination (XGtkIconView    *icon_view,
     GtkTreePath *old_dest_path = NULL;
     gboolean can_drop = FALSE;
 
-    widget = GTK_WIDGET (icon_view);
+    widget = GTK_WIDGET(icon_view);
 
     *suggested_action = (GdkDragAction)0;
     *target = GDK_NONE;
@@ -6239,43 +5871,41 @@ set_destination (XGtkIconView    *icon_view,
          * we return FALSE drag_leave isn't called
          */
 
-        xiconview_set_drag_dest_item (icon_view,
-                                          NULL,
-                                          GTK_ICON_VIEW_DROP_LEFT);
+        xiconview_set_drag_dest_item(icon_view, NULL, GTK_ICON_VIEW_DROP_LEFT);
 
-        remove_scroll_timeout (XICONVIEW(widget));
+        remove_scroll_timeout(XICONVIEW(widget));
 
         return FALSE; /* no longer a drop site */
     }
 
-    *target = gtk_drag_dest_find_target (widget, context,
-                                         gtk_drag_dest_get_target_list (widget));
+    *target = gtk_drag_dest_find_target(widget, context, gtk_drag_dest_get_target_list(widget));
     if (*target == GDK_NONE)
         return FALSE;
 
-    if (!xiconview_get_dest_item_at_pos (icon_view, x, y, &path, &pos))
+    if (!xiconview_get_dest_item_at_pos(icon_view, x, y, &path, &pos))
     {
         gint n_children;
         GtkTreeModel *model;
 
-        /* the row got dropped on empty space, let's setup a special case
+        /* the row got dropped on empty space, let's setup a special
+         * case
          */
 
         if (path)
-            gtk_tree_path_free (path);
+            gtk_tree_path_free(path);
 
-        model = xiconview_get_model (icon_view);
+        model = xiconview_get_model(icon_view);
 
-        n_children = gtk_tree_model_iter_n_children (model, NULL);
+        n_children = gtk_tree_model_iter_n_children(model, NULL);
         if (n_children)
         {
             pos = GTK_ICON_VIEW_DROP_BELOW;
-            path = gtk_tree_path_new_from_indices (n_children - 1, -1);
+            path = gtk_tree_path_new_from_indices(n_children - 1, -1);
         }
         else
         {
             pos = GTK_ICON_VIEW_DROP_ABOVE;
-            path = gtk_tree_path_new_from_indices (0, -1);
+            path = gtk_tree_path_new_from_indices(0, -1);
         }
 
         can_drop = TRUE;
@@ -6283,14 +5913,12 @@ set_destination (XGtkIconView    *icon_view,
         goto out;
     }
 
-    g_assert (path);
+    g_assert(path);
 
-    xiconview_get_drag_dest_item (icon_view,
-                                      &old_dest_path,
-                                      &old_pos);
+    xiconview_get_drag_dest_item(icon_view, &old_dest_path, &old_pos);
 
     if (old_dest_path)
-        gtk_tree_path_free (old_dest_path);
+        gtk_tree_path_free(old_dest_path);
 
     if (TRUE /* FIXME if the location droppable predicate */)
     {
@@ -6302,38 +5930,33 @@ out:
     {
         GtkWidget *source_widget;
 
-        *suggested_action = gdk_drag_context_get_suggested_action (context);
-        source_widget = gtk_drag_get_source_widget (context);
+        *suggested_action = gdk_drag_context_get_suggested_action(context);
+        source_widget = gtk_drag_get_source_widget(context);
 
         if (source_widget == widget)
         {
             /* Default to MOVE, unless the user has
              * pressed ctrl or shift to affect available actions
              */
-            if ((gdk_drag_context_get_actions (context) & GDK_ACTION_MOVE) != 0)
+            if ((gdk_drag_context_get_actions(context) & GDK_ACTION_MOVE) != 0)
                 *suggested_action = GDK_ACTION_MOVE;
         }
 
-        xiconview_set_drag_dest_item (XICONVIEW(widget),
-                                          path, pos);
+        xiconview_set_drag_dest_item(XICONVIEW(widget), path, pos);
     }
     else
     {
         /* can't drop here */
-        xiconview_set_drag_dest_item (XICONVIEW(widget),
-                                          NULL,
-                                          GTK_ICON_VIEW_DROP_LEFT);
+        xiconview_set_drag_dest_item(XICONVIEW(widget), NULL, GTK_ICON_VIEW_DROP_LEFT);
     }
 
     if (path)
-        gtk_tree_path_free (path);
+        gtk_tree_path_free(path);
 
     return TRUE;
 }
 
-static GtkTreePath*
-get_logical_destination (XGtkIconView *icon_view,
-                         gboolean    *drop_append_mode)
+static GtkTreePath *get_logical_destination(XGtkIconView *icon_view, gboolean *drop_append_mode)
 {
     /* adjust path to point to the row the drop goes in front of */
     GtkTreePath *path = NULL;
@@ -6341,35 +5964,31 @@ get_logical_destination (XGtkIconView *icon_view,
 
     *drop_append_mode = FALSE;
 
-    xiconview_get_drag_dest_item (icon_view, &path, &pos);
+    xiconview_get_drag_dest_item(icon_view, &path, &pos);
 
     if (path == NULL)
         return NULL;
 
-    if (pos == GTK_ICON_VIEW_DROP_RIGHT ||
-            pos == GTK_ICON_VIEW_DROP_BELOW)
+    if (pos == GTK_ICON_VIEW_DROP_RIGHT || pos == GTK_ICON_VIEW_DROP_BELOW)
     {
         GtkTreeIter iter;
         GtkTreeModel *model = icon_view->priv->model;
 
-        if (!gtk_tree_model_get_iter (model, &iter, path) ||
-                !gtk_tree_model_iter_next (model, &iter))
+        if (!gtk_tree_model_get_iter(model, &iter, path) || !gtk_tree_model_iter_next(model, &iter))
             *drop_append_mode = TRUE;
         else
         {
             *drop_append_mode = FALSE;
-            gtk_tree_path_next (path);
+            gtk_tree_path_next(path);
         }
     }
 
     return path;
 }
 
-static gboolean
-xiconview_maybe_begin_drag (XGtkIconView    *icon_view,
-                                GdkEventMotion *event)
+static gboolean xiconview_maybe_begin_drag(XGtkIconView *icon_view, GdkEventMotion *event)
 {
-    GtkWidget *widget = GTK_WIDGET (icon_view);
+    GtkWidget *widget = GTK_WIDGET(icon_view);
     GdkDragContext *context;
     GtkTreePath *path = NULL;
     gint button;
@@ -6382,13 +6001,11 @@ xiconview_maybe_begin_drag (XGtkIconView    *icon_view,
     if (icon_view->priv->pressed_button < 0)
         goto out;
 
-    if (!gtk_drag_check_threshold (GTK_WIDGET (icon_view),
-                                   icon_view->priv->press_start_x,
-                                   icon_view->priv->press_start_y,
-                                   event->x, event->y))
+    if (!gtk_drag_check_threshold(
+            GTK_WIDGET(icon_view), icon_view->priv->press_start_x, icon_view->priv->press_start_y, event->x, event->y))
         goto out;
 
-    model = xiconview_get_model (icon_view);
+    model = xiconview_get_model(icon_view);
 
     if (model == NULL)
         goto out;
@@ -6396,16 +6013,12 @@ xiconview_maybe_begin_drag (XGtkIconView    *icon_view,
     button = icon_view->priv->pressed_button;
     icon_view->priv->pressed_button = -1;
 
-    path = xiconview_get_path_at_pos (icon_view,
-                                          icon_view->priv->press_start_x,
-                                          icon_view->priv->press_start_y);
+    path = xiconview_get_path_at_pos(icon_view, icon_view->priv->press_start_x, icon_view->priv->press_start_y);
 
     if (path == NULL)
         goto out;
 
-    if (!GTK_IS_TREE_DRAG_SOURCE (model) ||
-            !gtk_tree_drag_source_row_draggable (GTK_TREE_DRAG_SOURCE (model),
-                    path))
+    if (!GTK_IS_TREE_DRAG_SOURCE(model) || !gtk_tree_drag_source_row_draggable(GTK_TREE_DRAG_SOURCE(model), path))
         goto out;
 
     /* FIXME Check whether we're a start button, if not return FALSE and
@@ -6416,30 +6029,28 @@ xiconview_maybe_begin_drag (XGtkIconView    *icon_view,
 
     retval = TRUE;
 
-    context = gtk_drag_begin_with_coordinates (widget,
-              gtk_drag_source_get_target_list (widget),
-              icon_view->priv->source_actions,
-              button,
-              (GdkEvent*)event,
-              icon_view->priv->press_start_x,
-              icon_view->priv->press_start_y);
+    context = gtk_drag_begin_with_coordinates(widget,
+                                              gtk_drag_source_get_target_list(widget),
+                                              icon_view->priv->source_actions,
+                                              button,
+                                              (GdkEvent *)event,
+                                              icon_view->priv->press_start_x,
+                                              icon_view->priv->press_start_y);
 
-    set_source_row (context, model, path);
+    set_source_row(context, model, path);
 
 out:
     if (path)
-        gtk_tree_path_free (path);
+        gtk_tree_path_free(path);
 
     return retval;
 }
 
 /* Source side drag signals */
-static void
-xiconview_drag_begin (GtkWidget      *widget,
-                          GdkDragContext *context)
+static void xiconview_drag_begin(GtkWidget *widget, GdkDragContext *context)
 {
     XGtkIconView *icon_view;
-    XGtkIconViewItem *item;
+//     XGtkIconViewItem *item;
     cairo_surface_t *icon;
     gint x, y;
     GtkTreePath *path;
@@ -6450,48 +6061,39 @@ xiconview_drag_begin (GtkWidget      *widget,
     if (!icon_view->priv->dest_set && !icon_view->priv->source_set)
         return;
 
-    item = _xiconview_get_item_at_coords (icon_view,
-            icon_view->priv->press_start_x,
-            icon_view->priv->press_start_y,
-            TRUE,
-            NULL);
+    auto pItem = _xiconview_get_item_at_coords(icon_view,
+                                               icon_view->priv->press_start_x,
+                                               icon_view->priv->press_start_y,
+                                               TRUE,
+                                               NULL);
 
-    g_return_if_fail (item != NULL);
+    g_return_if_fail(pItem != NULL);
 
-    x = icon_view->priv->press_start_x - item->cell_area.x + icon_view->priv->item_padding;
-    y = icon_view->priv->press_start_y - item->cell_area.y + icon_view->priv->item_padding;
+    x = icon_view->priv->press_start_x - pItem->cell_area.x + icon_view->priv->item_padding;
+    y = icon_view->priv->press_start_y - pItem->cell_area.y + icon_view->priv->item_padding;
 
-    path = gtk_tree_path_new_from_indices (item->index, -1);
-    icon = xiconview_create_drag_icon (icon_view, path);
-    gtk_tree_path_free (path);
+    path = gtk_tree_path_new_from_indices(pItem->index, -1);
+    icon = xiconview_create_drag_icon(icon_view, path);
+    gtk_tree_path_free(path);
 
-    cairo_surface_set_device_offset (icon, -x, -y);
+    cairo_surface_set_device_offset(icon, -x, -y);
 
-    gtk_drag_set_icon_surface (context, icon);
+    gtk_drag_set_icon_surface(context, icon);
 
-    cairo_surface_destroy (icon);
+    cairo_surface_destroy(icon);
 }
 
-static void
-xiconview_drag_end (GtkWidget      *widget,
-                        GdkDragContext *context)
-{
-    /* do nothing */
-}
+static void xiconview_drag_end(GtkWidget *widget, GdkDragContext *context) { /* do nothing */ }
 
-static void
-xiconview_drag_data_get (GtkWidget        *widget,
-                             GdkDragContext   *context,
-                             GtkSelectionData *selection_data,
-                             guint             info,
-                             guint             time)
+static void xiconview_drag_data_get(
+    GtkWidget *widget, GdkDragContext *context, GtkSelectionData *selection_data, guint info, guint time)
 {
     XGtkIconView *icon_view;
     GtkTreeModel *model;
     GtkTreePath *source_row;
 
     icon_view = XICONVIEW(widget);
-    model = xiconview_get_model (icon_view);
+    model = xiconview_get_model(icon_view);
 
     if (model == NULL)
         return;
@@ -6499,7 +6101,7 @@ xiconview_drag_data_get (GtkWidget        *widget,
     if (!icon_view->priv->source_set)
         return;
 
-    source_row = get_source_row (context);
+    source_row = get_source_row(context);
 
     if (source_row == NULL)
         return;
@@ -6509,76 +6111,59 @@ xiconview_drag_data_get (GtkWidget        *widget,
      * we also support.
      */
 
-    if (GTK_IS_TREE_DRAG_SOURCE (model) &&
-            gtk_tree_drag_source_drag_data_get (GTK_TREE_DRAG_SOURCE (model),
-                    source_row,
-                    selection_data))
+    if (GTK_IS_TREE_DRAG_SOURCE(model)
+        && gtk_tree_drag_source_drag_data_get(GTK_TREE_DRAG_SOURCE(model), source_row, selection_data))
         goto done;
 
     /* If drag_data_get does nothing, try providing row data. */
-    if (gtk_selection_data_get_target (selection_data) == gdk_atom_intern_static_string ("GTK_TREE_MODEL_ROW"))
-        gtk_tree_set_row_drag_data (selection_data,
-                                    model,
-                                    source_row);
+    if (gtk_selection_data_get_target(selection_data) == gdk_atom_intern_static_string("GTK_TREE_MODEL_ROW"))
+        gtk_tree_set_row_drag_data(selection_data, model, source_row);
 
 done:
-    gtk_tree_path_free (source_row);
+    gtk_tree_path_free(source_row);
 }
 
-static void
-xiconview_drag_data_delete (GtkWidget      *widget,
-                                GdkDragContext *context)
+static void xiconview_drag_data_delete(GtkWidget *widget, GdkDragContext *context)
 {
     GtkTreeModel *model;
     XGtkIconView *icon_view;
     GtkTreePath *source_row;
 
     icon_view = XICONVIEW(widget);
-    model = xiconview_get_model (icon_view);
+    model = xiconview_get_model(icon_view);
 
-    if (!check_model_dnd (model, GTK_TYPE_TREE_DRAG_SOURCE, "drag-data-delete"))
+    if (!check_model_dnd(model, GTK_TYPE_TREE_DRAG_SOURCE, "drag-data-delete"))
         return;
 
     if (!icon_view->priv->source_set)
         return;
 
-    source_row = get_source_row (context);
+    source_row = get_source_row(context);
 
     if (source_row == NULL)
         return;
 
-    gtk_tree_drag_source_drag_data_delete (GTK_TREE_DRAG_SOURCE (model),
-                                           source_row);
+    gtk_tree_drag_source_drag_data_delete(GTK_TREE_DRAG_SOURCE(model), source_row);
 
-    gtk_tree_path_free (source_row);
+    gtk_tree_path_free(source_row);
 
-    set_source_row (context, NULL, NULL);
+    set_source_row(context, NULL, NULL);
 }
 
 /* Target side drag signals */
-static void
-xiconview_drag_leave (GtkWidget      *widget,
-                          GdkDragContext *context,
-                          guint           time)
+static void xiconview_drag_leave(GtkWidget *widget, GdkDragContext *context, guint time)
 {
     XGtkIconView *icon_view;
 
     icon_view = XICONVIEW(widget);
 
     /* unset any highlight row */
-    xiconview_set_drag_dest_item (icon_view,
-                                      NULL,
-                                      GTK_ICON_VIEW_DROP_LEFT);
+    xiconview_set_drag_dest_item(icon_view, NULL, GTK_ICON_VIEW_DROP_LEFT);
 
-    remove_scroll_timeout (icon_view);
+    remove_scroll_timeout(icon_view);
 }
 
-static gboolean
-xiconview_drag_motion (GtkWidget      *widget,
-                           GdkDragContext *context,
-                           gint            x,
-                           gint            y,
-                           guint           time)
+static gboolean xiconview_drag_motion(GtkWidget *widget, GdkDragContext *context, gint x, gint y, guint time)
 {
     GtkTreePath *path = NULL;
     GtkIconViewDropPosition pos;
@@ -6589,13 +6174,13 @@ xiconview_drag_motion (GtkWidget      *widget,
 
     icon_view = XICONVIEW(widget);
 
-    if (!set_destination (icon_view, context, x, y, &suggested_action, &target))
+    if (!set_destination(icon_view, context, x, y, &suggested_action, &target))
         return FALSE;
 
     icon_view->priv->event_last_x = x;
     icon_view->priv->event_last_y = y;
 
-    xiconview_get_drag_dest_item (icon_view, &path, &pos);
+    xiconview_get_drag_dest_item(icon_view, &path, &pos);
 
     /* we only know this *after* set_desination_row */
     empty = icon_view->priv->empty_view_drop;
@@ -6609,38 +6194,32 @@ xiconview_drag_motion (GtkWidget      *widget,
     {
         if (icon_view->priv->scroll_timeout_id == 0)
         {
-            icon_view->priv->scroll_timeout_id =
-                gdk_threads_add_timeout (50, drag_scroll_timeout, icon_view);
-            g_source_set_name_by_id (icon_view->priv->scroll_timeout_id, "[gtk+] drag_scroll_timeout");
+            icon_view->priv->scroll_timeout_id = gdk_threads_add_timeout(50, drag_scroll_timeout, icon_view);
+            g_source_set_name_by_id(icon_view->priv->scroll_timeout_id, "[gtk+] drag_scroll_timeout");
         }
 
-        if (target == gdk_atom_intern_static_string ("GTK_TREE_MODEL_ROW"))
+        if (target == gdk_atom_intern_static_string("GTK_TREE_MODEL_ROW"))
         {
             /* Request data so we can use the source row when
              * determining whether to accept the drop
              */
-            set_status_pending (context, suggested_action);
-            gtk_drag_get_data (widget, context, target, time);
+            set_status_pending(context, suggested_action);
+            gtk_drag_get_data(widget, context, target, time);
         }
         else
         {
             set_status_pending(context, (GdkDragAction)0);
-            gdk_drag_status (context, suggested_action, time);
+            gdk_drag_status(context, suggested_action, time);
         }
     }
 
     if (path)
-        gtk_tree_path_free (path);
+        gtk_tree_path_free(path);
 
     return TRUE;
 }
 
-static gboolean
-xiconview_drag_drop (GtkWidget      *widget,
-                         GdkDragContext *context,
-                         gint            x,
-                         gint            y,
-                         guint           time)
+static gboolean xiconview_drag_drop(GtkWidget *widget, GdkDragContext *context, gint x, gint y, guint time)
 {
     XGtkIconView *icon_view;
     GtkTreePath *path;
@@ -6650,54 +6229,52 @@ xiconview_drag_drop (GtkWidget      *widget,
     gboolean drop_append_mode;
 
     icon_view = XICONVIEW(widget);
-    model = xiconview_get_model (icon_view);
+    model = xiconview_get_model(icon_view);
 
-    remove_scroll_timeout (XICONVIEW(widget));
+    remove_scroll_timeout(XICONVIEW(widget));
 
     if (!icon_view->priv->dest_set)
         return FALSE;
 
-    if (!check_model_dnd (model, GTK_TYPE_TREE_DRAG_DEST, "drag-drop"))
+    if (!check_model_dnd(model, GTK_TYPE_TREE_DRAG_DEST, "drag-drop"))
         return FALSE;
 
-    if (!set_destination (icon_view, context, x, y, &suggested_action, &target))
+    if (!set_destination(icon_view, context, x, y, &suggested_action, &target))
         return FALSE;
 
-    path = get_logical_destination (icon_view, &drop_append_mode);
+    path = get_logical_destination(icon_view, &drop_append_mode);
 
     if (target != GDK_NONE && path != NULL)
     {
         /* in case a motion had requested drag data, change things so we
          * treat drag data receives as a drop.
          */
-        set_status_pending (context, (GdkDragAction)0);
-        set_dest_row (context, model, path,
-                      icon_view->priv->empty_view_drop, drop_append_mode);
+        set_status_pending(context, (GdkDragAction)0);
+        set_dest_row(context, model, path, icon_view->priv->empty_view_drop, drop_append_mode);
     }
 
     if (path)
-        gtk_tree_path_free (path);
+        gtk_tree_path_free(path);
 
     /* Unset this thing */
-    xiconview_set_drag_dest_item (icon_view, NULL, GTK_ICON_VIEW_DROP_LEFT);
+    xiconview_set_drag_dest_item(icon_view, NULL, GTK_ICON_VIEW_DROP_LEFT);
 
     if (target != GDK_NONE)
     {
-        gtk_drag_get_data (widget, context, target, time);
+        gtk_drag_get_data(widget, context, target, time);
         return TRUE;
     }
     else
         return FALSE;
 }
 
-static void
-xiconview_drag_data_received (GtkWidget        *widget,
-                                  GdkDragContext   *context,
-                                  gint              x,
-                                  gint              y,
-                                  GtkSelectionData *selection_data,
-                                  guint             info,
-                                  guint             time)
+static void xiconview_drag_data_received(GtkWidget *widget,
+                                         GdkDragContext *context,
+                                         gint x,
+                                         gint y,
+                                         GtkSelectionData *selection_data,
+                                         guint info,
+                                         guint time)
 {
     GtkTreePath *path;
     gboolean accepted = FALSE;
@@ -6708,15 +6285,15 @@ xiconview_drag_data_received (GtkWidget        *widget,
     gboolean drop_append_mode;
 
     icon_view = XICONVIEW(widget);
-    model = xiconview_get_model (icon_view);
+    model = xiconview_get_model(icon_view);
 
-    if (!check_model_dnd (model, GTK_TYPE_TREE_DRAG_DEST, "drag-data-received"))
+    if (!check_model_dnd(model, GTK_TYPE_TREE_DRAG_DEST, "drag-data-received"))
         return;
 
     if (!icon_view->priv->dest_set)
         return;
 
-    suggested_action = get_status_pending (context);
+    suggested_action = get_status_pending(context);
 
     if (suggested_action)
     {
@@ -6725,55 +6302,46 @@ xiconview_drag_data_received (GtkWidget        *widget,
          * supposed to call drag_status, not actually paste in the
          * data.
          */
-        path = get_logical_destination (icon_view, &drop_append_mode);
+        path = get_logical_destination(icon_view, &drop_append_mode);
 
         if (path == NULL)
             suggested_action = (GdkDragAction)0;
 
         if (suggested_action)
         {
-            if (!gtk_tree_drag_dest_row_drop_possible (GTK_TREE_DRAG_DEST (model),
-                    path,
-                    selection_data))
+            if (!gtk_tree_drag_dest_row_drop_possible(GTK_TREE_DRAG_DEST(model), path, selection_data))
                 suggested_action = (GdkDragAction)0;
         }
 
-        gdk_drag_status (context, suggested_action, time);
+        gdk_drag_status(context, suggested_action, time);
 
         if (path)
-            gtk_tree_path_free (path);
+            gtk_tree_path_free(path);
 
-        /* If you can't drop, remove user drop indicator until the next motion */
+        /* If you can't drop, remove user drop indicator until the next
+         * motion */
         if (suggested_action == 0)
-            xiconview_set_drag_dest_item (icon_view,
-                                              NULL,
-                                              GTK_ICON_VIEW_DROP_LEFT);
+            xiconview_set_drag_dest_item(icon_view, NULL, GTK_ICON_VIEW_DROP_LEFT);
         return;
     }
 
-
-    dest_row = get_dest_row (context);
+    dest_row = get_dest_row(context);
 
     if (dest_row == NULL)
         return;
 
-    if (gtk_selection_data_get_length (selection_data) >= 0)
+    if (gtk_selection_data_get_length(selection_data) >= 0)
     {
-        if (gtk_tree_drag_dest_drag_data_received (GTK_TREE_DRAG_DEST (model),
-                dest_row,
-                selection_data))
+        if (gtk_tree_drag_dest_drag_data_received(GTK_TREE_DRAG_DEST(model), dest_row, selection_data))
             accepted = TRUE;
     }
 
-    gtk_drag_finish (context,
-                     accepted,
-                     (gdk_drag_context_get_selected_action (context) == GDK_ACTION_MOVE),
-                     time);
+    gtk_drag_finish(context, accepted, (gdk_drag_context_get_selected_action(context) == GDK_ACTION_MOVE), time);
 
-    gtk_tree_path_free (dest_row);
+    gtk_tree_path_free(dest_row);
 
     /* drop dest_row */
-    set_dest_row (context, NULL, NULL, FALSE, FALSE);
+    set_dest_row(context, NULL, NULL, FALSE, FALSE);
 }
 
 /* Drag-and-Drop support */
@@ -6792,23 +6360,22 @@ xiconview_drag_data_received (GtkWidget        *widget,
  *
  * Since: 2.8
  **/
-void
-xiconview_enable_model_drag_source (XGtkIconView              *icon_view,
-                                        GdkModifierType           start_button_mask,
-                                        const GtkTargetEntry     *targets,
-                                        gint                      n_targets,
-                                        GdkDragAction             actions)
+void xiconview_enable_model_drag_source(XGtkIconView *icon_view,
+                                        GdkModifierType start_button_mask,
+                                        const GtkTargetEntry *targets,
+                                        gint n_targets,
+                                        GdkDragAction actions)
 {
-    g_return_if_fail (IS_XICONVIEW (icon_view));
+    g_return_if_fail(IS_XICONVIEW(icon_view));
 
-    gtk_drag_source_set (GTK_WIDGET(icon_view), (GdkModifierType)0, targets, n_targets, actions);
+    gtk_drag_source_set(GTK_WIDGET(icon_view), (GdkModifierType)0, targets, n_targets, actions);
 
     icon_view->priv->start_button_mask = start_button_mask;
     icon_view->priv->source_actions = actions;
 
     icon_view->priv->source_set = TRUE;
 
-    unset_reorderable (icon_view);
+    unset_reorderable(icon_view);
 }
 
 /**
@@ -6825,21 +6392,20 @@ xiconview_enable_model_drag_source (XGtkIconView              *icon_view,
  *
  * Since: 2.8
  **/
-void
-xiconview_enable_model_drag_dest (XGtkIconView          *icon_view,
+void xiconview_enable_model_drag_dest(XGtkIconView *icon_view,
                                       const GtkTargetEntry *targets,
-                                      gint                  n_targets,
-                                      GdkDragAction         actions)
+                                      gint n_targets,
+                                      GdkDragAction actions)
 {
-    g_return_if_fail (IS_XICONVIEW (icon_view));
+    g_return_if_fail(IS_XICONVIEW(icon_view));
 
-    gtk_drag_dest_set(GTK_WIDGET (icon_view), (GtkDestDefaults)0, targets, n_targets, actions);
+    gtk_drag_dest_set(GTK_WIDGET(icon_view), (GtkDestDefaults)0, targets, n_targets, actions);
 
     icon_view->priv->dest_actions = actions;
 
     icon_view->priv->dest_set = TRUE;
 
-    unset_reorderable (icon_view);
+    unset_reorderable(icon_view);
 }
 
 /**
@@ -6851,18 +6417,17 @@ xiconview_enable_model_drag_dest (XGtkIconView          *icon_view,
  *
  * Since: 2.8
  **/
-void
-xiconview_unset_model_drag_source (XGtkIconView *icon_view)
+void xiconview_unset_model_drag_source(XGtkIconView *icon_view)
 {
-    g_return_if_fail (IS_XICONVIEW (icon_view));
+    g_return_if_fail(IS_XICONVIEW(icon_view));
 
     if (icon_view->priv->source_set)
     {
-        gtk_drag_source_unset (GTK_WIDGET (icon_view));
+        gtk_drag_source_unset(GTK_WIDGET(icon_view));
         icon_view->priv->source_set = FALSE;
     }
 
-    unset_reorderable (icon_view);
+    unset_reorderable(icon_view);
 }
 
 /**
@@ -6874,18 +6439,17 @@ xiconview_unset_model_drag_source (XGtkIconView *icon_view)
  *
  * Since: 2.8
  **/
-void
-xiconview_unset_model_drag_dest (XGtkIconView *icon_view)
+void xiconview_unset_model_drag_dest(XGtkIconView *icon_view)
 {
-    g_return_if_fail (IS_XICONVIEW (icon_view));
+    g_return_if_fail(IS_XICONVIEW(icon_view));
 
     if (icon_view->priv->dest_set)
     {
-        gtk_drag_dest_unset (GTK_WIDGET (icon_view));
+        gtk_drag_dest_unset(GTK_WIDGET(icon_view));
         icon_view->priv->dest_set = FALSE;
     }
 
-    unset_reorderable (icon_view);
+    unset_reorderable(icon_view);
 }
 
 /* These are useful to implement your own custom stuff. */
@@ -6899,38 +6463,33 @@ xiconview_unset_model_drag_dest (XGtkIconView *icon_view)
  *
  * Since: 2.8
  */
-void
-xiconview_set_drag_dest_item (XGtkIconView              *icon_view,
-                                  GtkTreePath              *path,
-                                  GtkIconViewDropPosition   pos)
+void xiconview_set_drag_dest_item(XGtkIconView *icon_view, GtkTreePath *path, GtkIconViewDropPosition pos)
 {
     /* Note; this function is exported to allow a custom DND
      * implementation, so it can't touch TreeViewDragInfo
      */
 
-    g_return_if_fail (IS_XICONVIEW (icon_view));
+    g_return_if_fail(IS_XICONVIEW(icon_view));
 
     if (icon_view->priv->dest_item)
     {
         GtkTreePath *current_path;
-        current_path = gtk_tree_row_reference_get_path (icon_view->priv->dest_item);
-        gtk_tree_row_reference_free (icon_view->priv->dest_item);
+        current_path = gtk_tree_row_reference_get_path(icon_view->priv->dest_item);
+        gtk_tree_row_reference_free(icon_view->priv->dest_item);
         icon_view->priv->dest_item = NULL;
 
-        xiconview_queue_draw_path (icon_view, current_path);
-        gtk_tree_path_free (current_path);
+        xiconview_queue_draw_path(icon_view, current_path);
+        gtk_tree_path_free(current_path);
     }
 
     /* special case a drop on an empty model */
     icon_view->priv->empty_view_drop = FALSE;
-    if (pos == GTK_ICON_VIEW_DROP_ABOVE && path
-            && gtk_tree_path_get_depth (path) == 1
-            && gtk_tree_path_get_indices (path)[0] == 0)
+    if (pos == GTK_ICON_VIEW_DROP_ABOVE && path && gtk_tree_path_get_depth(path) == 1
+        && gtk_tree_path_get_indices(path)[0] == 0)
     {
         gint n_children;
 
-        n_children = gtk_tree_model_iter_n_children (icon_view->priv->model,
-                     NULL);
+        n_children = gtk_tree_model_iter_n_children(icon_view->priv->model, NULL);
 
         if (n_children == 0)
             icon_view->priv->empty_view_drop = TRUE;
@@ -6941,10 +6500,9 @@ xiconview_set_drag_dest_item (XGtkIconView              *icon_view,
     if (path)
     {
         icon_view->priv->dest_item =
-            gtk_tree_row_reference_new_proxy (G_OBJECT (icon_view),
-                                              icon_view->priv->model, path);
+            gtk_tree_row_reference_new_proxy(G_OBJECT(icon_view), icon_view->priv->model, path);
 
-        xiconview_queue_draw_path (icon_view, path);
+        xiconview_queue_draw_path(icon_view, path);
     }
 }
 
@@ -6959,17 +6517,16 @@ xiconview_set_drag_dest_item (XGtkIconView              *icon_view,
  *
  * Since: 2.8
  **/
-void
-xiconview_get_drag_dest_item (XGtkIconView              *icon_view,
-                                  GtkTreePath             **path,
-                                  GtkIconViewDropPosition  *pos)
+void xiconview_get_drag_dest_item(XGtkIconView *icon_view,
+                                  GtkTreePath **path,
+                                  GtkIconViewDropPosition *pos)
 {
-    g_return_if_fail (IS_XICONVIEW (icon_view));
+    g_return_if_fail(IS_XICONVIEW(icon_view));
 
     if (path)
     {
         if (icon_view->priv->dest_item)
-            *path = gtk_tree_row_reference_get_path (icon_view->priv->dest_item);
+            *path = gtk_tree_row_reference_get_path(icon_view->priv->dest_item);
         else
             *path = NULL;
     }
@@ -6993,48 +6550,47 @@ xiconview_get_drag_dest_item (XGtkIconView              *icon_view,
  *
  * Since: 2.8
  **/
-gboolean
-xiconview_get_dest_item_at_pos (XGtkIconView              *icon_view,
-                                    gint                      drag_x,
-                                    gint                      drag_y,
-                                    GtkTreePath             **path,
-                                    GtkIconViewDropPosition  *pos)
+gboolean xiconview_get_dest_item_at_pos(XGtkIconView *icon_view,
+                                        gint drag_x,
+                                        gint drag_y,
+                                        GtkTreePath **path,
+                                        GtkIconViewDropPosition *pos)
 {
-    XGtkIconViewItem *item;
+//     XGtkIconViewItem *item;
 
     /* Note; this function is exported to allow a custom DND
      * implementation, so it can't touch TreeViewDragInfo
      */
 
-    g_return_val_if_fail (IS_XICONVIEW (icon_view), FALSE);
-    g_return_val_if_fail (drag_x >= 0, FALSE);
-    g_return_val_if_fail (drag_y >= 0, FALSE);
-    g_return_val_if_fail (icon_view->priv->bin_window != NULL, FALSE);
-
+    g_return_val_if_fail(IS_XICONVIEW(icon_view), FALSE);
+    g_return_val_if_fail(drag_x >= 0, FALSE);
+    g_return_val_if_fail(drag_y >= 0, FALSE);
+    g_return_val_if_fail(icon_view->priv->bin_window != NULL, FALSE);
 
     if (path)
         *path = NULL;
 
-    item = _xiconview_get_item_at_coords (icon_view,
-            drag_x + gtk_adjustment_get_value (icon_view->priv->hadjustment),
-            drag_y + gtk_adjustment_get_value (icon_view->priv->vadjustment),
-            FALSE, NULL);
+    auto pItem = _xiconview_get_item_at_coords(icon_view,
+                                               drag_x + gtk_adjustment_get_value(icon_view->priv->hadjustment),
+                                               drag_y + gtk_adjustment_get_value(icon_view->priv->vadjustment),
+                                               FALSE,
+                                               NULL);
 
-    if (item == NULL)
+    if (!pItem)
         return FALSE;
 
     if (path)
-        *path = gtk_tree_path_new_from_indices (item->index, -1);
+        *path = gtk_tree_path_new_from_indices(pItem->index, -1);
 
     if (pos)
     {
-        if (drag_x < item->cell_area.x + item->cell_area.width / 4)
+        if (drag_x < pItem->cell_area.x + pItem->cell_area.width / 4)
             *pos = GTK_ICON_VIEW_DROP_LEFT;
-        else if (drag_x > item->cell_area.x + item->cell_area.width * 3 / 4)
+        else if (drag_x > pItem->cell_area.x + pItem->cell_area.width * 3 / 4)
             *pos = GTK_ICON_VIEW_DROP_RIGHT;
-        else if (drag_y < item->cell_area.y + item->cell_area.height / 4)
+        else if (drag_y < pItem->cell_area.y + pItem->cell_area.height / 4)
             *pos = GTK_ICON_VIEW_DROP_ABOVE;
-        else if (drag_y > item->cell_area.y + item->cell_area.height * 3 / 4)
+        else if (drag_y > pItem->cell_area.y + pItem->cell_area.height * 3 / 4)
             *pos = GTK_ICON_VIEW_DROP_BELOW;
         else
             *pos = GTK_ICON_VIEW_DROP_INTO;
@@ -7055,52 +6611,49 @@ xiconview_get_dest_item_at_pos (XGtkIconView              *icon_view,
  *
  * Since: 2.8
  **/
-cairo_surface_t *
-xiconview_create_drag_icon (XGtkIconView *icon_view,
-                                GtkTreePath *path)
+cairo_surface_t *xiconview_create_drag_icon(XGtkIconView *icon_view, GtkTreePath *path)
 {
     GtkWidget *widget;
     cairo_t *cr;
     cairo_surface_t *surface;
-    GList *l;
+//     GList *l;
     gint index;
 
-    g_return_val_if_fail (IS_XICONVIEW (icon_view), NULL);
-    g_return_val_if_fail (path != NULL, NULL);
+    g_return_val_if_fail(IS_XICONVIEW(icon_view), NULL);
+    g_return_val_if_fail(path != NULL, NULL);
 
-    widget = GTK_WIDGET (icon_view);
+    widget = GTK_WIDGET(icon_view);
 
-    if (!gtk_widget_get_realized (widget))
+    if (!gtk_widget_get_realized(widget))
         return NULL;
 
-    index = gtk_tree_path_get_indices (path)[0];
+    index = gtk_tree_path_get_indices(path)[0];
 
-    for (l = icon_view->priv->items; l; l = l->next)
+    // for (l = icon_view->priv->items; l; l = l->next)
+    for (auto &pItem : icon_view->priv->llItems)
     {
-        XGtkIconViewItem *item = (XGtkIconViewItem *)l->data;
+//         XGtkIconViewItem *item = (XGtkIconViewItem *)l->data;
 
-        if (index == item->index)
+        if (index == pItem->index)
         {
-            GdkRectangle rect = {
-                item->cell_area.x - icon_view->priv->item_padding,
-                item->cell_area.y - icon_view->priv->item_padding,
-                item->cell_area.width  + icon_view->priv->item_padding * 2,
-                item->cell_area.height + icon_view->priv->item_padding * 2
-            };
+            GdkRectangle rect = { pItem->cell_area.x - icon_view->priv->item_padding,
+                                  pItem->cell_area.y - icon_view->priv->item_padding,
+                                  pItem->cell_area.width + icon_view->priv->item_padding * 2,
+                                  pItem->cell_area.height + icon_view->priv->item_padding * 2 };
 
-            surface = gdk_window_create_similar_surface (icon_view->priv->bin_window,
-                      CAIRO_CONTENT_COLOR_ALPHA,
-                      rect.width,
-                      rect.height);
+            surface = gdk_window_create_similar_surface(
+                icon_view->priv->bin_window, CAIRO_CONTENT_COLOR_ALPHA, rect.width, rect.height);
 
-            cr = cairo_create (surface);
+            cr = cairo_create(surface);
 
-            xiconview_paint_item (icon_view, cr, item,
-                                      icon_view->priv->item_padding,
-                                      icon_view->priv->item_padding,
-                                      FALSE);
+            xiconview_paint_item(icon_view,
+                                 cr,
+                                 pItem,
+                                 icon_view->priv->item_padding,
+                                 icon_view->priv->item_padding,
+                                 FALSE);
 
-            cairo_destroy (cr);
+            cairo_destroy(cr);
 
             return surface;
         }
@@ -7120,18 +6673,14 @@ xiconview_create_drag_icon (XGtkIconView *icon_view,
  *
  * Since: 2.8
  **/
-gboolean
-xiconview_get_reorderable (XGtkIconView *icon_view)
+gboolean xiconview_get_reorderable(XGtkIconView *icon_view)
 {
-    g_return_val_if_fail (IS_XICONVIEW (icon_view), FALSE);
+    g_return_val_if_fail(IS_XICONVIEW(icon_view), FALSE);
 
     return icon_view->priv->reorderable;
 }
 
-static const GtkTargetEntry item_targets[] = {
-    { (gchar*)"GTK_TREE_MODEL_ROW", GTK_TARGET_SAME_WIDGET, 0 }
-};
-
+static const GtkTargetEntry item_targets[] = { { (gchar *)"GTK_TREE_MODEL_ROW", GTK_TARGET_SAME_WIDGET, 0 } };
 
 /**
  * xiconview_set_reorderable:
@@ -7140,10 +6689,12 @@ static const GtkTargetEntry item_targets[] = {
  *
  * This function is a convenience function to allow you to reorder models that
  * support the #GtkTreeDragSourceIface and the #GtkTreeDragDestIface.  Both
- * #GtkTreeStore and #GtkListStore support these.  If @reorderable is %TRUE, then
+ * #GtkTreeStore and #GtkListStore support these.  If @reorderable is %TRUE,
+ *then
  * the user can reorder the model by dragging and dropping rows.  The
  * developer can listen to these changes by connecting to the model's
- * row_inserted and row_deleted signals. The reordering is implemented by setting up
+ * row_inserted and row_deleted signals. The reordering is implemented by
+ *setting up
  * the icon view as a drag source and destination. Therefore, drag and
  * drop can not be used in a reorderable view for any other purpose.
  *
@@ -7153,11 +6704,9 @@ static const GtkTargetEntry item_targets[] = {
  *
  * Since: 2.8
  **/
-void
-xiconview_set_reorderable (XGtkIconView *icon_view,
-                               gboolean     reorderable)
+void xiconview_set_reorderable(XGtkIconView *icon_view, gboolean reorderable)
 {
-    g_return_if_fail (IS_XICONVIEW (icon_view));
+    g_return_if_fail(IS_XICONVIEW(icon_view));
 
     reorderable = reorderable != FALSE;
 
@@ -7166,25 +6715,19 @@ xiconview_set_reorderable (XGtkIconView *icon_view,
 
     if (reorderable)
     {
-        xiconview_enable_model_drag_source (icon_view,
-                                                GDK_BUTTON1_MASK,
-                                                item_targets,
-                                                G_N_ELEMENTS (item_targets),
-                                                GDK_ACTION_MOVE);
-        xiconview_enable_model_drag_dest (icon_view,
-                                              item_targets,
-                                              G_N_ELEMENTS (item_targets),
-                                              GDK_ACTION_MOVE);
+        xiconview_enable_model_drag_source(
+            icon_view, GDK_BUTTON1_MASK, item_targets, G_N_ELEMENTS(item_targets), GDK_ACTION_MOVE);
+        xiconview_enable_model_drag_dest(icon_view, item_targets, G_N_ELEMENTS(item_targets), GDK_ACTION_MOVE);
     }
     else
     {
-        xiconview_unset_model_drag_source (icon_view);
-        xiconview_unset_model_drag_dest (icon_view);
+        xiconview_unset_model_drag_source(icon_view);
+        xiconview_unset_model_drag_dest(icon_view);
     }
 
     icon_view->priv->reorderable = reorderable;
 
-    g_object_notify (G_OBJECT (icon_view), "reorderable");
+    g_object_notify(G_OBJECT(icon_view), "reorderable");
 }
 
 /**
@@ -7197,11 +6740,9 @@ xiconview_set_reorderable (XGtkIconView *icon_view,
  *
  * Since: 3.8
  **/
-void
-xiconview_set_activate_on_single_click (XGtkIconView *icon_view,
-        gboolean     single)
+void xiconview_set_activate_on_single_click(XGtkIconView *icon_view, gboolean single)
 {
-    g_return_if_fail (IS_XICONVIEW (icon_view));
+    g_return_if_fail(IS_XICONVIEW(icon_view));
 
     single = single != FALSE;
 
@@ -7209,7 +6750,7 @@ xiconview_set_activate_on_single_click (XGtkIconView *icon_view,
         return;
 
     icon_view->priv->activate_on_single_click = single;
-    g_object_notify (G_OBJECT (icon_view), "activate-on-single-click");
+    g_object_notify(G_OBJECT(icon_view), "activate-on-single-click");
 }
 
 /**
@@ -7222,10 +6763,9 @@ xiconview_set_activate_on_single_click (XGtkIconView *icon_view,
  *
  * Since: 3.8
  **/
-gboolean
-xiconview_get_activate_on_single_click (XGtkIconView *icon_view)
+gboolean xiconview_get_activate_on_single_click(XGtkIconView *icon_view)
 {
-    g_return_val_if_fail (IS_XICONVIEW (icon_view), FALSE);
+    g_return_val_if_fail(IS_XICONVIEW(icon_view), FALSE);
 
     return icon_view->priv->activate_on_single_click;
 }
@@ -7242,7 +6782,8 @@ xiconview_get_activate_on_single_click (XGtkIconView *icon_view)
 //             tagname, parser, data))
 //         return TRUE;
 //
-//     return _gtk_cell_layout_buildable_custom_tag_start (buildable, builder, child,
+//     return _gtk_cell_layout_buildable_custom_tag_start (buildable, builder,
+//     child,
 //             tagname, parser, data);
 // }
 //
