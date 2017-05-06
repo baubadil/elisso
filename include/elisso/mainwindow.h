@@ -98,7 +98,8 @@ public:
     void enableBackForwardActions();
 
     void onLoadingFolderView(ElissoFolderView &view);
-    void onFolderViewLoaded(ElissoFolderView &view, PFSModelBase pDirSelect);
+    void onFolderViewLoaded(ElissoFolderView &view);
+    void selectInFolderTree(PFSModelBase pDir);
 
     void openFolderInTerminal(PFSModelBase pFS);
 

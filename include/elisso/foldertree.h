@@ -45,6 +45,7 @@ public:
     void select(PFSModelBase pDir);
 
 private:
+    friend class FolderTreeMonitor;
     bool spawnPopulate(const Gtk::TreeModel::iterator &it);
     void onPopulateDone();
 
@@ -68,5 +69,42 @@ private:
     struct Impl;
     Impl                        *_pImpl;
 };
+
+
+/***************************************************************************
+ *
+ *  FolderTreeMonitor
+ *
+ **************************************************************************/
+
+/**
+ *  FSMonitorBase subclass tailored to the folder tree on the left of the screen.
+ *
+ *  Whenever we populate a folder in the tree, either completely with folders because
+ *  it has been expanded or with a first folder to add the expander icon, we create
+ *  a monitor for the directory that was populated so we can remove subfolders
+ *  if necessary.
+ */
+class FolderTreeMonitor : public FSMonitorBase
+{
+public:
+    FolderTreeMonitor(ElissoFolderTree &tree,
+                      PRowReference pRowRefDirWatching,
+                      PFSModelBase pDirWatching)
+        : FSMonitorBase(),
+          _tree(tree),
+          _pRowRefDirWatching(pRowRefDirWatching),
+          _pDirWatching(pDirWatching)
+    { };
+
+    virtual void onItemAdded(PFSModelBase &pFS) override;
+    virtual void onItemRemoved(PFSModelBase &pFS) override;
+
+private:
+    ElissoFolderTree &_tree;
+    PRowReference _pRowRefDirWatching;
+    PFSModelBase _pDirWatching;
+};
+typedef shared_ptr<FolderTreeMonitor> PFolderTreeMonitor;
 
 #endif // ELISSO_FOLDERTREE_H

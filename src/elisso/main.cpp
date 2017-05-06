@@ -292,6 +292,8 @@ main(int argc, char *argv[])
 //                   | FILE_HIGH
 //                   | THUMBNAILER
 //                   | FILE_LOW
+//                   | XICONVIEW
+                  | WINDOWHIERARCHY
                   ;
 
     auto app = ElissoApplication::create(argc,

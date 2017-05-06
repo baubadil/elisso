@@ -100,9 +100,8 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app)      //
         auto p = static_cast<ElissoFolderView*>(pw);
         if (p)
         {
-            PFSModelBase pDir = p->getDirectory();
-            this->onFolderViewLoaded(*p, pDir);
-
+            this->onFolderViewLoaded(*p);
+            this->selectInFolderTree(p->getDirectory());
             this->enableViewTabActions();
         }
     });
@@ -580,8 +579,7 @@ ElissoApplicationWindow::onLoadingFolderView(ElissoFolderView &view)
  *  folder that's displaying on the right.
  */
 void
-ElissoApplicationWindow::onFolderViewLoaded(ElissoFolderView &view,
-                                            PFSModelBase pDirSelect)
+ElissoApplicationWindow::onFolderViewLoaded(ElissoFolderView &view)
 {
     PFSModelBase pDir = view.getDirectory();
 
@@ -594,9 +592,12 @@ ElissoApplicationWindow::onFolderViewLoaded(ElissoFolderView &view,
 
     this->setWindowTitle(strTitle);
     this->enableViewTypeActions(true);
+}
 
-    if (pDirSelect)
-        _treeViewLeft.select(pDirSelect);
+void
+ElissoApplicationWindow::selectInFolderTree(PFSModelBase pDir)
+{
+    this->_treeViewLeft.select(pDir);
 }
 
 void

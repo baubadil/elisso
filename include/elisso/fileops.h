@@ -46,9 +46,9 @@ class ProgressDialog;
 typedef std::shared_ptr<ProgressDialog> PProgressDialog;
 
 /**
- *  FileOperation is a temporary object that is constructed from a FileSelection of file-system
- *  objects on which a file operation such as "trash" should be performed in a background
- *  thread.
+ *  A FileOperation instance is a temporary object that is constructed from a FileSelection of
+ *  file-system objects on which a file operation such as "trash" should be performed in a
+ *  background thread.
  *
  *  The Create() factory method takes the FileSelection and the Type (e.g. Type::TRASH). It
  *  also adds the FileOperation to a given list which should reside in the caller's instance
@@ -61,7 +61,8 @@ typedef std::shared_ptr<ProgressDialog> PProgressDialog;
  *  This inherits from WorkerResult<PFSModelBase> so the worker thread can push file-system
  *  objects onto the member deque for file-system monitor processing on the GUI thread.
  */
-class FileOperation : public WorkerResult<PFSModelBase>, public enable_shared_from_this<FileOperation>
+class FileOperation : public WorkerResult<PFSModelBase>,
+                      public enable_shared_from_this<FileOperation>
 {
 public:
     static const uint UPDATE_PROGRESS_MILLIS = 100;

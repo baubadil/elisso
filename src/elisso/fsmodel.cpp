@@ -858,6 +858,7 @@ std::condition_variable_any g_condFolderPopulated;
 size_t
 FSContainer::getContents(FSList &llFiles,
                          Get getContents,
+                         FSList *pllFilesRemoved,        //!< out: list of file-system object that have been removed, or nullptr (optional)
                          StopFlag *pStopFlag)
 {
     Debug::Enter(FILE_LOW, "FSContainer::getContents(\"" + _refBase.getBasename() + "\")");
@@ -921,9 +922,24 @@ FSContainer::getContents(FSList &llFiles,
                          && (strThis != "..")
                        )
                     {
+                        if (pStopFlag)
+                            if (*pStopFlag)
+                            {
+                                fStopped = true;
+                                break;
+                            }
+
                         ContentsLock cLock(*_pMap);
-                        auto pAwake = isAwake(cLock, strThis);
-                        if (pAwake)
+
+                        // Check if the object is already in this container.
+                        PFSModelBase pAwake = isAwake(cLock, strThis);
+                        // Also wake up a new object from the GioFile. This is necessary
+                        // so we can detect if the type of the file changed. This will not have the dirty flag set.
+                        PFSModelBase pTemp = FSModelBase::MakeAwake(pGioFile);
+
+                        if (    (pAwake)
+                             && (pAwake->getType() == pTemp->getType())
+                           )
                         {
                             FSLock lock2Temp;
                             // Clear the dirty flag.
@@ -931,17 +947,15 @@ FSContainer::getContents(FSList &llFiles,
                         }
                         else
                         {
-                            if (pStopFlag)
-                                if (*pStopFlag)
-                                {
-                                    fStopped = true;
-                                    break;
-                                }
-
                             PFSModelBase pKeep;
 
-                            // Wake up a new object. This will not have the dirty flag set.
-                            PFSModelBase pTemp = FSModelBase::MakeAwake(pGioFile);
+                            if (pAwake)
+                            {
+                                // Type of file changed: then remove it from the folder before adding the new one.
+                                if (pllFilesRemoved)
+                                    pllFilesRemoved->push_back(pAwake);
+                                _pMap->m.erase(strThis);
+                            }
 
                             auto t = pTemp->getType();
                             switch (t)
@@ -1005,6 +1019,8 @@ FSContainer::getContents(FSList &llFiles,
                      && (p->_fl & FSFlag::DIRTY)
                    )
                 {
+                    if (pllFilesRemoved)
+                        pllFilesRemoved->push_back(p);
                     // Note the post increment. http://stackoverflow.com/questions/180516/how-to-filter-items-from-a-stdmap/180616#180616
                     _pMap->m.erase(it++);
                 }

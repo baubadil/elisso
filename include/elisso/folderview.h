@@ -30,6 +30,8 @@ typedef std::shared_ptr<Thumbnail> PThumbnail;
 
 typedef Glib::RefPtr<Gio::AppInfo> PAppInfo;
 
+struct ViewPopulatedResult;
+typedef std::shared_ptr<ViewPopulatedResult> PViewPopulatedResult;
 
 /***************************************************************************
  *
@@ -147,7 +149,7 @@ private:
     friend class TreeViewPlus;
 
     void dumpStack();
-    void onPopulateDone();
+    void onPopulateDone(PViewPopulatedResult p);
     void removeFile(PFSModelBase pFS);
     Gtk::ListStore::iterator insertFile(PFSModelBase pFS);
     void connectModel(bool fConnect);
@@ -212,12 +214,19 @@ private:
     uint32_t                    _uPreviousOffset = 0;
 };
 
+
 /***************************************************************************
  *
  *  FolderViewMonitor
  *
  **************************************************************************/
 
+/**
+ *  FSMonitorBase subclassed tailored for the folder contents list.
+ *
+ *  This is for updating the folder contents when file operations are
+ *  going on.
+ */
 class FolderViewMonitor : public FSMonitorBase
 {
 public:

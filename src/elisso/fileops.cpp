@@ -83,7 +83,7 @@ FileOperation::Create(Type t,
         return true;
     }, UPDATE_PROGRESS_MILLIS);
 
-    // Enqueue the instance in the parent list.
+    // Enqueue *this in the caller's file operations list.
     refQueue.push_back(p);
 
     // If the parent has given us a pointer to a progress dialog pointer, update
@@ -123,7 +123,7 @@ FileOperation::Create(Type t,
 }
 
 /**
- *  Protected constructor.
+ *  Protected constructor, only to be used by Create().
  */
 FileOperation::FileOperation(Type t,
                              FileOperationsList  &refQueue)

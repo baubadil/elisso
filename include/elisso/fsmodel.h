@@ -94,8 +94,6 @@ class ContentsLock;
  *
  *   3) Call startWatching() with a container. This stores the instance in
  *      the container (and thus increases the refcount of the shared_ptr).
- *      From now on the container will call the monitor methods when folder
- *      contents change.
  *
  *   4) When you're done monitoring, call stopWatching(). You can keep the
  *      instance around for another container.
@@ -352,6 +350,7 @@ public:
 
     size_t getContents(FSList &llFiles,
                        Get getContents,
+                       FSList *pllFilesRemoved,
                        StopFlag *pStopFlag);
 
     PFSDirectory createSubdirectory(const std::string &strName);

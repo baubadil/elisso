@@ -37,6 +37,7 @@ const DebugFlag FOLDER_POPULATE_HIGH    = (1 << 21);
 const DebugFlag FOLDER_POPULATE_LOW     = (1 << 22);
 const DebugFlag FOLDER_STACK            = (1 << 23);
 const DebugFlag THUMBNAILER             = (1 << 24);
+const DebugFlag WINDOWHIERARCHY         = (1 << 25);
 
 #define ICON_SIZE_SMALL     16
 #define ICON_SIZE_BIG       128
