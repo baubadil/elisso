@@ -287,13 +287,16 @@ ElissoApplication::on_open(const type_vec_files &files,
 int
 main(int argc, char *argv[])
 {
-    g_flDebugSet =  CMD_TOP
-                  | FOLDER_POPULATE_HIGH
+    g_flDebugSet =  0
+//                   | CMD_TOP
+//                   | FOLDER_POPULATE_HIGH
+//                   | FILE_LOW
 //                   | FILE_HIGH
 //                   | THUMBNAILER
-//                   | FILE_LOW
 //                   | XICONVIEW
-                  | WINDOWHIERARCHY
+//                   | WINDOWHIERARCHY
+//                   | FILEMONITORS
+//                   | FOLDER_STACK
                   ;
 
     auto app = ElissoApplication::create(argc,

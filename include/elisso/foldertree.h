@@ -52,6 +52,7 @@ private:
     Gtk::TreeModel::iterator insertNode(const Glib::ustring &strName,
                                         PFSModelBase pFS,
                                         const Gtk::TreeNodeChildren &children);
+    void addMonitor(Gtk::TreeModel::iterator it);
 
     void spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst);
     void onAddAnotherFirst();

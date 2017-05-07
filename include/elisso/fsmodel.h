@@ -68,8 +68,6 @@ namespace Gdk { class Pixbuf; }
 typedef Glib::RefPtr<Gdk::Pixbuf> PPixbuf;
 
 class FSContainer;
-struct ContentsMap;
-
 class ContentsLock;
 
 
@@ -126,7 +124,6 @@ private:
 };
 
 typedef std::shared_ptr<FSMonitorBase> PFSMonitorBase;
-typedef std::list<PFSMonitorBase> FSMonitorsList;
 
 
 /***************************************************************************
@@ -356,11 +353,13 @@ public:
     PFSDirectory createSubdirectory(const std::string &strName);
     PFSFile createEmptyDocument(const std::string &strName);
 
+    void notifyFileAdded(PFSModelBase pFS);
     void notifyFileRemoved(PFSModelBase pFS);
 
 protected:
     friend class FSModelBase;
     friend class FSMonitorBase;
+    friend class ContentsLock;
 
     FSContainer(FSModelBase &refBase);
     virtual ~FSContainer();
@@ -371,10 +370,10 @@ protected:
     void removeChild(ContentsLock &lock, PFSModelBase p);
     PFSModelBase isAwake(ContentsLock &lock, const std::string &strParticle);
 
-    ContentsMap         *_pMap;
+    struct Impl;
+    Impl                *_pImpl;
 
     FSModelBase         &_refBase;
-    FSMonitorsList      _llMonitors;
 };
 
 /***************************************************************************

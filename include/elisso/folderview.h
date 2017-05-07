@@ -211,7 +211,7 @@ private:
 
     PFSModelBase                _pDir;
     std::vector<std::string>    _aPathHistory;
-    uint32_t                    _uPreviousOffset = 0;
+    uint32_t                    _uPathHistoryOffset = 0;
 };
 
 

@@ -443,8 +443,12 @@ ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
     FSContainer *pContainer;
     if ((pContainer = pDirOrSymlinkToDir->getContainer()))
     {
-        // If we have a directory already, push the path into the history.
+        _pDir = pDirOrSymlinkToDir;
+
+        // Push the new path into the history.
         if (fl.test(SetDirectoryFlags::PUSH_TO_HISTORY))
+        {
+            Debug::Log(FOLDER_STACK, string(__func__) + "(): SetDirectoryFlags::PUSH_TO_HISTORY is set: pushing new " + _pDir->getRelativePath());
             if (_pDir)
             {
                 auto strFull = _pDir->getRelativePath();
@@ -452,12 +456,26 @@ ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
                 if (    (!_aPathHistory.size())
                      || (_aPathHistory.back() != strFull)
                    )
+                {
+                    // Before pushing back, cut off the stack if the user has pressed "back" at least once.
+                    if (_uPathHistoryOffset > 0)
+                    {
+                        Debug::Log(FOLDER_STACK, "  cutting off history before pushing new item, old:");
+                        this->dumpStack();
+                        auto itFirstToDelete = _aPathHistory.begin() + (_aPathHistory.size() - _uPathHistoryOffset);
+                        _aPathHistory.erase(itFirstToDelete, _aPathHistory.end());
+                        Debug::Log(FOLDER_STACK, "  new:");
+                        this->dumpStack();
+                    }
+
                     _aPathHistory.push_back(strFull);
+                }
 
-                _uPreviousOffset = 0;
+                _uPathHistoryOffset = 0;
             }
-
-        _pDir = pDirOrSymlinkToDir;
+        }
+        else
+            Debug::Log(FOLDER_STACK, string(__func__) + "(): SetDirectoryFlags::PUSH_TO_HISTORY is NOT set");
 
         // Change view state early to avoid "selection changed" signals overflowing us.
         this->setState(ViewState::POPULATING);
@@ -610,9 +628,17 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
         this->_pImpl->pPopulateThread = nullptr;
 
         // Start watching.
-        auto p = _pDir->getContainer();
-        if (p)
-            _pImpl->pMonitor->startWatching(*p);
+        auto pCnr = _pDir->getContainer();
+        if (pCnr)
+        {
+            // Notify other monitors (tree view) of the items that have been removed
+            // if this was a refresh.
+            for (auto &pRemoved : pResult->llRemoved)
+                pCnr->notifyFileRemoved(pRemoved);
+
+            // And make sure we have a monitor.
+            _pImpl->pMonitor->startWatching(*pCnr);
+        }
     }
 }
 
@@ -717,7 +743,7 @@ ElissoFolderView::refresh()
 bool
 ElissoFolderView::canGoBack()
 {
-    return (_uPreviousOffset < _aPathHistory.size());
+    return (_uPathHistoryOffset + 1 < _aPathHistory.size());
 }
 
 bool
@@ -725,19 +751,13 @@ ElissoFolderView::goBack()
 {
     if (this->canGoBack())
     {
-        ++_uPreviousOffset;
-        std::string strPrevious = _aPathHistory[_aPathHistory.size() - _uPreviousOffset];
-        PFSModelBase pDirOld = _pDir;
+        ++_uPathHistoryOffset;
+        std::string strPrevious = _aPathHistory[_aPathHistory.size() - _uPathHistoryOffset - 1];
         PFSModelBase pDir;
         if ((pDir = FSModelBase::FindPath(strPrevious)))
             if (this->setDirectory(pDir,
                                    SetDirectoryFlags::SELECT_PREVIOUS))     // but do not push to history
-            {
-                std::vector<std::string>::iterator it = _aPathHistory.begin() + _uPreviousOffset;
-                _aPathHistory.insert(it, pDirOld->getRelativePath());
                 return true;
-            }
-
     }
 
     return false;
@@ -746,7 +766,7 @@ ElissoFolderView::goBack()
 bool
 ElissoFolderView::canGoForward()
 {
-    return (_uPreviousOffset > _aPathHistory.size());
+    return (_uPathHistoryOffset > 0);
 }
 
 bool
@@ -754,13 +774,13 @@ ElissoFolderView::goForward()
 {
     if (this->canGoForward())
     {
-        std::string strPrevious = _aPathHistory[_aPathHistory.size() - --_uPreviousOffset];
-        PFSDirectory pDir;
-        if ((pDir = FSModelBase::FindDirectory(strPrevious)))
+        Debug::Log(FOLDER_STACK, string(__func__) + "(): _aPathHistory.size()=" + to_string(_aPathHistory.size()) + ", _uPathHistoryOffset=" + to_string(_uPathHistoryOffset));
+        std::string strPrevious = _aPathHistory[_aPathHistory.size() - _uPathHistoryOffset--];
+        Debug::Log(FOLDER_STACK, " --> " + strPrevious);
+        PFSModelBase pDir;
+        if ((pDir = FSModelBase::FindPath(strPrevious)))
             if (this->setDirectory(pDir, {}))     // do not push to history
-            {
                 return true;
-            }
     }
 
     return false;
@@ -1121,7 +1141,9 @@ ElissoFolderView::onMouseButton3Pressed(GdkEventButton *pEvent,
             if (cTotal == 1)
                 app.addMenuItem(pSubSection, "Rename", ACTION_EDIT_RENAME);
             app.addMenuItem(pSubSection, "Move to trash", ACTION_EDIT_TRASH);
+#ifdef USE_TESTFILEOPS
             app.addMenuItem(pSubSection, "TEST FILEOPS", ACTION_EDIT_TEST_FILEOPS);
+#endif
 
             pSubSection = app.addMenuSection(pMenu);
             if (cTotal == 1)
@@ -1193,8 +1215,10 @@ ElissoFolderView::handleAction(const std::string &strAction)
             selectAll();
         else if (strAction == ACTION_EDIT_TRASH)
             trashSelected();
+#ifdef USE_TESTFILEOPS
         else if (strAction == ACTION_EDIT_TEST_FILEOPS)
             testFileopsSelected();
+#endif
         else if (strAction == ACTION_VIEW_ICONS)
             setViewMode(FolderViewMode::ICONS);
         else if (strAction == ACTION_VIEW_LIST)
@@ -1223,6 +1247,8 @@ ElissoFolderView::handleAction(const std::string &strAction)
             if (pHome)
                 setDirectory(pHome, SetDirectoryFlags::PUSH_TO_HISTORY);
         }
+        else
+            _mainWindow.errorBox("Not implemented yet");
     }
     catch(FSException &e)
     {
@@ -1316,7 +1342,8 @@ ElissoFolderView::createSubfolderDialog()
         if (dlg.run() == Gtk::RESPONSE_OK)
         {
             auto s = dlg.getText();
-            pNew = pContainer->createSubdirectory(s);
+            if ((pNew = pContainer->createSubdirectory(s)))
+                pContainer->notifyFileAdded(pNew);
         }
     }
 
@@ -1339,7 +1366,8 @@ ElissoFolderView::createEmptyFileDialog()
         if (dlg.run() == Gtk::RESPONSE_OK)
         {
             auto s = dlg.getText();
-            pNew = pContainer->createEmptyDocument(s);
+            if ((pNew = pContainer->createEmptyDocument(s)))
+                pContainer->notifyFileAdded(pNew);
         }
     }
 
@@ -1376,10 +1404,10 @@ ElissoFolderView::testFileopsSelected()
 void
 ElissoFolderView::dumpStack()
 {
+    Debug::Log(FOLDER_STACK, string(__func__) + "(): size=" + to_string(_aPathHistory.size()) + ", offset=" + to_string(_uPathHistoryOffset));
     uint i = 0;
     for (auto &s : _aPathHistory)
-        Debug::Log(FOLDER_STACK, "stack item " + to_string(i++) + ": " + s);
-    Debug::Log(FOLDER_STACK, "offset: " + to_string(_uPreviousOffset));
+        Debug::Log(FOLDER_STACK, "  stack item " + to_string(i++) + ": " + s);
 }
 
 void
@@ -1709,7 +1737,7 @@ ElissoFolderView::onButtonPressedEvent(GdkEventButton *pEvent)
 {
     if (pEvent->type == GDK_BUTTON_PRESS)
     {
-        Debug::Log(DEBUG_ALWAYS, "button " + to_string(pEvent->button) + " pressed");
+//         Debug::Log(DEBUG_ALWAYS, "button " + to_string(pEvent->button) + " pressed");
 
         switch (pEvent->button)
         {
@@ -1989,13 +2017,17 @@ ElissoFolderView::onSelectionChanged()
 void
 FolderViewMonitor::onItemAdded(PFSModelBase &pFS) /* override; */
 {
+    Debug::Enter(FILEMONITORS, string(__func__) + "(" + pFS->getRelativePath() + ")");
     _view.insertFile(pFS);
+    Debug::Leave();
 }
 
 /* virtual */
 void
 FolderViewMonitor::onItemRemoved(PFSModelBase &pFS) /* override; */
 {
+    Debug::Enter(FILEMONITORS, string(__func__) + "(" + pFS->getRelativePath() + ")");
     _view.removeFile(pFS);
+    Debug::Leave();
 }
 

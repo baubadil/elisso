@@ -19,6 +19,7 @@
 #include <atomic>
 #include <chrono>
 #include <thread>
+#include <set>
 
 
 /***************************************************************************
@@ -40,11 +41,13 @@ PCurrentDirectory CurrentDirectory::s_theCWD = NULL;
  **************************************************************************/
 
 typedef map<const std::string, PFSModelBase> FilesMap;
+typedef list<PFSMonitorBase> FSMonitorsList;
 
-struct ContentsMap
+struct FSContainer::Impl
 {
-    Mutex       contentsMutex;
-    FilesMap    m;
+    Mutex           contentsMutex;
+    FilesMap        mapContents;
+    FSMonitorsList  llMonitors;
 };
 
 
@@ -106,8 +109,8 @@ public:
 class ContentsLock : public XWP::Lock
 {
 public:
-    ContentsLock(ContentsMap& map)
-        : Lock(map.contentsMutex)
+    ContentsLock(FSContainer& cnr)
+        : Lock(cnr._pImpl->contentsMutex)
     { }
 };
 
@@ -123,10 +126,15 @@ FSMonitorBase::startWatching(FSContainer &cnr)
 {
     FSLock lock;
     if (_pContainer)
-        throw FSException("Monitor is already busy with another container");
-
-    cnr._llMonitors.push_back(shared_from_this());
-    _pContainer = &cnr;
+    {
+        if (_pContainer != &cnr)
+            throw FSException("Monitor is already busy with another container");
+    }
+    else
+    {
+        cnr._pImpl->llMonitors.push_back(shared_from_this());
+        _pContainer = &cnr;
+    }
 }
 
 void
@@ -136,11 +144,8 @@ FSMonitorBase::stopWatching(FSContainer &cnr)
     if (_pContainer != &cnr)
         throw FSException("Cannot remove monitor as it's not active for this container");
 
-    size_t c = cnr._llMonitors.size();
     _pContainer = nullptr;
-    cnr._llMonitors.remove(shared_from_this());
-    if (cnr._llMonitors.size() != c - 1)
-        throw FSException("Couln't find monitor to remove in container's list");
+    cnr._pImpl->llMonitors.remove(shared_from_this());
 }
 
 
@@ -534,7 +539,7 @@ FSModelBase::sendToTrash()
             throw FSException("cannot get parent container for trashing");
 
         {
-            ContentsLock cLock(*pParentCnr->_pMap);
+            ContentsLock cLock(*pParentCnr);
             pParentCnr->removeChild(cLock, shared_from_this());
         }
 
@@ -654,7 +659,7 @@ FSFile::getThumbnail(uint32_t thumbsize)
  *  multiple inheritance.
  */
 FSContainer::FSContainer(FSModelBase &refBase)
-    : _pMap(new ContentsMap),
+    : _pImpl(new Impl),
       _refBase(refBase)
 {
 }
@@ -666,7 +671,7 @@ FSContainer::FSContainer(FSModelBase &refBase)
 /* virtual */
 FSContainer::~FSContainer()
 {
-    delete _pMap;
+    delete _pImpl;
 }
 
 /**
@@ -683,7 +688,7 @@ void FSContainer::addChild(ContentsLock &lock, PFSModelBase p)
     if (p->_pParent)
         throw FSException("addChild() called for a child who already has a parent");
 
-    _pMap->m[strBasename] = p;
+    _pImpl->mapContents[strBasename] = p;
 
     p->_pParent = _refBase.getSharedFromThis();
 }
@@ -695,11 +700,11 @@ void FSContainer::addChild(ContentsLock &lock, PFSModelBase p)
 void
 FSContainer::removeChild(ContentsLock &lock, PFSModelBase p)
 {
-    auto it = _pMap->m.find(p->getBasename());
-    if (it == _pMap->m.end())
+    auto it = _pImpl->mapContents.find(p->getBasename());
+    if (it == _pImpl->mapContents.end())
         throw FSException("internal: cannot find myself in parent");
 
-    _pMap->m.erase(it);
+    _pImpl->mapContents.erase(it);
     p->_pParent = nullptr;
 }
 
@@ -735,8 +740,8 @@ FSContainer::resolveDirectory()
 PFSModelBase
 FSContainer::isAwake(ContentsLock &lock, const string &strParticle)
 {
-    auto it = _pMap->m.find(strParticle);
-    if (it != _pMap->m.end())
+    auto it = _pImpl->mapContents.find(strParticle);
+    if (it != _pImpl->mapContents.end())
         return it->second;
 
     return nullptr;
@@ -754,7 +759,7 @@ PFSModelBase
 FSContainer::find(const string &strParticle)
 {
     PFSModelBase pReturn;
-    ContentsLock cLock(*_pMap);
+    ContentsLock cLock(*this);
     if ((pReturn = isAwake(cLock, strParticle)))
         Debug::Log(FILE_MID, "Directory::find(\"" + strParticle + "\") => already awake " + pReturn->describe());
     else
@@ -897,9 +902,9 @@ FSContainer::getContents(FSList &llFiles,
              * objects from the contents map that do not have the "dirty" flag set. */
             if (getContents == Get::ALL)
             {
-                ContentsLock cLock(*_pMap);
+                ContentsLock cLock(*this);
                 FSLock lock2Temp;
-                for (auto it : _pMap->m)
+                for (auto it : _pImpl->mapContents)
                 {
                     auto &p = it.second;
                     p->_fl |= FSFlag::DIRTY;
@@ -929,7 +934,7 @@ FSContainer::getContents(FSList &llFiles,
                                 break;
                             }
 
-                        ContentsLock cLock(*_pMap);
+                        ContentsLock cLock(*this);
 
                         // Check if the object is already in this container.
                         PFSModelBase pAwake = isAwake(cLock, strThis);
@@ -954,7 +959,7 @@ FSContainer::getContents(FSList &llFiles,
                                 // Type of file changed: then remove it from the folder before adding the new one.
                                 if (pllFilesRemoved)
                                     pllFilesRemoved->push_back(pAwake);
-                                _pMap->m.erase(strThis);
+                                _pImpl->mapContents.erase(strThis);
                             }
 
                             auto t = pTemp->getType();
@@ -1009,9 +1014,9 @@ FSContainer::getContents(FSList &llFiles,
 
         if (!fStopped)
         {
-            ContentsLock cLock(*_pMap);
-            for (auto it = _pMap->m.begin();
-                 it != _pMap->m.end();
+            ContentsLock cLock(*this);
+            for (auto it = _pImpl->mapContents.begin();
+                 it != _pImpl->mapContents.end();
                 )
             {
                 auto &p = it->second;
@@ -1022,7 +1027,7 @@ FSContainer::getContents(FSList &llFiles,
                     if (pllFilesRemoved)
                         pllFilesRemoved->push_back(p);
                     // Note the post increment. http://stackoverflow.com/questions/180516/how-to-filter-items-from-a-stdmap/180616#180616
-                    _pMap->m.erase(it++);
+                    _pImpl->mapContents.erase(it++);
                 }
                 else
                 {
@@ -1058,7 +1063,7 @@ FSContainer::getContents(FSList &llFiles,
             if (    (getContents == Get::FIRST_FOLDER_ONLY)
                  && (!c)
                )
-            for (auto it : _pMap->m)
+            for (auto it : _pImpl->mapContents)
             {
                 auto &p = it.second;
                 // Leave out ".." in the list.
@@ -1100,9 +1105,8 @@ FSContainer::getContents(FSList &llFiles,
  *
  *  Throws an FSException on I/O errors.
  *
- *  Otherwise, this calls onDirectoryAdded() with the new FSDirectory instance (which
- *  is in the symlink target if the container is a symlink). The new instance is also
- *  returned.
+ *  This does not automatically call file-system monitors since this may not run on
+ *  the GUI thread. Call notifyFileAdded() with the returned instance afterwards.
  */
 PFSDirectory
 FSContainer::createSubdirectory(const std::string &strName)
@@ -1127,14 +1131,9 @@ FSContainer::createSubdirectory(const std::string &strName)
         // If we got here, we have a directory.
         pDirReturn = FSDirectory::Create(pGioFileNew);
         {
-            ContentsLock cLock(*_pMap);
+            ContentsLock cLock(*this);
             this->addChild(cLock, pDirReturn);
         }
-
-        // Notify the monitors.
-        PFSModelBase pFS = pDirReturn;
-        for (auto &p : _llMonitors)
-            p->onItemAdded(pFS);
     }
     catch(Gio::Error &e)
     {
@@ -1144,6 +1143,15 @@ FSContainer::createSubdirectory(const std::string &strName)
     return pDirReturn;
 }
 
+/**
+ *  Creates a new physical directory in this container (physical directory or symlink
+ *  pointing to one), which is returned.
+ *
+ *  Throws an FSException on I/O errors.
+ *
+ *  This does not automatically call file-system monitors since this may not run on
+ *  the GUI thread. Call notifyFileAdded() with the returned instance afterwards.
+ */
 PFSFile
 FSContainer::createEmptyDocument(const std::string &strName)
 {
@@ -1168,14 +1176,9 @@ FSContainer::createEmptyDocument(const std::string &strName)
         // If we got here, we have a directory.
         pFileReturn = FSFile::Create(pGioFileNew, 0);
         {
-            ContentsLock cLock(*_pMap);
+            ContentsLock cLock(*this);
             this->addChild(cLock, pFileReturn);
         }
-
-        // Notify the monitors.
-        PFSModelBase pFS = pFileReturn;
-        for (auto &p : _llMonitors)
-            p->onItemAdded(pFS);
     }
     catch(Gio::Error &e)
     {
@@ -1183,6 +1186,20 @@ FSContainer::createEmptyDocument(const std::string &strName)
     }
 
     return pFileReturn;
+}
+
+/**
+ *  Notifies all monitors attached to *this that a file has been added.
+ *
+ *  Call this on the GUI thread after calling FSContainer::create*().
+ */
+void
+FSContainer::notifyFileAdded(PFSModelBase pFS)
+{
+    Debug::Enter(FILEMONITORS, string(__func__) + "(" + pFS->getRelativePath() + ")");
+    for (auto &pMonitor : _pImpl->llMonitors)
+        pMonitor->onItemAdded(pFS);
+    Debug::Leave();
 }
 
 /**
@@ -1195,9 +1212,10 @@ FSContainer::createEmptyDocument(const std::string &strName)
 void
 FSContainer::notifyFileRemoved(PFSModelBase pFS)
 {
-    auto pThis = pFS->shared_from_this();
-    for (auto &pMonitor : _llMonitors)
-        pMonitor->onItemRemoved(pThis);
+    Debug::Enter(FILEMONITORS, string(__func__) + "(" + pFS->getRelativePath() + ")");
+    for (auto &pMonitor : _pImpl->llMonitors)
+        pMonitor->onItemRemoved(pFS);
+    Debug::Leave();
 }
 
 

@@ -142,7 +142,7 @@ ElissoApplicationWindow::addFolderTab(PFSModelBase pDirOrSymlink)       //!< in:
         if (!p2)
             p2 = FSDirectory::GetHome();
         pView->setDirectory(p2,
-                            {});     // do not push to history
+                            SetDirectoryFlags::PUSH_TO_HISTORY);
 
         Debug::Leave();
         return false;       // disconnect, do not call again
@@ -229,14 +229,17 @@ ElissoApplicationWindow::initActionHandlers()
 
     _pActionEditCopy = this->add_action(ACTION_EDIT_COPY, [this]()
     {
+        this->handleViewAction(ACTION_EDIT_COPY);
     });
 
     _pActionEditCut = this->add_action(ACTION_EDIT_CUT, [this]()
     {
+        this->handleViewAction(ACTION_EDIT_CUT);
     });
 
     _pActionEditPaste = this->add_action(ACTION_EDIT_PASTE, [this]()
     {
+        this->handleViewAction(ACTION_EDIT_PASTE);
     });
 
     _pActionEditSelectAll = this->add_action(ACTION_EDIT_SELECT_ALL, [this]()
@@ -246,6 +249,7 @@ ElissoApplicationWindow::initActionHandlers()
 
     _pActionEditRename = this->add_action(ACTION_EDIT_RENAME, [this]()
     {
+        this->handleViewAction(ACTION_EDIT_RENAME);
     });
 
     _pActionEditTrash = this->add_action(ACTION_EDIT_TRASH, [this]()
@@ -253,13 +257,16 @@ ElissoApplicationWindow::initActionHandlers()
         this->handleViewAction(ACTION_EDIT_TRASH);
     });
 
+#ifdef USE_TESTFILEOPS
     _pActionEditTestFileops = this->add_action(ACTION_EDIT_TEST_FILEOPS, [this]()
     {
         this->handleViewAction(ACTION_EDIT_TEST_FILEOPS);
     });
+#endif
 
     _pActionEditProperties = this->add_action(ACTION_EDIT_PROPERTIES, [this]()
     {
+        this->handleViewAction(ACTION_EDIT_PROPERTIES);
     });
 
 
@@ -525,7 +532,7 @@ ElissoApplicationWindow::getActiveFolderView()
 void
 ElissoApplicationWindow::enableEditActions(size_t cFolders, size_t cOtherFiles)
 {
-    Debug::Log(DEBUG_ALWAYS, "cFolders: " + to_string(cFolders) + ", cOtherFiles: " + to_string(cOtherFiles));
+//     Debug::Log(DEBUG_ALWAYS, "cFolders: " + to_string(cFolders) + ", cOtherFiles: " + to_string(cOtherFiles));
     size_t cTotal = cFolders + cOtherFiles;
     bool fSingleFolder = (cTotal == 1) && (cFolders == 1);
     _pActionEditOpenSelected->set_enabled(cTotal == 1);

@@ -21,6 +21,7 @@
 typedef std::shared_ptr<Gtk::TreeRowReference> PRowReference;
 
 #define USE_XICONVIEW
+// #define USE_TESTFILEOPS
 
 // const DebugFlag DEBUG_ALWAYS          = 0;
 
@@ -31,6 +32,7 @@ typedef std::shared_ptr<Gtk::TreeRowReference> PRowReference;
     // mid-level
 // const DebugFlag FILE_MID        = (1 << 15);
 
+
     // high-level
 // const DebugFlag CMD_TOP              = (1 << 20);
 const DebugFlag FOLDER_POPULATE_HIGH    = (1 << 21);
@@ -38,6 +40,7 @@ const DebugFlag FOLDER_POPULATE_LOW     = (1 << 22);
 const DebugFlag FOLDER_STACK            = (1 << 23);
 const DebugFlag THUMBNAILER             = (1 << 24);
 const DebugFlag WINDOWHIERARCHY         = (1 << 25);
+const DebugFlag FILEMONITORS            = (1 << 26);
 
 #define ICON_SIZE_SMALL     16
 #define ICON_SIZE_BIG       128
@@ -76,7 +79,9 @@ DEF_STRING(ACTION_EDIT_PASTE, "edit-paste");
 DEF_STRING(ACTION_EDIT_SELECT_ALL, "edit-select-all");
 DEF_STRING(ACTION_EDIT_RENAME, "edit-rename");
 DEF_STRING(ACTION_EDIT_TRASH, "edit-trash");
+#ifdef USE_TESTFILEOPS
 DEF_STRING(ACTION_EDIT_TEST_FILEOPS, "edit-test-fileops");
+#endif
 DEF_STRING(ACTION_EDIT_PROPERTIES, "edit-properties");
 
 DEF_STRING(ACTION_VIEW_NEXT_TAB, "view-next-tab");
