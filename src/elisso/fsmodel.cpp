@@ -667,10 +667,18 @@ FSContainer::FSContainer(FSModelBase &refBase)
 /**
  *  Constructor. This is protected because an FSContainer only ever gets created through
  *  multiple inheritance.
+ *
+ *  We delete the implementation, but MUST clear the list first under the protection of
+ *  the contents map.
  */
 /* virtual */
 FSContainer::~FSContainer()
 {
+    {
+        ContentsLock lock(*this);
+        _pImpl->mapContents.clear();
+    }
+
     delete _pImpl;
 }
 
