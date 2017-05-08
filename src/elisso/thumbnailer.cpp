@@ -12,22 +12,68 @@
 
 #include "elisso/worker.h"
 #include "xwp/debug.h"
+#include "xwp/stringhelp.h"
 #include <thread>
-#include <mutex>
-#include <condition_variable>
 #include <ctime>
 #include <ratio>
 #include <chrono>
+#include <cstdio>
+#include <cstdlib>
+
+/**
+ *  Simple structure to temporarily hold the complete binary contents
+ *  of a file. The constructor reads them from disk via fopen().
+ */
+struct FileContents
+{
+    FileContents(const string &strPath)
+         : _pData(nullptr), _size(0)
+    {
+        FILE *f = fopen(strPath.c_str(), "rb");
+        if (f)
+        {
+            fseek(f, 0, SEEK_END);
+            _size = ftell(f);
+            fseek(f, 0, SEEK_SET);  //same as rewind(f);
+
+            if ((_pData = (char*)malloc(_size)))
+                fread(_pData, _size, 1, f);
+
+            fclose(f);
+        }
+    }
+
+    ~FileContents()
+    {
+        if (_pData)
+            free(_pData);
+    }
+
+    char *_pData;
+    size_t _size;
+};
+typedef std::shared_ptr<FileContents> PFileContents;
 
 struct ThumbnailTemp
 {
     PThumbnail      pThumb;
+    PFileContents   pFileContents;
     PPixbuf         ppbOrig;
 
-    ThumbnailTemp(PThumbnail pThumb_, PPixbuf ppbOrig_)
+    ThumbnailTemp(PThumbnail &pThumb_, PFileContents &pFileContents_)
         : pThumb(pThumb_),
-          ppbOrig(ppbOrig_)
+          pFileContents(pFileContents_)
     { }
+
+    ~ThumbnailTemp()
+    { }
+
+    void setLoaded(PPixbuf p)
+    {
+        // Release the memory of the loaded file.
+        pFileContents = nullptr;
+        ppbOrig = p;
+    }
 };
 
 typedef std::shared_ptr<ThumbnailTemp> PThumbnailTemp;
@@ -40,66 +86,11 @@ typedef std::shared_ptr<ThumbnailTemp> PThumbnailTemp;
  **************************************************************************/
 
 /**
- *  Templated input queue for a worker thread.
- */
-template<class P>
-struct ThreadQueue
-{
-    std::mutex                  mutex;
-    std::condition_variable     cond;
-    std::deque<P>               deq;
-
-    /**
-     *  To be called by employer thread to add work to the queue.
-     *  Requests the lock, adds p to the queue and post the condition variable
-     *  so the worker thread wakes up in fetch().
-     */
-    void post(P p)
-    {
-        {
-            std::unique_lock<std::mutex> lock(mutex);
-            deq.push_back(p);
-        }
-        cond.notify_one();
-    }
-
-    /**
-     *  To be called by the worker thread to pick up the next item to be worked
-     *  on. Blocks if the queue is empty and does not return until an item
-     *  as been posted in the queue.
-     */
-    P fetch()
-    {
-        // Block on the condition variable and make sure the deque isn't empty.
-        std::unique_lock<std::mutex> lock(mutex);
-        // Loop until the condition variable has been posted AND something's in the
-        // queue (condition variables can wake up spuriously).
-        while (!deq.size())
-            cond.wait(lock);
-        // Lock has been reacquired now.
-
-        P p = deq.at(0);
-        deq.pop_front();
-        return p;
-    }
-
-    /**
-     *  To be called by employer thread if it decides that all work should be
-     *  stopped and the work queue should be emptied after all.
-     */
-    void clear()
-    {
-        std::unique_lock<std::mutex> lock(mutex);
-        deq.clear();
-    }
-};
-
-/**
  *  Our private Impl structure, anonymously declared in the Thumbnailer class.
  *
  *  This combines four things:
  *
- *   -- It contains three ThreadQueue instantiations, for the three threads that
+ *   -- It contains six ThreadQueue instantiations, for the six threads that
  *      we are running here. Each of these has its own mutex, std::dequeue and
  *      condition variable.
  *
@@ -114,11 +105,26 @@ struct ThreadQueue
  *  resolutions. When both results are ready, the WorkerResult is posted
  *  so that the GUI thread receives the result.
  */
-struct Thumbnailer::Impl : WorkerResult<PThumbnail>
+struct Thumbnailer::Impl : WorkerResultQueue<PThumbnail>
 {
-    ThreadQueue<PThumbnail>     qFileReader;
-    ThreadQueue<PThumbnailTemp> qScalerIconSmall;
-    ThreadQueue<PThumbnailTemp> qScalerIconBig;
+    WorkerInputQueue<PThumbnail>        qFileReader_;
+    WorkerInputQueue<PThumbnailTemp>    aqPixbufLoaders[Thumbnailer::C_LOADER_THREADS];
+    WorkerInputQueue<PThumbnailTemp>    qScalerIconSmall;
+    WorkerInputQueue<PThumbnailTemp>    qScalerIconBig;
+
+    // List of formats supported by GTK's PixbufLoader.
+    std::vector<Gdk::PixbufFormat>      vFormats;
+    // Map of upper-cased file extensions with pointers into vFormats.
+    map<string, Gdk::PixbufFormat*>     mapFormats;
+
+    Impl()
+        : vFormats(Gdk::Pixbuf::get_formats())
+    {
+        // Build the map of supported image formats, sorted by extension in upper case.
+        for (auto &fmt : vFormats)
+            for (const auto &ext : fmt.get_extensions())
+                mapFormats[strToUpper(ext)] = &fmt;
+    }
 };
 
 
@@ -136,11 +142,20 @@ Thumbnailer::Thumbnailer()
 {
     Debug::Log(THUMBNAILER, "Thumbnailer constructed");
 
-    // Create the file reader thread.
+     // Create the file reader thread.
     new std::thread([this]()
     {
         this->fileReaderThread();
     });
+
+    // Create the pixmap loader threads.
+    for (uint u = 0;
+         u < C_LOADER_THREADS;
+         ++u)
+        new std::thread([this, u]()
+        {
+            this->pixbufLoaderThread(u);
+        });
 
     // Create the pixbuf scaler thread.
     new std::thread([this]()
@@ -172,13 +187,36 @@ Thumbnailer::connect(std::function<void ()> fn)
 }
 
 /**
- *  Adds an FSFile to the queues to be thumbnailed.
+ *  Tests by file extension whether the file is of one of the types
+ *  supported by the thumbnailer (which is all the types supported by
+ *  GdkPixBuf internally).
+ *
+ *  Returns nullptr if not.
+ */
+const Gdk::PixbufFormat*
+Thumbnailer::isImageFile(PFSModelBase pFile)
+{
+    const string &strBasename = pFile->getBasename();
+    string strExtension = strToUpper(getExtensionString(strBasename));
+    auto it = _pImpl->mapFormats.find(strExtension);
+    if (it != _pImpl->mapFormats.end())
+        return it->second;
+
+    return nullptr;
+}
+
+/**
+ *  Adds an FSFile to the queues to be thumbnailed. With pFormat, pass in
+ *  the pixbuf format pointer returned by isImageFile(), which you should
+ *  call first.
  */
 void
-Thumbnailer::enqueue(PFSFile pFile, PRowReference pRowRef)
+Thumbnailer::enqueue(PFSFile pFile,
+                     const Gdk::PixbufFormat *pFormat,
+                     PRowReference pRowRef)
 {
     Debug::Log(THUMBNAILER, string(__func__) + ":  " + pFile->getBasename());
-    _pImpl->qFileReader.post(make_shared<Thumbnail>(pFile, pRowRef));
+    _pImpl->qFileReader_.post(make_shared<Thumbnail>(pFile, pFormat, pRowRef));
 }
 
 /**
@@ -200,11 +238,56 @@ Thumbnailer::fetchResult()
 void
 Thumbnailer::stop()
 {
-    _pImpl->qFileReader.clear();
-    _pImpl->qScalerIconSmall.clear();
-    _pImpl->qScalerIconBig.clear();
+    // For each of the queues, we need to
+    // 1) reset the FSFlag::THUMBNAILING for each of the files still left
+    //    in the queue, or else enqueue will reject them if the folder is
+    //    selected again;
+    for (auto &pThumb : _pImpl->qFileReader_.deq)
+        pThumb->pFile->clearFlag(FSFlag::THUMBNAILING);
+    // 2) actually clear the queue.
+    _pImpl->qFileReader_.clear();
+
+    // The other queues are all of the same type, so
+    // let's make a stack of pointers to them and then
+    // clear the flags and the queues for each to avoid
+    // code duplication.
+    std::vector<WorkerInputQueue<PThumbnailTemp>*> vQueues;
+    for (uint u = 0;
+         u < C_LOADER_THREADS;
+         ++u)
+        vQueues.push_back(&_pImpl->aqPixbufLoaders[u]);
+    vQueues.push_back(&_pImpl->qScalerIconSmall);
+    vQueues.push_back(&_pImpl->qScalerIconBig);
+
+    for (auto &p : vQueues)
+    {
+        for (auto &pTemp : p->deq)
+            pTemp->pThumb->pFile->clearFlag(FSFlag::THUMBNAILING);
+        p->clear();
+    }
 }
 
+string implode(const string &strGlue, const std::vector<Glib::ustring> v)
+{
+    string str;
+    for (const auto &s : v)
+        if (!s.empty())
+        {
+            if (!str.empty())
+                str += strGlue + s;
+            else
+                str += s;
+        }
+
+    return str;
+}
+
+/**
+ *  First thread spawned by the constructor. This blocks on the primary
+ *  queue that is fed by enqueue() and then creates a FileContents for
+ *  every such file. It then passes the file contents on to the least
+ *  busy pixbuf loader thread.
+ */
 void Thumbnailer::fileReaderThread()
 {
     Debug::Log(THUMBNAILER, string(__func__) + " started, blocking");
@@ -212,8 +295,66 @@ void Thumbnailer::fileReaderThread()
     PThumbnail pThumbnailIn;
     while(1)
     {
-        // Block until someone wants a file.
-        pThumbnailIn = _pImpl->qFileReader.fetch();
+        // Block until someone has queued a file.
+        pThumbnailIn = _pImpl->qFileReader_.fetch();
+
+        using namespace std::chrono;
+        steady_clock::time_point t1 = steady_clock::now();
+
+        if (pThumbnailIn->pFormat)
+        {
+            string strPath = pThumbnailIn->pFile->getRelativePath();
+            std::shared_ptr<FileContents> pFileContents = make_shared<FileContents>(strPath);
+
+            auto pThumbnailTemp = make_shared<ThumbnailTemp>(pThumbnailIn,
+                                                             pFileContents);
+
+            milliseconds time_span = duration_cast<milliseconds>(steady_clock::now() - t1);
+            Debug::Log(THUMBNAILER, string(__func__) + ": reading file \"" + pThumbnailIn->pFile->getBasename() + "\" took " + to_string(time_span.count()) + "ms");
+
+            // Find the queue that's least busy. There is a race between
+            // our size() query and the post() call later, but it's still
+            // a good indicator which of the threads to bother.
+            size_t uLeastBusyThread = 0;
+            size_t uLeastBusyQueueSize = 99999999;
+            for (uint u = 0;
+                 u < C_LOADER_THREADS;
+                 ++u)
+            {
+                size_t sz = _pImpl->aqPixbufLoaders[u].size();
+                if (sz < uLeastBusyQueueSize)
+                {
+                    uLeastBusyThread = u;
+                    uLeastBusyQueueSize = sz;
+                }
+            }
+
+            Debug::Log(THUMBNAILER, string(__func__) + ": queue " + to_string(uLeastBusyThread) + " is least busy (" + to_string(uLeastBusyQueueSize) + "), queueing there");
+            _pImpl->aqPixbufLoaders[uLeastBusyThread].post(pThumbnailTemp);
+
+//                 ppb = Gdk::Pixbuf::create_from_file(strPath);
+
+        }
+    }
+}
+
+/**
+ *  Thread func for the second class of threads, which gets spawned C_LOADER_THREADS
+ *  times in order to parse the input files into a Pixbuf via PixbufLoader with optimal
+ *  parallel processing.
+ *
+ *  The aqPixbufLoaders queues get fed by the single fileReaderThread; the results are
+ *  then passed on to the two scaler threads.
+ */
+void Thumbnailer::pixbufLoaderThread(uint threadno)
+{
+    Debug::Log(THUMBNAILER, string(__func__) + " started, blocking");
+
+    PThumbnailTemp pTemp;
+    while (1)
+    {
+        // Block until someone has queued a file.
+        pTemp = _pImpl->aqPixbufLoaders[threadno].fetch();
 
         using namespace std::chrono;
         steady_clock::time_point t1 = steady_clock::now();
@@ -221,7 +362,13 @@ void Thumbnailer::fileReaderThread()
         PPixbuf ppb;
         try
         {
-            ppb = Gdk::Pixbuf::create_from_file(pThumbnailIn->pFile->getRelativePath());
+            auto pLoader = Gdk::PixbufLoader::create(pTemp->pThumb->pFormat->get_name());
+            if (pLoader)
+            {
+                pLoader->write((const guint8*)pTemp->pFileContents->_pData, pTemp->pFileContents->_size);       // can throw
+                ppb = pLoader->get_pixbuf();
+                pLoader->close();
+            }
         }
         catch(...)
         {
@@ -231,12 +378,12 @@ void Thumbnailer::fileReaderThread()
         if (ppb)
         {
             milliseconds time_span = duration_cast<milliseconds>(steady_clock::now() - t1);
-            Debug::Log(THUMBNAILER, string(__func__) + ": reading file \"" + pThumbnailIn->pFile->getBasename() + "\" took " + to_string(time_span.count()) + "ms");
+            Debug::Log(THUMBNAILER, string(__func__) + to_string(threadno) + ": loading \"" + pTemp->pThumb->pFile->getBasename() + "\" took " + to_string(time_span.count()) + "ms");
 
-            auto pThumbnailTemp = make_shared<ThumbnailTemp>(pThumbnailIn,
-                                                             ppb);
-            _pImpl->qScalerIconSmall.post(pThumbnailTemp);
-            _pImpl->qScalerIconBig.post(pThumbnailTemp);
+            pTemp->setLoaded(ppb);
+
+            _pImpl->qScalerIconSmall.post(pTemp);
+            _pImpl->qScalerIconBig.post(pTemp);
         }
     }
 }

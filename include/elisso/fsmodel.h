@@ -142,8 +142,9 @@ enum class FSFlag : uint16_t
     DIRTY                      =  (1 <<  5),        // only used during populate
     HIDDEN_CHECKED             =  (1 <<  6),
     HIDDEN                     =  (1 <<  7),
-    LAZY_LOADING_ICON          =  (1 <<  8),
+    THUMBNAILING               =  (1 <<  8),
 };
+// DEFINE_FLAGSET(FSFlag)
 
 typedef FlagSet<FSFlag> FSFlagSet;
 
@@ -203,7 +204,12 @@ public:
 
     void setFlag(FSFlag f)
     {
-        _fl |= f;
+        _fl.set(f);
+    }
+
+    void clearFlag(FSFlag f)
+    {
+        _fl.clear(f);
     }
 
     PFSFile getFile();

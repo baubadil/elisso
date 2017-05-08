@@ -136,8 +136,8 @@ struct ElissoFolderTree::Impl : public ProhibitCopy
 
     Glib::RefPtr<Gtk::TreeStore>    pTreeStore;
 
-    WorkerResult<PSubtreePopulated> workerSubtreePopulated;
-    WorkerResult<PAddOneFirst>      workerAddOneFirst;
+    WorkerResultQueue<PSubtreePopulated> workerSubtreePopulated;
+    WorkerResultQueue<PAddOneFirst>      workerAddOneFirst;
 
     // The following is true while we're in select(); we don't want to process
     // the "node selected" signal then and recurse infinitely.
@@ -654,13 +654,11 @@ void ElissoFolderTree::onNodeSelected()
                 auto pActiveFolderView = _mainWindow.getActiveFolderView();
                 if (pActiveFolderView)
                 {
-                    SetDirectoryFlagSet fl = SetDirectoryFlags::PUSH_TO_HISTORY;
-                    fl |= SetDirectoryFlags::CLICK_FROM_TREE;
                     pActiveFolderView->setDirectory(pDir,
-                                                    fl);
+                                                    SetDirectoryFlag::PUSH_TO_HISTORY | SetDirectoryFlag::CLICK_FROM_TREE);
                 }
 
-                            // SetDirectoryFlags::CLICK_FROM_TREE prevents the callback to select the node in the
+                            // SetDirectoryFlag::CLICK_FROM_TREE prevents the callback to select the node in the
                             // tree again, which is already selected, since we're in the "selected" signal handler.
             }
         }

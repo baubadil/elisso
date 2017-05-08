@@ -13,6 +13,7 @@
 
 #include <gtkmm.h>
 #include <mutex>
+#include <condition_variable>
 #include <deque>
 
 #include "xwp/lock.h"
@@ -20,7 +21,81 @@
 
 /***************************************************************************
  *
- *  WorkerResult class template
+ *  WorkerInputQueue class template
+ *
+ **************************************************************************/
+
+/**
+ *  Templated input queue for a worker thread. This model is designed for a
+ *  thread that is always running, but blocked on a condition variable until
+ *  there is work to do; it then fetches an item of type P from the queue.
+ */
+template<class P>
+struct WorkerInputQueue
+{
+    std::mutex                  mutex;
+    std::condition_variable     cond;
+    std::deque<P>               deq;
+
+    /**
+     *  Returns the no. of items queued. This is not atomic if you use it with post()
+     *  but it can give an indication if the queue is busy.
+     */
+    size_t size()
+    {
+        std::unique_lock<std::mutex> lock(mutex);
+        return deq.size();
+    }
+
+    /**
+     *  To be called by employer thread to add work to the queue.
+     *  Requests the lock, adds p to the queue and post the condition variable
+     *  so the worker thread wakes up in fetch().
+     */
+    void post(P p)
+    {
+        {
+            std::unique_lock<std::mutex> lock(mutex);
+            deq.push_back(p);
+        }
+        cond.notify_one();
+    }
+
+    /**
+     *  To be called by the worker thread to pick up the next item to be worked
+     *  on. Blocks if the queue is empty and does not return until an item
+     *  as been posted in the queue.
+     */
+    P fetch()
+    {
+        // Block on the condition variable and make sure the deque isn't empty.
+        std::unique_lock<std::mutex> lock(mutex);
+        // Loop until the condition variable has been posted AND something's in the
+        // queue (condition variables can wake up spuriously).
+        while (!deq.size())
+            cond.wait(lock);
+        // Lock has been reacquired now.
+
+        P p = deq.at(0);
+        deq.pop_front();
+        return p;
+    }
+
+    /**
+     *  To be called by employer thread if it decides that all work should be
+     *  stopped and the work queue should be emptied after all.
+     */
+    void clear()
+    {
+        std::unique_lock<std::mutex> lock(mutex);
+        deq.clear();
+    }
+};
+
+
+/***************************************************************************
+ *
+ *  WorkerResultQueue class template
  *
  **************************************************************************/
 
@@ -60,7 +135,7 @@
             }
  */
 template<class P>
-class WorkerResult : public ProhibitCopy
+class WorkerResultQueue : public ProhibitCopy
 {
 public:
     sigc::connection connect(std::function<void ()> fn)

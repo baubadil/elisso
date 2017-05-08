@@ -142,7 +142,7 @@ ElissoApplicationWindow::addFolderTab(PFSModelBase pDirOrSymlink)       //!< in:
         if (!p2)
             p2 = FSDirectory::GetHome();
         pView->setDirectory(p2,
-                            SetDirectoryFlags::PUSH_TO_HISTORY);
+                            SetDirectoryFlag::PUSH_TO_HISTORY);
 
         Debug::Leave();
         return false;       // disconnect, do not call again

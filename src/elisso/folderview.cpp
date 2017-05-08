@@ -97,18 +97,21 @@ FolderContentsModelColumns* FolderContentsModelColumns::s_p = nullptr;
 
 struct ViewPopulatedResult
 {
-    FSList          llContents;
+    PFSList         pllContents;
     FSList          llRemoved;
-    bool            fClickFromTree;     // true if SetDirectoryFlags::CLICK_FROM_TREE was set.
+    uint            idPopulateThread;
+    bool            fClickFromTree;     // true if SetDirectoryFlag::CLICK_FROM_TREE was set.
     Glib::ustring   strError;
 
-    ViewPopulatedResult(bool fClickFromTree_)
-        : fClickFromTree(fClickFromTree_)
+    ViewPopulatedResult(uint idPopulateThread_, bool fClickFromTree_)
+        : pllContents(make_shared<FSList>()),
+          idPopulateThread(idPopulateThread_),
+          fClickFromTree(fClickFromTree_)
     { }
 };
 typedef std::shared_ptr<ViewPopulatedResult> PViewPopulatedResult;
 
-typedef WorkerResult<PViewPopulatedResult> ViewPopulatedWorker;
+typedef WorkerResultQueue<PViewPopulatedResult> ViewPopulatedWorker;
 
 /***************************************************************************
  *
@@ -170,7 +173,7 @@ public:
             /*
              *  Thread function!
              */
-            p->threadFunc(fClickFromTree);
+            p->threadFunc(p->_id, fClickFromTree);
         });
 
         return p;
@@ -213,14 +216,14 @@ private:
         _id = ++g_uPopulateThreadID;
     }
 
-    void threadFunc(bool fClickFromTree)
+    void threadFunc(uint idPopulateThread, bool fClickFromTree)
     {
-        PViewPopulatedResult pResult = std::make_shared<ViewPopulatedResult>(fClickFromTree);
+        PViewPopulatedResult pResult = std::make_shared<ViewPopulatedResult>(idPopulateThread, fClickFromTree);
         try
         {
             FSContainer *pCnr = _pDir->getContainer();
             if (pCnr)
-                pCnr->getContents(pResult->llContents,
+                pCnr->getContents(*pResult->pllContents,
                                   FSDirectory::Get::ALL,
                                   &pResult->llRemoved,
                                   &_stopFlag);
@@ -253,14 +256,14 @@ private:
 struct ElissoFolderView::Impl : public ProhibitCopy
 {
     PPopulateThread                 pPopulateThread;      // only set while state == POPULATING
-    uint                            idLastPopulateThread = 0;
+    uint                            idCurrentPopulateThread = 0;
 
     // GUI thread dispatcher for when a folder populate is done.
     // Glib::Dispatcher                dispatcherPopulateDone;
     ViewPopulatedWorker             workerPopulated;
 
     Glib::RefPtr<Gtk::ListStore>    pListStore;
-    FSList                          llFolderContents;
+    PFSList                         pllFolderContents;
     Glib::RefPtr<Gtk::IconTheme>    pIconTheme;
 
     std::shared_ptr<Gtk::Menu>      pPopupMenu;
@@ -419,7 +422,7 @@ ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
 
     // Remember previous directory so we can try scrolling to and selecting it.
     PFSModelBase pDirSelectPrevious;
-    if (fl & SetDirectoryFlags::SELECT_PREVIOUS)
+    if (fl.test(SetDirectoryFlag::SELECT_PREVIOUS))
         pDirSelectPrevious = _pDir;
 
     switch (_state)
@@ -446,9 +449,9 @@ ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
         _pDir = pDirOrSymlinkToDir;
 
         // Push the new path into the history.
-        if (fl.test(SetDirectoryFlags::PUSH_TO_HISTORY))
+        if (fl.test(SetDirectoryFlag::PUSH_TO_HISTORY))
         {
-            Debug::Log(FOLDER_STACK, string(__func__) + "(): SetDirectoryFlags::PUSH_TO_HISTORY is set: pushing new " + _pDir->getRelativePath());
+            Debug::Log(FOLDER_STACK, string(__func__) + "(): SetDirectoryFlag::PUSH_TO_HISTORY is set: pushing new " + _pDir->getRelativePath());
             if (_pDir)
             {
                 auto strFull = _pDir->getRelativePath();
@@ -475,7 +478,7 @@ ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
             }
         }
         else
-            Debug::Log(FOLDER_STACK, string(__func__) + "(): SetDirectoryFlags::PUSH_TO_HISTORY is NOT set");
+            Debug::Log(FOLDER_STACK, string(__func__) + "(): SetDirectoryFlag::PUSH_TO_HISTORY is NOT set");
 
         // Change view state early to avoid "selection changed" signals overflowing us.
         this->setState(ViewState::POPULATING);
@@ -486,7 +489,7 @@ ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
 
         // Remove all old data, if any.
         _pImpl->pListStore->clear();
-        _pImpl->llFolderContents.clear();
+        _pImpl->pllFolderContents = nullptr;
 
         _pImpl->thumbnailer.stop();
 
@@ -498,9 +501,9 @@ ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
 
         _pImpl->pPopulateThread = PopulateThread::Create(this->_pDir,
                                                          this->_pImpl->workerPopulated,
-                                                         fl.test(SetDirectoryFlags::CLICK_FROM_TREE),
+                                                         fl.test(SetDirectoryFlag::CLICK_FROM_TREE),
                                                          pDirSelectPrevious);
-        _pImpl->idLastPopulateThread = _pImpl->pPopulateThread->getID();
+        _pImpl->idCurrentPopulateThread = _pImpl->pPopulateThread->getID();
 
         rc = true;
 
@@ -512,19 +515,6 @@ ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
     return rc;
 }
 
-bool isImageFile(PFSModelBase pFile)
-{
-    const std::string &strBasename = pFile->getBasename();
-    if (    endsWith(strBasename, ".jpg")
-         || endsWith(strBasename, ".JPG")
-         || endsWith(strBasename, ".png")
-         || endsWith(strBasename, ".PNG")
-       )
-        return true;
-
-    return false;
-}
-
 /**
  *  Gets called when the populate thread within setDirectory() has finished. We must now
  *  inspect the PopulateThread in the implementation struct for the results.
@@ -534,6 +524,12 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
 {
     if (!pResult->strError.empty())
         this->setError(pResult->strError);
+    else if (pResult->idPopulateThread != _pImpl->idCurrentPopulateThread)
+        // When a populate thread gets stopped prematurely because a user clicked
+        // on another folder while a populate was still going on, we can end up
+        // with a populate result for the previous folder, which we should simply
+        // discard.
+        ;
     else
     {
         Debug::Log(FOLDER_POPULATE_LOW, "ElissoFolderView::onPopulateDone(\"" + _pDir->getRelativePath() + "\")");
@@ -544,13 +540,12 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
                 cFiles = 0,
                 cImageFiles = 0;
 
-        // Deep-copy the FS pointers.
-        _pImpl->llFolderContents = pResult->llContents;
+        _pImpl->pllFolderContents = pResult->pllContents;
 
         /*
          * Insert all the files and collect some statistics.
          */
-        for (auto &pFS : _pImpl->llFolderContents)
+        for (auto &pFS : *_pImpl->pllFolderContents)
         {
             auto it = this->insertFile(pFS);
 
@@ -567,7 +562,7 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
                 case FSTypeResolved::FILE:
                 case FSTypeResolved::SYMLINK_TO_FILE:
                     ++cFiles;
-                    if (isImageFile(pFS))
+                    if (_pImpl->thumbnailer.isImageFile(pFS))
                         ++cImageFiles;
                 break;
 
@@ -637,6 +632,9 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
                 pCnr->notifyFileRemoved(pRemoved);
 
             // And make sure we have a monitor.
+            auto pOther = _pImpl->pMonitor->isWatching();
+            if (pOther)
+                _pImpl->pMonitor->stopWatching(*pOther);
             _pImpl->pMonitor->startWatching(*pCnr);
         }
     }
@@ -756,7 +754,7 @@ ElissoFolderView::goBack()
         PFSModelBase pDir;
         if ((pDir = FSModelBase::FindPath(strPrevious)))
             if (this->setDirectory(pDir,
-                                   SetDirectoryFlags::SELECT_PREVIOUS))     // but do not push to history
+                                   SetDirectoryFlag::SELECT_PREVIOUS))     // but do not push to history
                 return true;
     }
 
@@ -1236,16 +1234,14 @@ ElissoFolderView::handleAction(const std::string &strAction)
             PFSModelBase pDir = _pDir->getParent();
             if (pDir)
             {
-                SetDirectoryFlagSet fl(SetDirectoryFlags::SELECT_PREVIOUS);
-                fl |= SetDirectoryFlags::PUSH_TO_HISTORY;
-                setDirectory(pDir,  fl);
+                setDirectory(pDir,  SetDirectoryFlag::SELECT_PREVIOUS | SetDirectoryFlag::PUSH_TO_HISTORY);
             }
         }
         else if (strAction == ACTION_GO_HOME)
         {
             auto pHome = FSDirectory::GetHome();
             if (pHome)
-                setDirectory(pHome, SetDirectoryFlags::PUSH_TO_HISTORY);
+                setDirectory(pHome, SetDirectoryFlag::PUSH_TO_HISTORY);
         }
         else
             _mainWindow.errorBox("Not implemented yet");
@@ -1290,7 +1286,7 @@ ElissoFolderView::openFile(PFSModelBase pFS,        //!< in: file or folder to o
     {
         case FSTypeResolved::DIRECTORY:
         case FSTypeResolved::SYMLINK_TO_DIRECTORY:
-            this->setDirectory(pFS, SetDirectoryFlags::PUSH_TO_HISTORY);
+            this->setDirectory(pFS, SetDirectoryFlag::PUSH_TO_HISTORY);
         break;
 
         case FSTypeResolved::FILE:
@@ -1421,6 +1417,14 @@ ElissoFolderView::connectModel(bool fConnect)
         case FolderViewMode::COMPACT:
             if (fConnect)
             {
+                // Scroll to the top. Otherwise we end up at a random scroll position if the
+                // icon view has been used before.
+                Glib::RefPtr<Gtk::Adjustment> pVAdj = _iconView.get_vadjustment();
+                if (pVAdj)
+                    pVAdj->set_value(0);
+//       gtk_adjustment_set_value (icon_view->priv->hadjustment,
+//                                 gtk_adjustment_get_value (icon_view->priv->hadjustment) + offset);
+
                  _pImpl->pListStore->set_sort_column(cols._colFilename, Gtk::SortType::SORT_ASCENDING);
                 _iconView.set_model(_pImpl->pListStore);
             }
@@ -1515,16 +1519,19 @@ ElissoFolderView::loadIcon(const Gtk::TreeModel::iterator& it,
             pReturn = i.load_icon();
 
         // Again, if it's a file, and if it can be thumbnailed, then give it to
-        // the thumbnailer to process in the background.
+        // the thumbnailer to process in the background. This will create both sizes.
         if (pFile)
-        {
-            if (isImageFile(pFile))
+            if (!pFile->hasFlag(FSFlag::THUMBNAILING))
             {
-                Gtk::TreePath path(it);
-                auto pRowRef = std::make_shared<Gtk::TreeRowReference>(_pImpl->pListStore, path);
-                _pImpl->thumbnailer.enqueue(pFile, pRowRef);
+                auto pFormat = _pImpl->thumbnailer.isImageFile(pFile);
+                if (pFormat)
+                {
+                    pFile->setFlag(FSFlag::THUMBNAILING);
+                    Gtk::TreePath path(it);
+                    auto pRowRef = std::make_shared<Gtk::TreeRowReference>(_pImpl->pListStore, path);
+                    _pImpl->thumbnailer.enqueue(pFile, pFormat, pRowRef);
+                }
             }
-        }
     }
 
     return pReturn;

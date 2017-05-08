@@ -388,14 +388,14 @@ FSModelBase::isHidden()
     {
         auto len = _strBasename.length();
         if (!len)
-            _fl |= FSFlag::HIDDEN;
+            _fl.set(FSFlag::HIDDEN);
         else
             if (    (_strBasename[0] == '.')
                  || (_strBasename[len - 1] == '~')
                )
-                _fl |= FSFlag::HIDDEN;
+                _fl.set(FSFlag::HIDDEN);
 
-        _fl |= FSFlag::HIDDEN_CHECKED;
+        _fl.set(FSFlag::HIDDEN_CHECKED);
     }
 
     return _fl.test(FSFlag::HIDDEN);
@@ -819,8 +819,8 @@ void
 FSContainer::unsetPopulated()
 {
     FSLock lock;
-    _refBase._fl.reset(FSFlag::POPULATED_WITH_ALL);
-    _refBase._fl.reset(FSFlag::POPULATED_WITH_DIRECTORIES);
+    _refBase._fl.clear(FSFlag::POPULATED_WITH_ALL);
+    _refBase._fl.clear(FSFlag::POPULATED_WITH_DIRECTORIES);
 }
 
 std::condition_variable_any g_condFolderPopulated;
@@ -897,7 +897,7 @@ FSContainer::getContents(FSList &llFiles,
         {
             // Folder needs populating: then set the flag so that only one thread populates
             // at a time.
-            _refBase._fl |= FSFlag::POPULATING;
+            _refBase._fl.set(FSFlag::POPULATING);
             lock.unlock();
 
             PFSModelBase pSharedThis = _refBase.getSharedFromThis();
@@ -915,7 +915,7 @@ FSContainer::getContents(FSList &llFiles,
                 for (auto it : _pImpl->mapContents)
                 {
                     auto &p = it.second;
-                    p->_fl |= FSFlag::DIRTY;
+                    p->_fl.set(FSFlag::DIRTY);
                 }
             }
 
@@ -956,7 +956,7 @@ FSContainer::getContents(FSList &llFiles,
                         {
                             FSLock lock2Temp;
                             // Clear the dirty flag.
-                            pAwake->_fl.reset(FSFlag::DIRTY);
+                            pAwake->_fl.clear(FSFlag::DIRTY);
                         }
                         else
                         {
@@ -1029,7 +1029,7 @@ FSContainer::getContents(FSList &llFiles,
             {
                 auto &p = it->second;
                 if (    (getContents == Get::ALL)
-                     && (p->_fl & FSFlag::DIRTY)
+                     && (p->_fl.test(FSFlag::DIRTY))
                    )
                 {
                     if (pllFilesRemoved)
@@ -1086,14 +1086,14 @@ FSContainer::getContents(FSList &llFiles,
 
             FSLock lock2Temp;
             if (getContents == Get::FOLDERS_ONLY)
-                _refBase._fl |= FSFlag::POPULATED_WITH_DIRECTORIES;
+                _refBase._fl.set(FSFlag::POPULATED_WITH_DIRECTORIES);
             else if (getContents == Get::ALL)
             {
-                _refBase._fl |= FSFlag::POPULATED_WITH_DIRECTORIES;
-                _refBase._fl |= FSFlag::POPULATED_WITH_ALL;
+                _refBase._fl.set(FSFlag::POPULATED_WITH_DIRECTORIES);
+                _refBase._fl.set(FSFlag::POPULATED_WITH_ALL);
             }
 
-            _refBase._fl.reset(FSFlag::POPULATING);
+            _refBase._fl.clear(FSFlag::POPULATING);
             g_condFolderPopulated.notify_all();
         }
     }

@@ -61,7 +61,7 @@ typedef std::shared_ptr<ProgressDialog> PProgressDialog;
  *  This inherits from WorkerResult<PFSModelBase> so the worker thread can push file-system
  *  objects onto the member deque for file-system monitor processing on the GUI thread.
  */
-class FileOperation : public WorkerResult<PFSModelBase>,
+class FileOperation : public WorkerResultQueue<PFSModelBase>,
                       public enable_shared_from_this<FileOperation>
 {
 public:

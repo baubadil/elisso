@@ -13,34 +13,54 @@
 
 #include "elisso/elisso.h"
 #include "elisso/fsmodel.h"
+// #include "xwp/except.h"
 
 struct Thumbnail
 {
-    PFSFile         pFile;
-    PRowReference   pRowRef;
-    PPixbuf         ppbIconSmall;
-    PPixbuf         ppbIconBig;
+    PFSFile                 pFile;
+    const Gdk::PixbufFormat *pFormat;
+    PRowReference           pRowRef;
+    PPixbuf                 ppbIconSmall;
+    PPixbuf                 ppbIconBig;
 
-    Thumbnail(PFSFile pFile_, PRowReference pRowRef_)
-        : pFile(pFile_), pRowRef(pRowRef_)
-    { }
+    Thumbnail(PFSFile pFile_, const Gdk::PixbufFormat *pFormat_, PRowReference pRowRef_)
+        : pFile(pFile_), pFormat(pFormat_), pRowRef(pRowRef_)
+    {
+    }
 };
 typedef std::shared_ptr<Thumbnail> PThumbnail;
 
+struct ThumbnailTemp;
+typedef std::shared_ptr<ThumbnailTemp> PThumbnailTemp;
+
 /**
- *  Thumbnailer with three background threads that communicate with the GUI thread.
+ *  Thumbnailer with three types of background threads that communicate with the GUI thread.
  *
  *  Create an instance of this and call connect() with a lambda that will receive
- *  thumbnails on the GUI thread.
+ *  finished thumbnails on the GUI thread.
  *
- *  Then call enqueue() for every file that should be thumbnailed. Three background
- *  threads will then try to parallelize file reading and scaling as much as possible.
- *  The scaled pixbuf will then be sent back to the GUI thread, and the callback
- *  you gave to connect() will be called. That callback should call fetchResult()
- *  to get the thumbnail.
+ *  Then call enqueue() from the GUI thread for every file that should be thumbnailed.
+ *  From then on three types of threads will process the file's contents with as much
+ *  concurrency as possible:
  *
- *  This gives us a 20-50% performance increase.
+ *   1) The "file reader" thread does a simple fopen() and reads the complete image file's
+ *      contents into memory.
  *
+ *   2) From there the file contents in memory get passed to one of the "pixbuf loader"
+ *      threads. The C_LOADER_THREADS class constant determines how many of them should
+ *      be started; the "file reader" thread posts the file contents into the "pixbuf loader"
+ *      thread whose queue is the least busy. The "pixbuf loader" thread then uses
+ *      GdkPixbufLoader with the format of the file to parse the in-memory conents and
+ *      create a full-size GdkPixbuf from it. This is CPU-bound only, so we can run
+ *      several of these in parallel.
+ *
+ *   3) Two additional threads then scale each such pixbuf to the "big" and "small" icon
+ *      sizes. Whichever scaler finishes last (meaning that both sizes are finished),
+ *      then calls the Glib dispatcher which signals to your GUI thread that the thumbnail
+ *      is done. This will call the callback you gave to connect(). That callback should
+ *      call fetchResult() to get the thumbnail.
+ *
+ *  The first attempt of this only parallelized 1) and 3).
  *  Some detailed statistics for a few sample files:
  *
               File size       fileReader  scalerSmall   scalerBig         Sum     Max     Improv    Improv
@@ -56,6 +76,10 @@ typedef std::shared_ptr<Thumbnail> PThumbnail;
  *  So, most time is spent in the file reader (which reads from disk and parses the JPEG into a Pixbuf).
  *  Whether the file is on a local disk or in the network doesn't seem to make much of a difference.
  *
+ *  This improved code has replaced the single GdkPixbuf::from_file() call by splitting the job into
+ *  the thread classes 1) and 2), and it turns out that 2) can speed up things greatly by running
+ *  it four times in parallel. I can get up to 95% CPU usage out of my 4-core (8 hyperthreads)
+ *  system. It doees feel four times as fast.
  */
 class Thumbnailer
 {
@@ -63,17 +87,22 @@ public:
     Thumbnailer();
     ~Thumbnailer();
 
+    static const uint C_LOADER_THREADS = 3;
+
     sigc::connection connect(std::function<void ()> fn);
 
-    void enqueue(PFSFile pFile, PRowReference pRowRef);
+    const Gdk::PixbufFormat* isImageFile(PFSModelBase pFile);
+
+    void enqueue(PFSFile pFile, const Gdk::PixbufFormat *pFormat, PRowReference pRowRef);
 
     PThumbnail fetchResult();
 
     void stop();
 
 private:
-
     void fileReaderThread();
+
+    void pixbufLoaderThread(uint threadno);
 
     PPixbuf scale(PFSFile pFS, PPixbuf ppbIn, size_t size);
 
