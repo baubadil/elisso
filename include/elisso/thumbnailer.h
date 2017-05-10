@@ -87,8 +87,6 @@ public:
     Thumbnailer();
     ~Thumbnailer();
 
-    static const uint C_LOADER_THREADS = 3;
-
     sigc::connection connect(std::function<void ()> fn);
 
     const Gdk::PixbufFormat* isImageFile(PFSModelBase pFile);

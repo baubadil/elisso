@@ -165,6 +165,52 @@ ElissoApplicationWindow::addFolderTab(const std::string &strError)
     Debug::Leave();
 }
 
+void
+ElissoApplicationWindow::setWaitCursor(Glib::RefPtr<Gdk::Window> pWindow,
+                                       Cursor cursor)
+{
+    if (pWindow)
+    {
+        static Glib::RefPtr<Gdk::Cursor> pDefaultCursor;
+        static Glib::RefPtr<Gdk::Cursor> pWaitProgressCursor;
+        static Glib::RefPtr<Gdk::Cursor> pWaitBlockedCursor;
+        if (!pDefaultCursor)
+        {
+            static Glib::RefPtr<Gdk::Display> pDisplay;
+            if (!pDisplay)
+                pDisplay = Gdk::Display::get_default();
+            if (pDisplay)
+            {
+                pDefaultCursor = Gdk::Cursor::create(pDisplay, "default");
+                pWaitProgressCursor = Gdk::Cursor::create(pDisplay, "progress");
+                pWaitBlockedCursor = Gdk::Cursor::create(pDisplay, "wait");
+//                 Debug::Log(DEBUG_ALWAYS, "loaded cursors");
+            }
+        }
+
+        if (pDefaultCursor)
+        {
+//             Debug::Log(DEBUG_ALWAYS, string(__func__) + ": fWait = " + to_string((int)cursor));
+            switch (cursor)
+            {
+                case Cursor::DEFAULT:
+                    pWindow->set_cursor(pDefaultCursor);
+                break;
+                case Cursor::WAIT_PROGRESS:
+                    pWindow->set_cursor(pWaitProgressCursor);
+                break;
+                case Cursor::WAIT_BLOCKED:
+                    pWindow->set_cursor(pWaitBlockedCursor);
+                break;
+            }
+
+            if (cursor == Cursor::WAIT_BLOCKED)
+                // Process remaining events, or the cursor won't change, since the caller plans
+                // to block the GUI.
+                while (gtk_events_pending()) gtk_main_iteration();
+        }
+    }
+}
 
 void
 ElissoApplicationWindow::initActionHandlers()

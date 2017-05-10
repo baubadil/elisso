@@ -31,7 +31,7 @@
  *  there is work to do; it then fetches an item of type P from the queue.
  */
 template<class P>
-struct WorkerInputQueue
+struct WorkerInputQueue : public ProhibitCopy
 {
     std::mutex                  mutex;
     std::condition_variable     cond;

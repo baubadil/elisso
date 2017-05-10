@@ -168,13 +168,14 @@ public:
 
         // We capture the shared_ptr "p" without &, meaning we create a copy, which increases the refcount
         // while the thread is running.
-        p->_pThread = new std::thread([p, fClickFromTree]()
+        auto pThread = new std::thread([p, fClickFromTree]()
         {
             /*
              *  Thread function!
              */
             p->threadFunc(p->_id, fClickFromTree);
         });
+        pThread->detach();
 
         return p;
     }
@@ -241,7 +242,6 @@ private:
     uint                _id;
     PFSModelBase        _pDir;
     ViewPopulatedWorker &_refWorkerResult;
-    std::thread         *_pThread = nullptr;
     StopFlag            _stopFlag;
     PFSModelBase        _pDirSelectPrevious;
 };
@@ -430,6 +430,7 @@ ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
         case ViewState::ERROR:
         case ViewState::UNDEFINED:
         case ViewState::POPULATED:
+        case ViewState::INSERTING:
         break;
 
         case ViewState::POPULATING:
@@ -542,6 +543,9 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
 
         _pImpl->pllFolderContents = pResult->pllContents;
 
+        // This sets the wait cursor.
+        this->setState(ViewState::INSERTING);
+
         /*
          * Insert all the files and collect some statistics.
          */
@@ -580,6 +584,9 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
 
         // This connects the model and also calls onFolderViewLoaded().
         this->setState(ViewState::POPULATED);
+
+        _mainWindow.setWaitCursor(_iconView.get_window(), Cursor::DEFAULT);
+        _mainWindow.setWaitCursor(_treeView.get_window(), Cursor::DEFAULT);
 
         if (!pResult->fClickFromTree)
             _mainWindow.selectInFolderTree(_pDir);
@@ -857,14 +864,22 @@ ElissoFolderView::setState(ViewState s)
                 _pLoading->show_all();
                 pSpinner->start();
 
+                this->setWaitCursor(Cursor::WAIT_PROGRESS);
+
                 _mainWindow.onLoadingFolderView(*this);
             }
+            break;
+
+            case ViewState::INSERTING:
+                this->setWaitCursor(Cursor::WAIT_BLOCKED);
             break;
 
             case ViewState::POPULATED:
             {
                 // Connect model again, set sort.
                 this->connectModel(true);
+
+                this->setWaitCursor(Cursor::DEFAULT);
 
                 _mainWindow.onFolderViewLoaded(*this);
             }
@@ -875,7 +890,7 @@ ElissoFolderView::setState(ViewState s)
                 _mainWindow.onFolderViewLoaded(*this);
             break;
 
-            default:
+            case ViewState::UNDEFINED:
             break;
         }
 
@@ -1395,6 +1410,16 @@ ElissoFolderView::testFileopsSelected()
                               _pImpl->llFileOperations,
                               &_pImpl->pProgressDialog,
                               &_mainWindow);
+}
+
+/**
+ *  Protected method which sets the wait cursor on the member view windows.
+ */
+void
+ElissoFolderView::setWaitCursor(Cursor cursor)
+{
+    _mainWindow.setWaitCursor(_iconView.get_window(), cursor);
+    _mainWindow.setWaitCursor(_treeView.get_window(), cursor);
 }
 
 void

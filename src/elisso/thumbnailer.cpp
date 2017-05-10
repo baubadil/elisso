@@ -19,6 +19,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <vector>
 
 /**
  *  Simple structure to temporarily hold the complete binary contents
@@ -108,7 +109,10 @@ typedef std::shared_ptr<ThumbnailTemp> PThumbnailTemp;
 struct Thumbnailer::Impl : WorkerResultQueue<PThumbnail>
 {
     WorkerInputQueue<PThumbnail>        qFileReader_;
-    WorkerInputQueue<PThumbnailTemp>    aqPixbufLoaders[Thumbnailer::C_LOADER_THREADS];
+
+    unsigned                            cPixbufLoaders;
+    WorkerInputQueue<PThumbnailTemp>    *paqPixbufLoaders;
+
     WorkerInputQueue<PThumbnailTemp>    qScalerIconSmall;
     WorkerInputQueue<PThumbnailTemp>    qScalerIconBig;
 
@@ -124,6 +128,20 @@ struct Thumbnailer::Impl : WorkerResultQueue<PThumbnail>
         for (auto &fmt : vFormats)
             for (const auto &ext : fmt.get_extensions())
                 mapFormats[strToUpper(ext)] = &fmt;
+
+        // This returns 8 on a four-core machine with 8 hyperthreads.
+        // 3 pixbuf threads are good fit for that, so scale accordingly.
+        unsigned int cHyperThreads = std::thread::hardware_concurrency();
+        cPixbufLoaders = MAX(1, (cHyperThreads / 2 - 1));
+        // Would love to have a vector here to make this easier but WorkerInputQueue is not copyable.
+        paqPixbufLoaders = new WorkerInputQueue<PThumbnailTemp>[cPixbufLoaders];
+
+        Debug::Log(DEBUG_ALWAYS, "Thumbnailer: std::thread::hardware_concurrency=" + to_string(cHyperThreads) + " => " + to_string(cPixbufLoaders) + " JPEG threads");
+    }
+
+    ~Impl()
+    {
+        delete[] paqPixbufLoaders;
     }
 };
 
@@ -143,31 +161,37 @@ Thumbnailer::Thumbnailer()
     Debug::Log(THUMBNAILER, "Thumbnailer constructed");
 
      // Create the file reader thread.
-    new std::thread([this]()
+    auto pThread = new std::thread([this]()
     {
         this->fileReaderThread();
     });
+    pThread->detach();
 
     // Create the pixmap loader threads.
     for (uint u = 0;
-         u < C_LOADER_THREADS;
+         u < _pImpl->cPixbufLoaders;
          ++u)
-        new std::thread([this, u]()
+    {
+        pThread = new std::thread([this, u]()
         {
             this->pixbufLoaderThread(u);
         });
+        pThread->detach();
+    }
 
     // Create the pixbuf scaler thread.
-    new std::thread([this]()
+    pThread = new std::thread([this]()
     {
         this->scalerSmallThread();
     });
+    pThread->detach();
 
     // Create the pixbuf scaler thread.
-    new std::thread([this]()
+    pThread = new std::thread([this]()
     {
         this->scalerBigThread();
     });
+    pThread->detach();
 }
 
 Thumbnailer::~Thumbnailer()
@@ -253,9 +277,9 @@ Thumbnailer::stop()
     // code duplication.
     std::vector<WorkerInputQueue<PThumbnailTemp>*> vQueues;
     for (uint u = 0;
-         u < C_LOADER_THREADS;
+         u < _pImpl->cPixbufLoaders;
          ++u)
-        vQueues.push_back(&_pImpl->aqPixbufLoaders[u]);
+        vQueues.push_back(&_pImpl->paqPixbufLoaders[u]);
     vQueues.push_back(&_pImpl->qScalerIconSmall);
     vQueues.push_back(&_pImpl->qScalerIconBig);
 
@@ -318,10 +342,10 @@ void Thumbnailer::fileReaderThread()
             size_t uLeastBusyThread = 0;
             size_t uLeastBusyQueueSize = 99999999;
             for (uint u = 0;
-                 u < C_LOADER_THREADS;
+                 u < _pImpl->cPixbufLoaders;
                  ++u)
             {
-                size_t sz = _pImpl->aqPixbufLoaders[u].size();
+                size_t sz = _pImpl->paqPixbufLoaders[u].size();
                 if (sz < uLeastBusyQueueSize)
                 {
                     uLeastBusyThread = u;
@@ -330,7 +354,7 @@ void Thumbnailer::fileReaderThread()
             }
 
             Debug::Log(THUMBNAILER, string(__func__) + ": queue " + to_string(uLeastBusyThread) + " is least busy (" + to_string(uLeastBusyQueueSize) + "), queueing there");
-            _pImpl->aqPixbufLoaders[uLeastBusyThread].post(pThumbnailTemp);
+            _pImpl->paqPixbufLoaders[uLeastBusyThread].post(pThumbnailTemp);
 
 //                 ppb = Gdk::Pixbuf::create_from_file(strPath);
 
@@ -354,7 +378,7 @@ void Thumbnailer::pixbufLoaderThread(uint threadno)
     while (1)
     {
         // Block until someone has queued a file.
-        pTemp = _pImpl->aqPixbufLoaders[threadno].fetch();
+        pTemp = _pImpl->paqPixbufLoaders[threadno].fetch();
 
         using namespace std::chrono;
         steady_clock::time_point t1 = steady_clock::now();

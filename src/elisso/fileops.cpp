@@ -26,7 +26,6 @@
 
 struct FileOperation::Impl
 {
-    std::thread             *pThread = nullptr;
     sigc::connection        connDispatch;
     sigc::connection        connTimer;
 
@@ -111,13 +110,14 @@ FileOperation::Create(Type t,
     }
 
     // Launch the thread.
-    p->_pImpl->pThread = new std::thread([p]()
+    auto pThread = new std::thread([p]()
     {
         /*
          *  Thread function!
          */
         p->threadFunc();
     });
+    pThread->detach();
 
     return p;
 }

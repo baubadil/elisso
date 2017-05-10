@@ -33,11 +33,17 @@ typedef Glib::RefPtr<Gio::AppInfo> PAppInfo;
 struct ViewPopulatedResult;
 typedef std::shared_ptr<ViewPopulatedResult> PViewPopulatedResult;
 
-/***************************************************************************
- *
- *  ElissoFolderView
- *
- **************************************************************************/
+/**
+ *  Type of GTK cursor to display. Used by ElissoFolderView::setWaitCursor(),
+ *  which calls ElissoApplicationWindow::setWaitCursor, which loads the
+ *  corresponding GTK stock cursors from the cursor theme.
+ */
+enum class Cursor
+{
+    DEFAULT,            // Standard pointer, used most of the time.
+    WAIT_PROGRESS,      // Pointer with a clock attached, to indicate activity in a background thread, but GUI is responsive.
+    WAIT_BLOCKED        // Wait clock, while GUI thread is not responsive.
+};
 
 enum class FolderViewMode
 {
@@ -52,6 +58,7 @@ enum class ViewState
 {
     UNDEFINED,
     POPULATING,
+    INSERTING,
     POPULATED,
     ERROR
 };
@@ -71,10 +78,20 @@ enum class SetDirectoryFlag : uint8_t
 
 typedef FlagSet<SetDirectoryFlag> SetDirectoryFlagSet;
 
+
+/***************************************************************************
+ *
+ *  ElissoFolderView
+ *
+ **************************************************************************/
+
 /**
- *  The folder view is the right half of a folder window and derives from
- *  ScrolledWindow. It contains either a  TreeView or IconView child, depending
- *  on which view is selected.
+ *  The ElissoFolderView is the right two thirds of a folder window and derives from
+ *  Overlay to be able to overlay a "loading" spinner. Most importantly though,
+ *  it contains a ScrolledWindow, which in turn contains either a TreeView or
+ *  IconView child, depending on which view is selected. Both views are
+ *  constructed in the ElissoFolderView constructor, but inserted and removed
+ *  from the ScrolledWindow when the view is changed.
  */
 class ElissoFolderView : public Gtk::Overlay
 {
@@ -149,6 +166,7 @@ private:
     friend class FolderViewMonitor;
     friend class TreeViewPlus;
 
+    void setWaitCursor(Cursor cursor);
     void dumpStack();
     void onPopulateDone(PViewPopulatedResult p);
     void removeFile(PFSModelBase pFS);

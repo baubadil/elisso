@@ -95,6 +95,9 @@ public:
     void addFolderTab(PFSModelBase pDirOrSymlink);
     void addFolderTab(const std::string &strError);
 
+    void setWaitCursor(Glib::RefPtr<Gdk::Window> pWindow,
+                       Cursor cursor);
+
     void enableEditActions(size_t cFolders, size_t cOtherFiles);
     void enableBackForwardActions();
 

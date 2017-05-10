@@ -132,16 +132,22 @@ struct AddOneFirst : ResultBase
 
 struct ElissoFolderTree::Impl : public ProhibitCopy
 {
-    std::list<std::pair<PFSDirectory, Gtk::TreeModel::iterator>>    llTreeRoots;
+    std::vector<std::pair<PFSDirectory, Gtk::TreeModel::iterator>>  vTreeRoots;
 
-    Glib::RefPtr<Gtk::TreeStore>    pTreeStore;
+    Glib::RefPtr<Gtk::TreeStore>            pTreeStore;
 
-    WorkerResultQueue<PSubtreePopulated> workerSubtreePopulated;
-    WorkerResultQueue<PAddOneFirst>      workerAddOneFirst;
+    WorkerResultQueue<PSubtreePopulated>    workerSubtreePopulated;
+    WorkerResultQueue<PAddOneFirst>         workerAddOneFirst;
+
+    std::atomic<uint>                       cThreadsRunning;
 
     // The following is true while we're in select(); we don't want to process
     // the "node selected" signal then and recurse infinitely.
-    bool                            fInExplicitSelect = false;
+    bool                                    fInExplicitSelect = false;
+
+    Impl()
+        : cThreadsRunning(0)
+    { }
 };
 
 
@@ -248,6 +254,11 @@ ElissoFolderTree::~ElissoFolderTree()
 
 uint8_t g_cTreeRootItems = 0;
 
+/**
+ *  Adds a new tree root (toplevel folder) to the tree. This gets called
+ *  on setup to insert the "Home" and "File system" trees under which
+ *  additional items get inserted over time depending on what is selected.
+ */
 void
 ElissoFolderTree::addTreeRoot(const Glib::ustring &strName,
                               PFSDirectory pDir)
@@ -267,7 +278,7 @@ ElissoFolderTree::addTreeRoot(const Glib::ustring &strName,
 //         this->spawnPopulate(itRoot);
 
         Gtk::TreePath path = Gtk::TreePath(itRoot);
-        _pImpl->llTreeRoots.push_back({pDir, itRoot});
+        _pImpl->vTreeRoots.push_back({pDir, itRoot});
 
         return false;
     });
@@ -276,6 +287,14 @@ ElissoFolderTree::addTreeRoot(const Glib::ustring &strName,
 /**
  *  Called from the main window after the notebook page on the right has finished populating
  *  to select the node in the tree that corresponds to the folder contents being displayed.
+ *
+ *  If the given directory is already inserted into the tree, for example on startup because it's
+ *  the user's home directory, it simply gets selected and then expanded. However, if it is not
+ *  yet inserted, this needs to spawn a populate thread first for the parent. If the parent hasn't
+ *  been inserted either, that needs to be populated first. So this goes through the path of
+ *  the given directory and checks each component; if it is inserted already, it is expanded;
+ *  if it is not yet inserted, it is populated and then expanded. This can spawn many threads
+ *  as a result.
  *
  *  Example: if $(HOME)/subdir is showing on the right, we expand the $(HOME) item in the tree
  *  and select the "subdir" node under it.
@@ -290,7 +309,7 @@ ElissoFolderTree::select(PFSModelBase pDir)
     PFSModelBase pSelectRoot;
     Gtk::TreeModel::iterator itRoot;
 
-    for (auto &pair : _pImpl->llTreeRoots)
+    for (auto &pair : _pImpl->vTreeRoots)
     {
         auto &pRootThis = pair.first;
         if (    (pRootThis == pDir)
@@ -434,7 +453,8 @@ ElissoFolderTree::spawnPopulate(const Gtk::TreeModel::iterator &it)
             /*
              * Launch the thread!
              */
-            new std::thread([this, pDir, pDir2, pRowRefPopulating]()
+            ++_pImpl->cThreadsRunning;
+            auto pThread = new std::thread([this, pDir, pDir2, pRowRefPopulating]()
             {
                 // Create an FSList on the thread's stack and have it filled by the back-end.
                 PSubtreePopulated pResult = std::make_shared<SubtreePopulated>(pDir, pRowRefPopulating);
@@ -453,7 +473,12 @@ ElissoFolderTree::spawnPopulate(const Gtk::TreeModel::iterator &it)
                 // Hand the results over to the instance: add it to the queue, signal the dispatcher.
                 this->_pImpl->workerSubtreePopulated.postResultToGUI(pResult);
                 // This triggers onPopulateDone().
+
+                --_pImpl->cThreadsRunning;
             });
+            pThread->detach();
+
+            this->updateCursor();
 
             Debug::Log(FOLDER_POPULATE_LOW, "spawned");
 
@@ -518,6 +543,8 @@ ElissoFolderTree::onPopulateDone()
 
     if (pllToAddFirst->size())
         this->spawnAddFirstSubfolders(pllToAddFirst);
+
+    this->updateCursor();
 }
 
 Gtk::TreeModel::iterator
@@ -574,7 +601,8 @@ ElissoFolderTree::spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst)
     /*
      * Launch the thread!
      */
-    new std::thread([this, pllToAddFirst]()
+    ++_pImpl->cThreadsRunning;
+    auto pThread = new std::thread([this, pllToAddFirst]()
     {
         for (PAddOneFirst pAddOneFirst : *pllToAddFirst)
         {
@@ -603,7 +631,11 @@ ElissoFolderTree::spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst)
                 _pImpl->workerAddOneFirst.postResultToGUI(pAddOneFirst);
             }
         }
+        --_pImpl->cThreadsRunning;
     });
+    pThread->detach();
+
+    this->updateCursor();
 }
 
 /**
@@ -636,6 +668,8 @@ ElissoFolderTree::onAddAnotherFirst()
     }
 
     Debug::Log(FOLDER_POPULATE_LOW, "TreeJob::onAddAnotherFirst(): leaving");
+
+    this->updateCursor();
 }
 
 void ElissoFolderTree::onNodeSelected()
@@ -686,6 +720,13 @@ ElissoFolderTree::onNodeExpanded(const Gtk::TreeModel::iterator &it,
 //         case TreeNodeState::POPULATE_ERROR:
         break;
     }
+}
+
+void
+ElissoFolderTree::updateCursor()
+{
+    _mainWindow.setWaitCursor(_treeView.get_window(),
+                              (_pImpl->cThreadsRunning > 0) ? Cursor::WAIT_PROGRESS : Cursor::DEFAULT);
 }
 
 Gtk::TreeModel::iterator

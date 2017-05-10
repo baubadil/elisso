@@ -32,6 +32,16 @@ typedef std::shared_ptr<AddOneFirstsList> PAddOneFirstsList;
  *
  **************************************************************************/
 
+/**
+ *  The ElissoFolderTree occupies the left third or so of the folder window
+ *  and contains the tree of folders. On the one hand, this reacts to folders
+ *  clicked on in the view on the right; on the other hand, it sets the
+ *  folder to view on the right when a folder is clicked on the left.
+ *
+ *  The folder tree can have a lot of background threads that insert subfolders
+ *  into the tree when items get expanded, but this happens automatically.
+ *  There are few public methods, everything else happens under the hood.
+ */
 class ElissoFolderTree : public Gtk::ScrolledWindow
 {
 public:
@@ -46,6 +56,7 @@ public:
 
 private:
     friend class FolderTreeMonitor;
+
     bool spawnPopulate(const Gtk::TreeModel::iterator &it);
     void onPopulateDone();
 
@@ -60,6 +71,8 @@ private:
     void onNodeSelected();
     void onNodeExpanded(const Gtk::TreeModel::iterator &it,
                         const Gtk::TreeModel::Path &path);
+
+    void updateCursor();
 
     Gtk::TreeModel::iterator getIterator(const PRowReference &pRowRef);
     PRowReference getRowReference(const Gtk::TreeModel::iterator &it);
