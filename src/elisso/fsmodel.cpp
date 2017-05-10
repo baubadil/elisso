@@ -1092,10 +1092,10 @@ FSContainer::getContents(FSList &llFiles,
                 _refBase._fl.set(FSFlag::POPULATED_WITH_DIRECTORIES);
                 _refBase._fl.set(FSFlag::POPULATED_WITH_ALL);
             }
+        } // if (!fStopped)
 
-            _refBase._fl.clear(FSFlag::POPULATING);
-            g_condFolderPopulated.notify_all();
-        }
+        _refBase._fl.clear(FSFlag::POPULATING);
+        g_condFolderPopulated.notify_all();
     }
     catch(Gio::Error &e)
     {
