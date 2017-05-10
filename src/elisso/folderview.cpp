@@ -647,21 +647,6 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
     }
 }
 
-void
-ElissoFolderView::removeFile(PFSModelBase pFS)
-{
-    string strBasename = pFS->getBasename();
-    // Look up the row reference in the map to quickly get to the row.
-    auto itSTL = _pImpl->mapRowReferences.find(strBasename);
-    if (itSTL != _pImpl->mapRowReferences.end())
-    {
-        auto &rowref= itSTL->second;
-        Gtk::TreePath path = rowref.get_path();
-        auto itModel = _pImpl->pListStore->get_iter(path);
-        _pImpl->pListStore->erase(itModel);
-    }
-}
-
 Gtk::ListStore::iterator
 ElissoFolderView::insertFile(PFSModelBase pFS)
 {
@@ -727,6 +712,40 @@ ElissoFolderView::insertFile(PFSModelBase pFS)
     }
 
     return it;
+}
+
+void
+ElissoFolderView::removeFile(PFSModelBase pFS)
+{
+    string strBasename = pFS->getBasename();
+    // Look up the row reference in the map to quickly get to the row.
+    auto itSTL = _pImpl->mapRowReferences.find(strBasename);
+    if (itSTL != _pImpl->mapRowReferences.end())
+    {
+        auto &rowref= itSTL->second;
+        Gtk::TreePath path = rowref.get_path();
+        auto itModel = _pImpl->pListStore->get_iter(path);
+        _pImpl->pListStore->erase(itModel);
+    }
+}
+
+void
+ElissoFolderView::renameFile(PFSModelBase pFS, const std::string &strOldName, const std::string &strNewName)
+{
+    // Look up the row reference in the map to quickly get to the row.
+    auto itSTL = _pImpl->mapRowReferences.find(strOldName);
+    if (itSTL != _pImpl->mapRowReferences.end())
+    {
+        auto rowref= itSTL->second;
+        Gtk::TreePath path = rowref.get_path();
+        auto itModel = _pImpl->pListStore->get_iter(path);
+        auto row = *itModel;
+        FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
+        row[cols._colFilename] = strNewName;
+
+        _pImpl->mapRowReferences.erase(itSTL);
+        _pImpl->mapRowReferences[strNewName] = rowref;
+    }
 }
 
 void
@@ -1226,6 +1245,8 @@ ElissoFolderView::handleAction(const std::string &strAction)
             openFile(nullptr, {});
         else if (strAction == ACTION_EDIT_SELECT_ALL)
             selectAll();
+        else if (strAction == ACTION_EDIT_RENAME)
+            renameSelected();
         else if (strAction == ACTION_EDIT_TRASH)
             trashSelected();
 #ifdef USE_TESTFILEOPS
@@ -1367,7 +1388,6 @@ ElissoFolderView::createEmptyFileDialog()
     PFSFile pNew;
 
     FSContainer *pContainer = this->_pDir->getContainer();
-
     if (pContainer)
     {
         TextEntryDialog dlg(this->_mainWindow,
@@ -1385,6 +1405,39 @@ ElissoFolderView::createEmptyFileDialog()
     return pNew;
 }
 
+void
+ElissoFolderView::renameSelected()
+{
+    FileSelection sel;
+    if (    (getSelection(sel))
+         && (sel.llAll.size() == 1)
+       )
+    {
+        FSContainer *pContainer = this->_pDir->getContainer();
+        if (pContainer)
+        {
+            PFSModelBase pFile = sel.llAll.front();
+            Glib::ustring strOld(pFile->getBasename());
+            TextEntryDialog dlg(this->_mainWindow,
+                                "Rename file",
+                                "Please enter the new name for <b>" + strOld + "</b>:",
+                                "Rename");
+            dlg.setText(strOld);
+
+            auto pos = strOld.rfind('.');
+            dlg.selectRegion(0, pos);
+            if (dlg.run() == Gtk::RESPONSE_OK)
+            {
+                string strNew = dlg.getText();
+                pFile->rename(strNew);
+                pContainer->notifyFileRenamed(pFile, strOld, strNew);
+            }
+        }
+    }
+    else
+        _mainWindow.errorBox("Bad selection");
+}
+
 /**
  *  Trashes all files which are currently selected in the folder contents.
  */
@@ -1400,6 +1453,7 @@ ElissoFolderView::trashSelected()
                               &_mainWindow);
 }
 
+#ifdef USE_TESTFILEOPS
 void
 ElissoFolderView::testFileopsSelected()
 {
@@ -1411,6 +1465,7 @@ ElissoFolderView::testFileopsSelected()
                               &_pImpl->pProgressDialog,
                               &_mainWindow);
 }
+#endif
 
 /**
  *  Protected method which sets the wait cursor on the member view windows.
@@ -2047,7 +2102,7 @@ ElissoFolderView::onSelectionChanged()
 
 /* virtual */
 void
-FolderViewMonitor::onItemAdded(PFSModelBase &pFS) /* override; */
+FolderViewMonitor::onItemAdded(PFSModelBase &pFS) /* override */
 {
     Debug::Enter(FILEMONITORS, string(__func__) + "(" + pFS->getRelativePath() + ")");
     _view.insertFile(pFS);
@@ -2056,10 +2111,19 @@ FolderViewMonitor::onItemAdded(PFSModelBase &pFS) /* override; */
 
 /* virtual */
 void
-FolderViewMonitor::onItemRemoved(PFSModelBase &pFS) /* override; */
+FolderViewMonitor::onItemRemoved(PFSModelBase &pFS) /* override */
 {
     Debug::Enter(FILEMONITORS, string(__func__) + "(" + pFS->getRelativePath() + ")");
     _view.removeFile(pFS);
+    Debug::Leave();
+}
+
+/* virtual */
+void
+FolderViewMonitor::onItemRenamed(PFSModelBase &pFS, const std::string &strOldName, const std::string &strNewName) /* override */
+{
+    Debug::Enter(FILEMONITORS, string(__func__) + "(" + pFS->getRelativePath() + ")");
+    _view.renameFile(pFS, strOldName, strNewName);
     Debug::Leave();
 }
 

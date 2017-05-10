@@ -113,8 +113,11 @@ public:
 
     virtual void onItemAdded(PFSModelBase &pFS) override;
     virtual void onItemRemoved(PFSModelBase &pFS) override;
+    virtual void onItemRenamed(PFSModelBase &pFS, const std::string &strOldName, const std::string &strNewName) override;
 
 private:
+    Gtk::TreeModel::iterator findIterator(PFSModelBase &pFS);
+
     ElissoFolderTree &_tree;
     PRowReference _pRowRefDirWatching;
     PFSModelBase _pDirWatching;

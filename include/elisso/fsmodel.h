@@ -107,6 +107,7 @@ class FSMonitorBase : public ProhibitCopy, public enable_shared_from_this<FSMoni
 public:
     virtual void onItemAdded(PFSModelBase &pFS) = 0;
     virtual void onItemRemoved(PFSModelBase &pFS) = 0;
+    virtual void onItemRenamed(PFSModelBase &pFS, const std::string &strOldName, const std::string &strNewName) = 0;
 
     FSContainer* isWatching()
     {
@@ -242,7 +243,10 @@ public:
      *  Public operation methods
      */
 
+    void rename(const std::string &strNewName);
+
     void sendToTrash();
+
     void testFileOps();
 
 protected:
@@ -361,6 +365,7 @@ public:
 
     void notifyFileAdded(PFSModelBase pFS);
     void notifyFileRemoved(PFSModelBase pFS);
+    void notifyFileRenamed(PFSModelBase pFS, const std::string &strOldName, const std::string &strNewName);
 
 protected:
     friend class FSModelBase;

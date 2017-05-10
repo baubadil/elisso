@@ -519,12 +519,45 @@ FSModelBase::describe(bool fLong /* = false */ )
 }
 
 /**
- *  Attempts to send the file (or directory) to the desktop's trash can via the Gio methods. Throws an exception
- *  if that fails, for example, if the underlying file system has no trash support, or if the object's
- *  permissions are insufficient.
+ *  Renames this file to the given new name.
  *
- *  This does not notify file monitors since we can't be sure which thread we're running on. Call this->notifyFileRemoved()
- *  either afterwards if you call this on thread one, or have a GUI dispatcher which calls it instead.
+ *  This does not notify file monitors since we can't be sure which thread we're running on. Call
+ *  FSContainer::notifyFileRenamed() either afterwards if you call this on thread one, or have a
+ *  GUI dispatcher which calls it instead.
+ */
+void
+FSModelBase::rename(const std::string &strNewName)
+{
+    auto pCnr = _pParent->getContainer();
+    if (pCnr)
+        try
+        {
+            // This interface is bizarre. It returns a new Gio::File on rename.
+            _pGioFile = _pGioFile->set_display_name(strNewName);
+
+            // Update the contents map, which sorts by name.
+            ContentsLock cLock(*pCnr);
+            // First remove the old item; this calls getBasename(), which still has the old base name.
+            pCnr->removeChild(cLock, shared_from_this());
+
+            _strBasename = strNewName;
+            pCnr->addChild(cLock, shared_from_this());
+        }
+        catch(Gio::Error &e)
+        {
+            throw FSException(e.what());
+        }
+}
+
+/**
+ *  Attempts to send the file (or directory) to the desktop's trash can via the Gio methods.
+ *
+ *  Throws an exception if that fails, for example, if the underlying file system has no trash
+ *  support, or if the object's permissions are insufficient.
+ *
+ *  This does not notify file monitors since we can't be sure which thread we're running on. Call
+ *  FSContainer::notifyFileRemoved() either afterwards if you call this on thread one, or have a
+ *  GUI dispatcher which calls it instead.
  */
 void
 FSModelBase::sendToTrash()
@@ -690,7 +723,7 @@ FSContainer::~FSContainer()
  */
 void FSContainer::addChild(ContentsLock &lock, PFSModelBase p)
 {
-    std::string strBasename(p->getBasename());
+    const std::string &strBasename = p->getBasename();
     Debug::Log(FILE_LOW, "storing \"" + strBasename + "\" in parent map");
 
     if (p->_pParent)
@@ -1071,18 +1104,18 @@ FSContainer::getContents(FSList &llFiles,
             if (    (getContents == Get::FIRST_FOLDER_ONLY)
                  && (!c)
                )
-            for (auto it : _pImpl->mapContents)
-            {
-                auto &p = it.second;
-                // Leave out ".." in the list.
-                if (p != _refBase._pParent)
-                    if (p->getResolvedType() == FSTypeResolved::SYMLINK_TO_DIRECTORY)
-                    {
-                        llFiles.push_back(p);
-                        ++c;
-                        break;
-                    }
-            }
+                for (auto it : _pImpl->mapContents)
+                {
+                    auto &p = it.second;
+                    // Leave out ".." in the list.
+                    if (p != _refBase._pParent)
+                        if (p->getResolvedType() == FSTypeResolved::SYMLINK_TO_DIRECTORY)
+                        {
+                            llFiles.push_back(p);
+                            ++c;
+                            break;
+                        }
+                }
 
             FSLock lock2Temp;
             if (getContents == Get::FOLDERS_ONLY)
@@ -1226,7 +1259,14 @@ FSContainer::notifyFileRemoved(PFSModelBase pFS)
     Debug::Leave();
 }
 
-
+void
+FSContainer::notifyFileRenamed(PFSModelBase pFS, const std::string &strOldName, const std::string &strNewName)
+{
+    Debug::Enter(FILEMONITORS, string(__func__) + "(" + strOldName + " -> " + strNewName + ")");
+    for (auto &pMonitor : _pImpl->llMonitors)
+        pMonitor->onItemRenamed(pFS, strOldName, strNewName);
+    Debug::Leave();
+}
 
 
 /***************************************************************************

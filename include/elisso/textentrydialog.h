@@ -39,7 +39,17 @@ public:
                     const Glib::ustring &strTitle,
                     const Glib::ustring &strIntro,
                     const Glib::ustring &strButton);
+
+    void setText(Glib::ustring);
+
     Glib::ustring getText();
+
+    /**
+     *  Calls select_region on the Gtk::Entry. The characters that are selected are those characters at positions from
+     *  start_pos up to, but not including end_pos. If end_pos is negative, then the characters selected are those
+     *  characters from start_pos to the end of the text. Note that positions are specified in characters, not bytes.
+     */
+    void selectRegion(int start_pos, int end_pos);
 
 private:
     void enableButtons();

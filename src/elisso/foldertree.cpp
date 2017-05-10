@@ -759,6 +759,27 @@ FolderTreeMonitor::onItemAdded(PFSModelBase &pFS) /* override */
 void
 FolderTreeMonitor::onItemRemoved(PFSModelBase &pFS) /* override */
 {
+    Gtk::TreeModel::iterator itChild = findIterator(pFS);
+    if (itChild)
+        _tree._pImpl->pTreeStore->erase(itChild);
+}
+
+/* virtual */
+void
+FolderTreeMonitor::onItemRenamed(PFSModelBase &pFS, const std::string &strOldName, const std::string &strNewName) /* override */
+{
+    Gtk::TreeModel::iterator itChild = findIterator(pFS);
+    if (itChild)
+    {
+        auto row = *itChild;
+        FolderTreeModelColumns &cols = FolderTreeModelColumns::Get();
+        row[cols._colIconAndName] = strNewName;
+    }
+}
+
+Gtk::TreeModel::iterator
+FolderTreeMonitor::findIterator(PFSModelBase &pFS)
+{
     // This notification is only interesting if the object is a directory
     // or a symlink to one. This tests that.
     if (pFS->getContainer())
@@ -775,12 +796,9 @@ FolderTreeMonitor::onItemRemoved(PFSModelBase &pFS) /* override */
             {
                 PFSModelBase pDir = (*itChild)[cols._colPDir];
                 if (pDir == pFS)
-                {
-                    Debug::Log(DEBUG_ALWAYS, string(__func__) + ": !!!!!!!!!!!!!!!!!!!!!! removing " + pDir->getRelativePath());
-                    _tree._pImpl->pTreeStore->erase(itChild);
-                    break;
-                }
+                    return itChild;
             }
         }
     }
+    return {};
 }

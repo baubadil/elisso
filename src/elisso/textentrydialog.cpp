@@ -59,10 +59,22 @@ TextEntryDialog::TextEntryDialog(Gtk::Window &wParent,
     show_all();
 }
 
+void
+TextEntryDialog::setText(Glib::ustring str)
+{
+    _entry.set_text(str);
+}
+
 Glib::ustring
 TextEntryDialog::getText()
 {
-    return _entry.get_buffer()->get_text();
+    return _entry.get_text();
+}
+
+void
+TextEntryDialog::selectRegion(int start_pos, int end_pos)
+{
+    _entry.select_region(start_pos, end_pos);
 }
 
 void

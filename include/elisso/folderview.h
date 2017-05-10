@@ -156,9 +156,16 @@ public:
                   PAppInfo pAppInfo);
 
     PFSDirectory createSubfolderDialog();
+
     PFSFile createEmptyFileDialog();
+
+    void renameSelected();
+
     void trashSelected();
+
+#ifdef USE_TESTFILEOPS
     void testFileopsSelected();
+#endif
 
     class PopulateThread;
 
@@ -169,8 +176,9 @@ private:
     void setWaitCursor(Cursor cursor);
     void dumpStack();
     void onPopulateDone(PViewPopulatedResult p);
-    void removeFile(PFSModelBase pFS);
     Gtk::ListStore::iterator insertFile(PFSModelBase pFS);
+    void removeFile(PFSModelBase pFS);
+    void renameFile(PFSModelBase pFS, const std::string &strOldName, const std::string &strNewName);
     void connectModel(bool fConnect);
 
     void setNotebookTabTitle();
@@ -256,6 +264,7 @@ public:
 
     virtual void onItemAdded(PFSModelBase &pFS) override;
     virtual void onItemRemoved(PFSModelBase &pFS) override;
+    virtual void onItemRenamed(PFSModelBase &pFS, const std::string &strOldName, const std::string &strNewName) override;
 
 private:
     ElissoFolderView &_view;
