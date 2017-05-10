@@ -114,6 +114,9 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app)      //
     auto screen = Gdk::Screen::get_default();
     auto ctx = this->get_style_context();
     ctx->add_provider_for_screen(screen, css, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+
+    // Finally, add the window to the application for "quit" management.
+    app.add_window(*this);
 }
 
 /**
@@ -171,15 +174,12 @@ ElissoApplicationWindow::initActionHandlers()
      */
     this->add_action(ACTION_FILE_NEW_TAB, [this]()
     {
-        ElissoFolderView *pView;
-        if ((pView = getActiveFolderView()))
-        {
-            PFSModelBase pDir;
-            if ((pDir = pView->getDirectory()))
-            {
-                this->addFolderTab(pDir);
-            }
-        }
+        this->handleViewAction(ACTION_FILE_NEW_TAB);
+    });
+
+    this->add_action(ACTION_FILE_NEW_WINDOW, [this]()
+    {
+        this->handleViewAction(ACTION_FILE_NEW_WINDOW);
     });
 
     this->add_action(ACTION_FILE_OPEN_IN_TERMINAL, [this]()
@@ -553,11 +553,14 @@ void
 ElissoApplicationWindow::enableBackForwardActions()
 {
     ElissoFolderView *pActive;
+    bool fBack = false, fForward = false;
     if ((pActive = getActiveFolderView()))
     {
-        _pActionGoBack->set_enabled(pActive->canGoBack());
-        _pActionGoForward->set_enabled(pActive->canGoForward());
+        fBack = pActive->canGoBack();
+        fForward = pActive->canGoForward();
     }
+    _pActionGoBack->set_enabled(fBack);
+    _pActionGoForward->set_enabled(fForward);
 }
 
 void
@@ -635,33 +638,44 @@ ElissoApplicationWindow::enableViewTypeActions(bool f)
 
 /**
  *  Handles all actions that operate on the currently active folder view
- *  in the notebook. This installs an exception handler so that methods
- *  can freely throw FSException, whose message then gets shown in an errorBox().
+ *  in the notebook.
  */
 void
 ElissoApplicationWindow::handleViewAction(const std::string &strAction)
 {
-    auto p = this->getActiveFolderView();
-    if (p)
+    auto pView = this->getActiveFolderView();
+    if (pView)
     {
-        if (strAction == ACTION_FILE_OPEN_IN_TERMINAL)
-            this->openFolderInTerminal(p->getDirectory());
+        if (strAction == ACTION_FILE_NEW_TAB)
+        {
+            PFSModelBase pDir;
+            if ((pDir = pView->getDirectory()))
+                this->addFolderTab(pDir);
+        }
+        else if (strAction == ACTION_FILE_NEW_WINDOW)
+        {
+            auto p = new ElissoApplicationWindow(_app);
+            p->addFolderTab(pView->getDirectory());
+            p->present();
+        }
+        else if (strAction == ACTION_FILE_OPEN_IN_TERMINAL)
+            this->openFolderInTerminal(pView->getDirectory());
         else if (strAction == ACTION_FILE_CLOSE_TAB)
-            this->closeFolderTab(*p);
+            this->closeFolderTab(*pView);
         else if (strAction == ACTION_EDIT_OPEN_SELECTED_IN_TAB)
         {
-            auto pFS = p->getSelectedFolder();
+            auto pFS = pView->getSelectedFolder();
             if (pFS)
                 this->addFolderTab(pFS);
         }
         else if (strAction == ACTION_EDIT_OPEN_SELECTED_IN_TERMINAL)
         {
-            auto pFS = p->getSelectedFolder();
+            auto pFS = pView->getSelectedFolder();
             if (pFS)
                 this->openFolderInTerminal(pFS);
         }
         else
             // Forward all others to currently active folder view.
-            p->handleAction(strAction);
+            pView->handleAction(strAction);
     }
 }

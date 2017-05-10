@@ -53,8 +53,9 @@ class ElissoApplication;
  *                   +- GtkTreeView (list view)
  *
  *
- *
- *
+ *  There is only a constructor, no "create" method with a refptr, since
+ *  the constructor adds the new instance to the GtkApplication behing
+ *  ElissoApplication.
  */
 class ElissoApplicationWindow : public Gtk::ApplicationWindow
 {

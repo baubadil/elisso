@@ -248,7 +248,6 @@ ElissoApplication::on_open(const type_vec_files &files,
     Debug::Enter(DEBUG_ALWAYS, __func__);
 
     ElissoApplicationWindow *pWindow = new ElissoApplicationWindow(*this);
-    this->add_window(*pWindow);
     pWindow->present();
 
     for (auto &pFile : files)
