@@ -248,7 +248,7 @@ void
 ElissoApplication::on_open(const type_vec_files &files,
                            const Glib::ustring &hint) /* override */
 {
-    Debug::Enter(DEBUG_ALWAYS, __func__);
+//     Debug::Enter(DEBUG_ALWAYS, __func__);
 
     ElissoApplicationWindow *pWindow = new ElissoApplicationWindow(*this);
     pWindow->present();

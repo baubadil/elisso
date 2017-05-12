@@ -18,6 +18,7 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app)      //
       _mainVBox(Gtk::ORIENTATION_VERTICAL),
       _vPaned(),
       _treeViewLeft(*this),
+      _boxForNotebookAndStatusBar(Gtk::ORIENTATION_VERTICAL),
       _notebook()
 {
     this->initActionHandlers();
@@ -71,7 +72,18 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app)      //
     _vPaned.set_position(200);
     _vPaned.set_wide_handle(true);
     _vPaned.add1(_treeViewLeft);
-    _vPaned.add2(_notebook);
+    _vPaned.add2(_boxForNotebookAndStatusBar);
+
+    _statusbarCurrent.set_hexpand(true);
+    _progressBarThumbnailer.set_valign(Gtk::Align::ALIGN_CENTER);
+    _progressBarThumbnailer.set_size_request(50, -1);
+    _statusbarFree.set_halign(Gtk::Align::ALIGN_END);
+    _gridStatusBar.add(_statusbarCurrent);
+    _gridStatusBar.add(_progressBarThumbnailer);
+    _gridStatusBar.add(_statusbarFree);
+
+    _boxForNotebookAndStatusBar.pack_start(_notebook, true, true);
+    _boxForNotebookAndStatusBar.pack_start(_gridStatusBar, false, false);
 
     _mainVBox.pack_start(_vPaned);
 
@@ -88,7 +100,8 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app)      //
 
     _notebook.set_scrollable(true);
     _notebook.popup_enable();
-    _notebook.show_all();
+
+    _boxForNotebookAndStatusBar.show_all();
 
     /*
      *  Children setup
@@ -617,7 +630,14 @@ ElissoApplicationWindow::onLoadingFolderView(ElissoFolderView &view)
     {
         PFSModelBase pDir = view.getDirectory();
 
-        this->setWindowTitle("Loading " + pDir->getBasename() + "...");
+        Glib::ustring strTitle = "?";
+        if (pDir)
+            strTitle = pDir->getRelativePath();
+
+        this->setWindowTitle(strTitle);
+
+        this->setStatusbarCurrent("Loading " + quote(strTitle) + HELLIP);
+
         this->enableViewTypeActions(false);
         // Disable all edit actions; they will only get re-enabled when the "selected" signal comes in.
         this->enableEditActions(0, 0);
@@ -637,17 +657,40 @@ ElissoApplicationWindow::onLoadingFolderView(ElissoFolderView &view)
 void
 ElissoApplicationWindow::onFolderViewLoaded(ElissoFolderView &view)
 {
-    PFSModelBase pDir = view.getDirectory();
-
-    Glib::ustring strTitle = "?";
-    if (pDir)
-    {
-        strTitle = pDir->getRelativePath();
-        Debug::Log(FOLDER_POPULATE_HIGH, string(__func__) + "(\"" + pDir->getRelativePath() + "\")");
-    }
-
-    this->setWindowTitle(strTitle);
     this->enableViewTypeActions(true);
+}
+
+/**
+ *  Updates the left status bar with the "current" text.
+ *  This is shared between all folder views, so the folder view calls
+ *  this after having composed a meaningful text.
+ */
+void
+ElissoApplicationWindow::setStatusbarCurrent(const Glib::ustring &str)
+{
+    _statusbarCurrent.pop();       // Remove previous message, if any.
+    _statusbarCurrent.push(str);
+}
+
+void
+ElissoApplicationWindow::setProgress(uint current, uint max)
+{
+    if (max && current <= max)
+        _progressBarThumbnailer.set_fraction((gdouble)current / (gdouble)max);
+    else
+        _progressBarThumbnailer.set_fraction(1);
+}
+
+/**
+ *  Updates the left status bar with the "current" text.
+ *  This is shared between all folder views, so the folder view calls
+ *  this after having composed a meaningful text.
+ */
+void
+ElissoApplicationWindow::setStatusbarFree(const Glib::ustring &str)
+{
+    _statusbarFree.pop();       // Remove previous message, if any.
+    _statusbarFree.push(str);
 }
 
 void

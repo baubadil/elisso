@@ -64,6 +64,8 @@ typedef std::shared_ptr<FSMountable> PFSMountable;
 typedef std::list<PFSModelBase> FSList;
 typedef std::shared_ptr<FSList> PFSList;
 
+typedef Glib::RefPtr<Gio::File> PGioFile;
+
 namespace Gdk { class Pixbuf; }
 typedef Glib::RefPtr<Gdk::Pixbuf> PPixbuf;
 
@@ -174,7 +176,7 @@ public:
      *  Public Information methods
      */
 
-    Glib::RefPtr<Gio::File> getGioFile()
+    PGioFile getGioFile()
     {
         return _pGioFile;
     }
@@ -256,9 +258,9 @@ protected:
 
     friend class FSContainer;
 
-    static PFSModelBase MakeAwake(Glib::RefPtr<Gio::File> pGioFile);
+    static PFSModelBase MakeAwake(PGioFile pGioFile);
     FSModelBase(FSType type,
-                Glib::RefPtr<Gio::File> pGioFile,
+                PGioFile pGioFile,
                 uint64_t cbSize);
     virtual ~FSModelBase() { };
 
@@ -270,7 +272,7 @@ protected:
     uint64_t                    _uID = 0;
     FSType                      _type = FSType::UNINITIALIZED;
     FSFlagSet                   _fl;
-    Glib::RefPtr<Gio::File>     _pGioFile;
+    PGioFile                    _pGioFile;
     std::string                 _strBasename;
     uint64_t                    _cbSize;
     Glib::RefPtr<Gio::Icon>     _pIcon;
@@ -304,9 +306,9 @@ public:
 protected:
     friend class FSContainer;
 
-    static PFSFile Create(Glib::RefPtr<Gio::File> pGioFile,
+    static PFSFile Create(PGioFile pGioFile,
                           uint64_t cbSize);
-    FSFile(Glib::RefPtr<Gio::File> pGioFile,
+    FSFile(PGioFile pGioFile,
            uint64_t cbSize);
     virtual ~FSFile();
 
@@ -415,8 +417,8 @@ protected:
     friend class FSModelBase;
     friend class FSContainer;
 
-    FSDirectory(Glib::RefPtr<Gio::File> pGioFile);
-    static PFSDirectory Create(Glib::RefPtr<Gio::File> pGioFile);
+    FSDirectory(PGioFile pGioFile);
+    static PFSDirectory Create(PGioFile pGioFile);
 };
 
 class RootDirectory;
@@ -500,8 +502,8 @@ public:
     PFSModelBase getTarget();
 
 protected:
-    FSSymlink(Glib::RefPtr<Gio::File> pGioFile);
-    static PFSSymlink Create(Glib::RefPtr<Gio::File> pGioFile);
+    FSSymlink(PGioFile pGioFile);
+    static PFSSymlink Create(PGioFile pGioFile);
 
     enum class State
     {
@@ -530,8 +532,8 @@ class FSSpecial : public FSModelBase
     friend class FSModelBase;
 
 protected:
-    FSSpecial(Glib::RefPtr<Gio::File> pGioFile);
-    static PFSSpecial Create(Glib::RefPtr<Gio::File> pGioFile);
+    FSSpecial(PGioFile pGioFile);
+    static PFSSpecial Create(PGioFile pGioFile);
 
     virtual FSTypeResolved getResolvedType() override
     {
@@ -551,8 +553,8 @@ class FSMountable : public FSModelBase
     friend class FSModelBase;
 
 protected:
-    FSMountable(Glib::RefPtr<Gio::File> pGioFile);
-    static PFSMountable Create(Glib::RefPtr<Gio::File> pGioFile);
+    FSMountable(PGioFile pGioFile);
+    static PFSMountable Create(PGioFile pGioFile);
 
     virtual FSTypeResolved getResolvedType() override
     {

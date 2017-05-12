@@ -262,8 +262,13 @@ struct ElissoFolderView::Impl : public ProhibitCopy
     // Glib::Dispatcher                dispatcherPopulateDone;
     ViewPopulatedWorker             workerPopulated;
 
-    Glib::RefPtr<Gtk::ListStore>    pListStore;
-    PFSList                         pllFolderContents;
+    PFSList                         pllFolderContents;      // This includes hidden items.
+    Glib::RefPtr<Gtk::ListStore>    pListStore;             // The model, without hidden items.
+    size_t                          cFolders,
+                                    cFiles,
+                                    cImageFiles,
+                                    cTotal;
+
     Glib::RefPtr<Gtk::IconTheme>    pIconTheme;
 
     std::shared_ptr<Gtk::Menu>      pPopupMenu;
@@ -273,6 +278,9 @@ struct ElissoFolderView::Impl : public ProhibitCopy
     PProgressDialog                 pProgressDialog;
 
     Thumbnailer                     thumbnailer;
+    uint                            cToThumbnail;
+    uint                            cThumbnailed;
+    sigc::connection                connThumbnailProgressTimer;
 
     // This is a map which allows us to look up rows quickly for efficient removal of items by name.
     std::map<std::string, Gtk::TreeRowReference> mapRowReferences;
@@ -280,6 +288,22 @@ struct ElissoFolderView::Impl : public ProhibitCopy
     Impl()
         : pIconTheme(Gtk::IconTheme::get_default())
     { }
+
+    ~Impl()
+    {
+        // Just in case the thumbnailer is running.
+        connThumbnailProgressTimer.disconnect();
+    }
+
+    void clearModel()
+    {
+        pListStore->clear();
+        pllFolderContents = nullptr;
+        cFolders = 0;
+        cFiles = 0;
+        cImageFiles = 0;
+        cTotal = 0;
+    }
 };
 
 
@@ -489,8 +513,7 @@ ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
             setViewMode(_modeBeforeError);
 
         // Remove all old data, if any.
-        _pImpl->pListStore->clear();
-        _pImpl->pllFolderContents = nullptr;
+        _pImpl->clearModel();
 
         _pImpl->thumbnailer.stop();
 
@@ -509,6 +532,24 @@ ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
         rc = true;
 
         dumpStack();
+
+        Glib::ustring strFree;
+        PGioFile pGioFile;
+        if (    (_pDir)
+             && ((pGioFile = _pDir->getGioFile()))
+           )
+        {
+            try
+            {
+                Glib::RefPtr<Gio::FileInfo> pInfo = pGioFile->query_filesystem_info("*");
+                auto z = pInfo->get_attribute_uint64("filesystem::free");
+                strFree = formatBytes(z) + " free";
+            }
+            catch (...)
+            {
+            }
+        }
+        _mainWindow.setStatusbarFree(strFree);
     }
 
     _mainWindow.enableBackForwardActions();
@@ -537,14 +578,14 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
 
         Gtk::ListStore::iterator itSelect;
 
-        size_t  cFolders = 0,
-                cFiles = 0,
-                cImageFiles = 0;
-
         _pImpl->pllFolderContents = pResult->pllContents;
 
         // This sets the wait cursor.
         this->setState(ViewState::INSERTING);
+
+        // Reset the thumbnailer count for the progress bar. insertFile() increments it for each image file.
+        _pImpl->cToThumbnail = 0;
+        _pImpl->cThumbnailed = 0;
 
         /*
          * Insert all the files and collect some statistics.
@@ -552,32 +593,36 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
         for (auto &pFS : *_pImpl->pllFolderContents)
         {
             auto it = this->insertFile(pFS);
-
-            if (_pImpl->pPopulateThread->shouldBeSelected(pFS))
-                itSelect = it;
-
-            switch (pFS->getResolvedType())
+            if (it)
             {
-                case FSTypeResolved::DIRECTORY:
-                case FSTypeResolved::SYMLINK_TO_DIRECTORY:
-                    ++cFolders;
-                break;
+                ++_pImpl->cTotal;
 
-                case FSTypeResolved::FILE:
-                case FSTypeResolved::SYMLINK_TO_FILE:
-                    ++cFiles;
-                    if (_pImpl->thumbnailer.isImageFile(pFS))
-                        ++cImageFiles;
-                break;
+                if (_pImpl->pPopulateThread->shouldBeSelected(pFS))
+                    itSelect = it;
 
-                default:
+                switch (pFS->getResolvedType())
+                {
+                    case FSTypeResolved::DIRECTORY:
+                    case FSTypeResolved::SYMLINK_TO_DIRECTORY:
+                        ++_pImpl->cFolders;
+                    break;
 
-                break;
+                    case FSTypeResolved::FILE:
+                    case FSTypeResolved::SYMLINK_TO_FILE:
+                        ++_pImpl->cFiles;
+                        if (_pImpl->thumbnailer.isImageFile(pFS))
+                            ++_pImpl->cImageFiles;
+                    break;
+
+                    default:
+
+                    break;
+                }
             }
         }
 
         // This does not yet connect the model, since we haven't set the state to populated yet.
-        if (cImageFiles)
+        if (_pImpl->cImageFiles)
             this->setViewMode(FolderViewMode::ICONS);
         else
             this->setViewMode(FolderViewMode::LIST);
@@ -644,6 +689,25 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
                 _pImpl->pMonitor->stopWatching(*pOther);
             _pImpl->pMonitor->startWatching(*pCnr);
         }
+
+        // The folder view may have inserted a lot of icons and got the thumbnailer going.
+        // If so, begin a timer to update the thumbnailer progress bar until it's done.
+        Debug::Log(THUMBNAILER, "cToThumbnail: " + to_string(_pImpl->cToThumbnail));
+        if (_pImpl->cToThumbnail)
+        {
+            _pImpl->connThumbnailProgressTimer = Glib::signal_timeout().connect([this]() -> bool
+            {
+                Debug::Log(THUMBNAILER, "cThumbnailed: " + to_string(_pImpl->cThumbnailed));
+                if (!_pImpl->thumbnailer.isBusy())
+                {
+                    _mainWindow.setProgress(_pImpl->cToThumbnail, _pImpl->cToThumbnail);
+                    return false; // disconnect
+                }
+
+                _mainWindow.setProgress(_pImpl->cThumbnailed, _pImpl->cToThumbnail);
+                return true; // keep going
+            }, 300);
+        }
     }
 }
 
@@ -661,12 +725,16 @@ ElissoFolderView::insertFile(PFSModelBase pFS)
 
         // pFile must always be set first because the sort function relies on it;
         // the sort function gets triggered AS SOON AS cols._colFilename is set.
-        row[cols._colPFile] = pFS;
         const std::string &strBasename = pFS->getBasename();
+        row[cols._colPFile] = pFS;
         row[cols._colFilename] = strBasename;
         row[cols._colSize] = pFS->getFileSize();
-        row[cols._colIconSmall] = loadIcon(it, pFS, ICON_SIZE_SMALL);
-        row[cols._colIconBig] = loadIcon(it, pFS, ICON_SIZE_BIG);
+        bool fThumbnailing = false;
+        row[cols._colIconSmall] = loadIcon(it, pFS, ICON_SIZE_SMALL, &fThumbnailing);
+        row[cols._colIconBig] = loadIcon(it, pFS, ICON_SIZE_BIG, nullptr);
+
+        if (fThumbnailing)
+            ++_pImpl->cToThumbnail;
 
         auto t = pFS->getResolvedType();
 //                 row[cols._colTypeResolved] = t;
@@ -818,8 +886,8 @@ void ElissoFolderView::setNotebookTabTitle()
         strTitle = _pDir->getBasename();
         // set_max_width_chars doesn't work with ELLIPSIZE_MIDDLE so do it like this.
         uint maxChars = strTitle.length();
-        if (maxChars < 20)
-            maxChars = 20;
+        if (maxChars < 5)
+            maxChars = 5;
         else if (maxChars > 50)
             maxChars = 50;
         _labelNotebookPage.set_width_chars(maxChars);
@@ -832,19 +900,7 @@ void ElissoFolderView::setNotebookTabTitle()
 }
 
 /**
- *  The view state is one of the following:
- *
- *   -- POPULATING: setDirecotry() has been called, and a populate thread is running in
- *      the background. All calls are valid during this time, including another setDirectory()
- *      (which will kill the existing populate thread).
- *
- *   -- POPULATED: the populate thread was successful, and the contents of _pDir are being
- *      displayed.
- *
- *   -- ERROR: an error occured. This hides the tree or icon view containers and displays
- *      the error message instead. The only way to get out of this state is to call
- *      setDirectory() to try and display a directory again.
- *
+ *  Sets a new state for the view.
  */
 void
 ElissoFolderView::setState(ViewState s)
@@ -869,13 +925,15 @@ ElissoFolderView::setState(ViewState s)
 
                 _pLoading = Gtk::manage(new Gtk::EventBox);
                 auto pLabel = Gtk::manage(new Gtk::Label());
-                pLabel->set_markup("<b>Loading...</b>");
+                pLabel->set_markup("<big><b>Loading" + HELLIP + "</b></big> ");
                 auto pSpinner = Gtk::manage(new Gtk::Spinner);
                 pSpinner->set_size_request(32, 32);
                 auto pBox = Gtk::manage(new Gtk::Box());
                 pBox->pack_start(*pLabel);
                 pBox->pack_start(*pSpinner);
                 _pLoading->add(*pBox);
+                _pLoading->property_margin_left() = 30;
+                _pLoading->property_margin_top() = 40;
                 _pLoading->property_halign() = Gtk::Align::ALIGN_START;
                 _pLoading->property_valign() = Gtk::Align::ALIGN_START;
 
@@ -886,6 +944,7 @@ ElissoFolderView::setState(ViewState s)
                 this->setWaitCursor(Cursor::WAIT_PROGRESS);
 
                 _mainWindow.onLoadingFolderView(*this);
+                        // this sets the status bar text
             }
             break;
 
@@ -901,6 +960,8 @@ ElissoFolderView::setState(ViewState s)
                 this->setWaitCursor(Cursor::DEFAULT);
 
                 _mainWindow.onFolderViewLoaded(*this);
+
+                this->updateStatusbar(nullptr);
             }
             break;
 
@@ -1048,6 +1109,49 @@ ElissoFolderView::setError(Glib::ustring strError)
 }
 
 void
+ElissoFolderView::updateStatusbar(FileSelection *pSel)
+{
+    Glib::ustring str;
+    if (_pImpl->pllFolderContents)
+    {
+        if (_pImpl->cTotal)
+        {
+            str = formatNumber(_pImpl->cTotal) + " items in folder";
+            uint64_t z = 0;
+            FSList *pList = nullptr;
+
+            if (pSel && pSel->llAll.size())
+            {
+                if (pSel->llAll.size() == 1)
+                    str += ", " + quote(pSel->llAll.front()->getBasename()) + " selected";
+                else
+                    str += ", " + formatNumber(pSel->llAll.size()) + " selected";
+
+                if (pSel->llOthers.size())
+                    pList = &pSel->llOthers;
+            }
+            else if (_pImpl->pllFolderContents)
+                pList = &(*_pImpl->pllFolderContents);
+
+            if (pList)
+            {
+                PFSFile pFile;
+                for (auto &pFS : *pList)
+                {
+                    if ((pFile = pFS->getFile()))
+                        z += pFile->getFileSize();
+                }
+                str += " (" + formatBytes(z) + ")";
+            }
+        }
+        else
+            str = "Folder is empty";
+    }
+
+    _mainWindow.setStatusbarCurrent(str);
+}
+
+void
 ElissoFolderView::selectAll()
 {
     switch (this->_mode)
@@ -1104,7 +1208,7 @@ ElissoFolderView::onMouseButton3Pressed(GdkEventButton *pEvent,
 {
     auto &app = _mainWindow.getApplication();
 
-    Debug::Log(DEBUG_ALWAYS, string(__FUNCTION__) + "(): clickType = " + to_string((int)clickType));
+//     Debug::Log(DEBUG_ALWAYS, string(__FUNCTION__) + "(): clickType = " + to_string((int)clickType));
 
     auto pMenu = Gio::Menu::create();
 
@@ -1213,7 +1317,7 @@ ElissoFolderView::onMouseButton3Pressed(GdkEventButton *pEvent,
                     PAppInfo pAppInfo = it->second;
                     pMenuItem->signal_activate().connect([this, pMenuItem, pAppInfo]()
                     {
-                        Debug::Log(DEBUG_ALWAYS, pMenuItem->get_label());
+//                         Debug::Log(DEBUG_ALWAYS, pMenuItem->get_label());
                         this->openFile(nullptr, pAppInfo);
                     });
                 }
@@ -1570,7 +1674,8 @@ ElissoFolderView::connectModel(bool fConnect)
 PPixbuf
 ElissoFolderView::loadIcon(const Gtk::TreeModel::iterator& it,
                            PFSModelBase pFS,
-                           int size)
+                           int size,
+                           bool *pfThumbnailing)
 {
     Glib::RefPtr<Gdk::Pixbuf> pReturn;
 
@@ -1610,6 +1715,9 @@ ElissoFolderView::loadIcon(const Gtk::TreeModel::iterator& it,
                     Gtk::TreePath path(it);
                     auto pRowRef = std::make_shared<Gtk::TreeRowReference>(_pImpl->pListStore, path);
                     _pImpl->thumbnailer.enqueue(pFile, pFormat, pRowRef);
+
+                    if (pfThumbnailing)
+                        *pfThumbnailing = true;
                 }
             }
     }
@@ -1629,77 +1737,7 @@ ElissoFolderView::onThumbnailReady()
     row[cols._colIconSmall] = pThumbnail->ppbIconSmall;
     row[cols._colIconBig] = pThumbnail->ppbIconBig;
 
-}
-
-// PPixbuf
-// ElissoFolderView::cellDataFuncIcon(const Gtk::TreeModel::iterator& it,
-//                                    Gtk::TreeModelColumn<PPixbuf> &column,
-//                                    int iconSize)
-// {
-//     FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
-//
-//     Gtk::TreeModel::Row row = *it;
-//     PPixbuf pb1 = row[column];
-//     if (!pb1)
-//     {
-//         PFSModelBase pFS = row[cols._colPFile];
-//         row[column] = loadIcon(it, pFS, iconSize);
-//     }
-//
-//     return pb1;
-// }
-
-const std::string
-    strSuffixEB = " EB",
-    strSuffixPB = " PB",
-    strSuffixTB = " TB",
-    strSuffixGB = " GB",
-    strSuffixMB = " MB",
-    strSuffixKB = " KB",
-    strSuffixB = " bytes";
-
-Glib::ustring formatBytes(uint64_t u)
-{
-    const std::string *pSuffix = &strSuffixB;
-    double readable;
-    if (u >= 0x1000000000000000) // Exabyte
-    {
-        pSuffix = &strSuffixEB;
-        readable = (u >> 50);
-    }
-    else if (u >= 0x4000000000000) // Petabyte
-    {
-        pSuffix = &strSuffixPB;
-        readable = (u >> 40);
-    }
-    else if (u >= 0x10000000000) // Terabyte
-    {
-        pSuffix = &strSuffixTB;
-        readable = (u >> 30);
-    }
-    else if (u >= 0x40000000) // Gigabyte
-    {
-        pSuffix = &strSuffixGB;
-        readable = (u >> 20);
-    }
-    else if (u >= 0x100000) // Megabyte
-    {
-        pSuffix = &strSuffixMB;
-        readable = (u >> 10);
-    }
-    else if (u >= 0x400) // Kilobyte
-    {
-        pSuffix = &strSuffixKB;
-        readable = u;
-    }
-    else
-    {
-        return to_string(u) + strSuffixB;
-    }
-    // Divide by 1024 to get fractional value.
-    readable = (readable / 1024);
-    // Return formatted number with suffix
-    return Glib::ustring::format(std::fixed, std::setprecision(2), readable) + *pSuffix;
+    ++_pImpl->cThumbnailed;
 }
 
 /**
@@ -1845,7 +1883,7 @@ ElissoFolderView::onButtonPressedEvent(GdkEventButton *pEvent)
                         if (this->isSelected(path))
                         {
                             // Click on row that's selected: then show context even if it's whitespace.
-                            Debug::Log(DEBUG_ALWAYS, "row is selected");
+//                             Debug::Log(DEBUG_ALWAYS, "row is selected");
                             if (this->countSelectedRows() == 1)
                                 clickType = MouseButton3ClickType::SINGLE_ROW_SELECTED;
                             else
@@ -1853,7 +1891,7 @@ ElissoFolderView::onButtonPressedEvent(GdkEventButton *pEvent)
                         }
                         else
                         {
-                            Debug::Log(DEBUG_ALWAYS, "row is NOT selected");
+//                             Debug::Log(DEBUG_ALWAYS, "row is NOT selected");
                             if (    (_mode != FolderViewMode::LIST)
                                  || (!_treeView.is_blank_at_pos((int)pEvent->x, (int)pEvent->y))
                                )
@@ -2090,6 +2128,8 @@ ElissoFolderView::onSelectionChanged()
         FileSelection sel;
         this->getSelection(sel);
         _mainWindow.enableEditActions(sel.llFolders.size(), sel.llOthers.size());
+
+        updateStatusbar(&sel);
     }
 }
 

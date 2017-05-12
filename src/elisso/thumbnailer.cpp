@@ -136,7 +136,7 @@ struct Thumbnailer::Impl : WorkerResultQueue<PThumbnail>
         // Would love to have a vector here to make this easier but WorkerInputQueue is not copyable.
         paqPixbufLoaders = new WorkerInputQueue<PThumbnailTemp>[cPixbufLoaders];
 
-        Debug::Log(DEBUG_ALWAYS, "Thumbnailer: std::thread::hardware_concurrency=" + to_string(cHyperThreads) + " => " + to_string(cPixbufLoaders) + " JPEG threads");
+        Debug::Log(THUMBNAILER, "Thumbnailer: std::thread::hardware_concurrency=" + to_string(cHyperThreads) + " => " + to_string(cPixbufLoaders) + " JPEG threads");
     }
 
     ~Impl()
@@ -251,6 +251,26 @@ PThumbnail
 Thumbnailer::fetchResult()
 {
     return _pImpl->fetchResult();
+}
+
+/**
+ *  Returns true if the queues are not empty.
+ */
+bool
+Thumbnailer::isBusy()
+{
+    if (_pImpl->qFileReader_.size() > 0)
+        return true;
+    std::vector<WorkerInputQueue<PThumbnailTemp>*> vQueues;
+    for (uint u = 0;
+         u < _pImpl->cPixbufLoaders;
+         ++u)
+        if (_pImpl->paqPixbufLoaders[u].size() > 0)
+            return true;
+    if (_pImpl->qScalerIconBig.size() > 0)
+        return true;
+
+    return false;
 }
 
 /**

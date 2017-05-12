@@ -56,11 +56,17 @@ enum class FolderViewMode
 
 enum class ViewState
 {
-    UNDEFINED,
-    POPULATING,
-    INSERTING,
-    POPULATED,
-    ERROR
+    UNDEFINED,          // After initialization only.
+    POPULATING,         /* setDirectory() has been called, and a populate thread is running in
+                           the background. All calls are valid during this time, including another
+                           setDirectory() (which will kill the existing populate thread). */
+    INSERTING,          /* Temporary state after the populate thread has finished and items are being inserted
+                           into the tree/icon view's model. Since this has to happen on the GUI thread, this
+                           might block the GUI for a second. */
+    POPULATED,          /* The populate thread was successful, and the contents of _pDir are showing. */
+    ERROR               /* An error occured. This hides the tree or icon view containers and displays the
+                           error message instead. The only way to get out of this state is to call
+                           setDirectory() to try and display a directory again. */
 };
 
 class ElissoApplicationWindow;
@@ -138,6 +144,8 @@ public:
     void setViewMode(FolderViewMode m);
     void setError(Glib::ustring strError);
 
+    void updateStatusbar(FileSelection *pSel);
+
     /*
      *  Public selection methods
      */
@@ -185,7 +193,8 @@ private:
 
     PPixbuf loadIcon(const Gtk::TreeModel::iterator& it,
                      PFSModelBase pFS,
-                     int size);
+                     int size,
+                     bool *pfThumbnailing);
     void onThumbnailReady();
     PPixbuf cellDataFuncIcon(const Gtk::TreeModel::iterator& it,
                              Gtk::TreeModelColumn<PPixbuf> &column,

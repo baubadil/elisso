@@ -95,6 +95,8 @@ public:
 
     PThumbnail fetchResult();
 
+    bool isBusy();
+
     void stop();
 
 private:

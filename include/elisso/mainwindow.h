@@ -42,16 +42,23 @@ class ElissoApplication;
  *           |
  *           +- ElissoFolderTree (subclass of GtkScrolledWindow)
  *           |
- *           +- GtkNotebook
+ *           +- GtkBox (as parent of notebook and status bar)
  *               |
- *               +- ElissoFolderView (subclass of GtkScrolledWindow)
+ *               +- GtkNotebook
  *               |   |
- *               |   +- GtkTreeView (list view)
+ *               |   +- Tab: ElissoFolderView (subclass of GtkOverlay)
+ *               |   |   |
+ *               |   |   +- GtkScrolledWindow
+ *               |   |       |
+ *               |   |       +- GtkTreeView (list view)
+ *               |   |
+ *               |   +- Tab: ElissoFolderView (subclass of GtkOverlay)
+ *               |       |
+ *               |       +- GtkScrolledWindow
+ *               |           |
+ *               |           +- GtkTreeView (list view)
  *               |
- *               +- ElissoFolderView (subclass of GtkScrolledWindow)
- *                   |
- *                   +- GtkTreeView (list view)
- *
+ *               +- GtkStatusBar
  *
  *  There is only a constructor, no "create" method with a refptr, since
  *  the constructor adds the new instance to the GtkApplication behing
@@ -103,6 +110,11 @@ public:
 
     void onLoadingFolderView(ElissoFolderView &view);
     void onFolderViewLoaded(ElissoFolderView &view);
+
+    void setStatusbarCurrent(const Glib::ustring &str);
+    void setProgress(uint current, uint max);
+    void setStatusbarFree(const Glib::ustring &str);
+
     void selectInFolderTree(PFSModelBase pDir);
 
     void openFolderInTerminal(PFSModelBase pFS);
@@ -168,7 +180,14 @@ protected:
     Gtk::Box                        _mainVBox;
     Gtk::Paned                      _vPaned;
     ElissoFolderTree                _treeViewLeft;
+
+    Gtk::Box                        _boxForNotebookAndStatusBar;
     Gtk::Notebook                   _notebook;
+
+    Gtk::Grid                       _gridStatusBar;
+    Gtk::Statusbar                  _statusbarCurrent;
+    Gtk::ProgressBar                _progressBarThumbnailer;
+    Gtk::Statusbar                  _statusbarFree;
 };
 
 #endif // ELISSO_MAINWINDOW_H
