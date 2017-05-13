@@ -20,6 +20,13 @@ typedef Glib::RefPtr<Gio::SimpleAction> PSimpleAction;
 
 class ElissoApplication;
 
+enum class ShowHideOrNothing : uint8_t
+{
+    SHOW,
+    HIDE,
+    DO_NOTHING
+};
+
 
 /***************************************************************************
  *
@@ -112,7 +119,7 @@ public:
     void onFolderViewLoaded(ElissoFolderView &view);
 
     void setStatusbarCurrent(const Glib::ustring &str);
-    void setProgress(uint current, uint max);
+    void setThumbnailerProgress(uint current, uint max, ShowHideOrNothing shn);
     void setStatusbarFree(const Glib::ustring &str);
 
     void selectInFolderTree(PFSModelBase pDir);
@@ -178,16 +185,17 @@ protected:
                                     _fIsFullscreen = false;
 
     Gtk::Box                        _mainVBox;
-    Gtk::Paned                      _vPaned;
-    ElissoFolderTree                _treeViewLeft;
-
-    Gtk::Box                        _boxForNotebookAndStatusBar;
-    Gtk::Notebook                   _notebook;
-
-    Gtk::Grid                       _gridStatusBar;
-    Gtk::Statusbar                  _statusbarCurrent;
-    Gtk::ProgressBar                _progressBarThumbnailer;
-    Gtk::Statusbar                  _statusbarFree;
+    Gtk::Toolbar                        _toolbar;
+    Gtk::Paned                          _vPaned;
+    ElissoFolderTree                        _treeViewLeft;
+    Gtk::Box                                _boxForNotebookAndStatusBar;
+    Gtk::Notebook                               _notebook;
+    Gtk::Grid                                   _gridStatusBar;
+    Gtk::Statusbar                              _statusbarCurrent;
+    Gtk::Grid                                   _gridThumbnailing;
+    Gtk::Statusbar                                  _statusbarThumbnailing;
+    Gtk::ProgressBar                                _progressBarThumbnailer;
+    Gtk::Statusbar                              _statusbarFree;
 };
 
 #endif // ELISSO_MAINWINDOW_H

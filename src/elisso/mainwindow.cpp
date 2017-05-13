@@ -34,22 +34,19 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app)      //
      *  Toolbar
      */
 
-    Gtk::Toolbar* pToolbar = new Gtk::Toolbar();
-    _mainVBox.pack_start(*pToolbar, Gtk::PACK_SHRINK);
-
-    pToolbar->append(*(_pButtonGoBack = makeToolButton("go-previous-symbolic", _pActionGoBack)));
-    pToolbar->append(*(_pButtonGoForward = makeToolButton("go-next-symbolic", _pActionGoForward)));
-    pToolbar->append(*(_pButtonGoParent = makeToolButton("go-up-symbolic", _pActionGoParent)));
-    pToolbar->append(*(_pButtonGoHome = makeToolButton("go-home-symbolic", _pActionGoHome)));
+    _toolbar.append(*(_pButtonGoBack = makeToolButton("go-previous-symbolic", _pActionGoBack)));
+    _toolbar.append(*(_pButtonGoForward = makeToolButton("go-next-symbolic", _pActionGoForward)));
+    _toolbar.append(*(_pButtonGoParent = makeToolButton("go-up-symbolic", _pActionGoParent)));
+    _toolbar.append(*(_pButtonGoHome = makeToolButton("go-home-symbolic", _pActionGoHome)));
 
     auto pSeparator = new Gtk::SeparatorToolItem();
     pSeparator->set_expand(true);
     pSeparator->set_draw(false);
-    pToolbar->append(*pSeparator);
+    _toolbar.append(*pSeparator);
 
-    pToolbar->append(*(_pButtonViewIcons = makeToolButton("view-grid-symbolic", _pActionViewIcons, true)));
-    pToolbar->append(*(_pButtonViewList = makeToolButton("view-list-symbolic", _pActionViewList)));
-    pToolbar->append(*(_pButtonViewRefresh = makeToolButton("view-refresh-symbolic", _pActionViewRefresh)));
+    _toolbar.append(*(_pButtonViewIcons = makeToolButton("view-grid-symbolic", _pActionViewIcons, true)));
+    _toolbar.append(*(_pButtonViewList = makeToolButton("view-list-symbolic", _pActionViewList)));
+    _toolbar.append(*(_pButtonViewRefresh = makeToolButton("view-refresh-symbolic", _pActionViewRefresh)));
 
     this->signal_action_enabled_changed().connect([this](const Glib::ustring &strAction, bool fEnabled)
     {
@@ -69,22 +66,30 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app)      //
             _pButtonViewRefresh->set_sensitive(fEnabled);
     });
 
-    _vPaned.set_position(200);
-    _vPaned.set_wide_handle(true);
-    _vPaned.add1(_treeViewLeft);
-    _vPaned.add2(_boxForNotebookAndStatusBar);
-
     _statusbarCurrent.set_hexpand(true);
+
     _progressBarThumbnailer.set_valign(Gtk::Align::ALIGN_CENTER);
     _progressBarThumbnailer.set_size_request(50, -1);
+    _gridThumbnailing.set_valign(Gtk::Align::ALIGN_CENTER);
+    _statusbarThumbnailing.push("Thumbnailing:");
+    _gridThumbnailing.add(_statusbarThumbnailing);
+    _gridThumbnailing.add(_progressBarThumbnailer);
+
     _statusbarFree.set_halign(Gtk::Align::ALIGN_END);
+
     _gridStatusBar.add(_statusbarCurrent);
-    _gridStatusBar.add(_progressBarThumbnailer);
+    _gridStatusBar.add(_gridThumbnailing);
     _gridStatusBar.add(_statusbarFree);
 
     _boxForNotebookAndStatusBar.pack_start(_notebook, true, true);
     _boxForNotebookAndStatusBar.pack_start(_gridStatusBar, false, false);
 
+    _vPaned.set_position(200);
+    _vPaned.set_wide_handle(true);
+    _vPaned.add1(_treeViewLeft);
+    _vPaned.add2(_boxForNotebookAndStatusBar);
+
+    _mainVBox.pack_start(_toolbar, Gtk::PACK_SHRINK);
     _mainVBox.pack_start(_vPaned);
 
 //     auto pStatusBar = new Gtk::Statusbar();
@@ -673,12 +678,33 @@ ElissoApplicationWindow::setStatusbarCurrent(const Glib::ustring &str)
 }
 
 void
-ElissoApplicationWindow::setProgress(uint current, uint max)
+ElissoApplicationWindow::setThumbnailerProgress(uint current, uint max, ShowHideOrNothing shn)
 {
-    if (max && current <= max)
+    if (max && current < max)
         _progressBarThumbnailer.set_fraction((gdouble)current / (gdouble)max);
     else
+    {
         _progressBarThumbnailer.set_fraction(1);
+        shn = ShowHideOrNothing::HIDE;
+    }
+
+    switch (shn)
+    {
+        case ShowHideOrNothing::SHOW:
+            _gridThumbnailing.show();
+        break;
+
+        case ShowHideOrNothing::HIDE:
+            Glib::signal_timeout().connect([this]() -> bool
+            {
+                _gridThumbnailing.hide();
+                return false; // disconnect
+            }, 500);
+        break;
+
+        case ShowHideOrNothing::DO_NOTHING:
+        break;
+    }
 }
 
 /**

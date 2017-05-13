@@ -695,16 +695,17 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
         Debug::Log(THUMBNAILER, "cToThumbnail: " + to_string(_pImpl->cToThumbnail));
         if (_pImpl->cToThumbnail)
         {
+            _mainWindow.setThumbnailerProgress(0, _pImpl->cToThumbnail, ShowHideOrNothing::SHOW);
             _pImpl->connThumbnailProgressTimer = Glib::signal_timeout().connect([this]() -> bool
             {
                 Debug::Log(THUMBNAILER, "cThumbnailed: " + to_string(_pImpl->cThumbnailed));
                 if (!_pImpl->thumbnailer.isBusy())
                 {
-                    _mainWindow.setProgress(_pImpl->cToThumbnail, _pImpl->cToThumbnail);
+                    _mainWindow.setThumbnailerProgress(_pImpl->cToThumbnail, _pImpl->cToThumbnail, ShowHideOrNothing::HIDE);
                     return false; // disconnect
                 }
 
-                _mainWindow.setProgress(_pImpl->cThumbnailed, _pImpl->cToThumbnail);
+                _mainWindow.setThumbnailerProgress(_pImpl->cThumbnailed, _pImpl->cToThumbnail, ShowHideOrNothing::DO_NOTHING);
                 return true; // keep going
             }, 300);
         }
