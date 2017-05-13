@@ -234,12 +234,12 @@ FSModelBase::FindPath(const std::string &strPath)
                     pCurrent = pCurrent->_pParent;
                     strForStat = getDirnameString(strForStat);
 
-                    Debug::Log(FILE_LOW, "Loop " + to_string(c) + ": collapsed \"" + pPrev->getRelativePath() + "/" + strParticle + "\" to " + quote(pCurrent->getRelativePath()));
+                    Debug::Log(FILE_LOW, "Loop " + to_string(c) + ": collapsed \"" + pPrev->getPath() + "/" + strParticle + "\" to " + quote(pCurrent->getPath()));
                 }
                 else if (!(pDir = pCurrent->getContainer()))
                     // Particle is a broken symlink.
                     break;
-//                     throw FSException("path particle \"" + pCurrent->getRelativePath() + "\" cannot have contents");
+//                     throw FSException("path particle \"" + pCurrent->getPath() + "\" cannot have contents");
             }
 
             if (!fCollapsing)
@@ -409,12 +409,12 @@ FSModelBase::isHidden()
  *  Expands the path without resorting to realpath(), which would hit the disk.
  */
 std::string
-FSModelBase::getRelativePath()
+FSModelBase::getPath() const
 {
     std::string strFullpath;
     if (_pParent)
     {
-        strFullpath = _pParent->getRelativePath();
+        strFullpath = _pParent->getPath();
         if (strFullpath != "/")
             strFullpath += '/';
         strFullpath += getBasename();
@@ -428,7 +428,7 @@ FSModelBase::getRelativePath()
 }
 
 Glib::ustring
-FSModelBase::getIcon()
+FSModelBase::getIcon() const
 {
     return _pIcon->to_string();
 }
@@ -453,7 +453,7 @@ FSModelBase::getFile()
  *  can be either a FSDirectory or a FSSymlink that points to one.
  */
 PFSModelBase
-FSModelBase::getParent()
+FSModelBase::getParent() const
 {
     if (_pParent)
         ;
@@ -471,7 +471,7 @@ FSModelBase::getParent()
  *  manually.
  */
 bool
-FSModelBase::isUnder(PFSDirectory pDir)
+FSModelBase::isUnder(PFSDirectory pDir) const
 {
     auto p = getParent();
     while (p)
@@ -490,7 +490,7 @@ const std::string g_strSymlink("symlink");
 const std::string g_strOther("other");
 
 const std::string&
-FSModelBase::describeType()
+FSModelBase::describeType() const
 {
     switch (_type)
     {
@@ -513,9 +513,9 @@ FSModelBase::describeType()
 }
 
 std::string
-FSModelBase::describe(bool fLong /* = false */ )
+FSModelBase::describe(bool fLong /* = false */ ) const
 {
-    return  describeType() + " \"" + (fLong ? getRelativePath() : getBasename()) + "\" (#" + to_string(_uID) + ")";
+    return  describeType() + " \"" + (fLong ? getPath() : getBasename()) + "\" (#" + to_string(_uID) + ")";
 }
 
 /**
@@ -666,7 +666,7 @@ FSFile::setThumbnail(uint32_t thumbsize, PPixbuf ppb)
  *  setThumbnail() gave us one fore.
  */
 PPixbuf
-FSFile::getThumbnail(uint32_t thumbsize)
+FSFile::getThumbnail(uint32_t thumbsize) const
 {
     PPixbuf ppb;
 
@@ -769,7 +769,7 @@ FSContainer::resolveDirectory()
         break;
     }
 
-    throw FSException("Cannot create directory under " + _refBase.getRelativePath());
+    throw FSException("Cannot create directory under " + _refBase.getPath());
 }
 
 /**
@@ -779,7 +779,7 @@ FSContainer::resolveDirectory()
  *  directory contents may have changed since.
  */
 PFSModelBase
-FSContainer::isAwake(ContentsLock &lock, const string &strParticle)
+FSContainer::isAwake(ContentsLock &lock, const string &strParticle) const
 {
     auto it = _pImpl->mapContents.find(strParticle);
     if (it != _pImpl->mapContents.end())
@@ -805,7 +805,7 @@ FSContainer::find(const string &strParticle)
         Debug::Log(FILE_MID, "Directory::find(\"" + strParticle + "\") => already awake " + pReturn->describe());
     else
     {
-        const string strPath(_refBase.getRelativePath() + "/" + strParticle);
+        const string strPath(_refBase.getPath() + "/" + strParticle);
         Debug::Enter(FILE_MID, "Directory::find(\"" + strPath + "\")");
 
         auto pGioFile = Gio::File::create_for_path(strPath);
@@ -826,7 +826,7 @@ FSContainer::find(const string &strParticle)
  *  See getContents() for what that means.
  */
 bool
-FSContainer::isPopulatedWithDirectories()
+FSContainer::isPopulatedWithDirectories() const
 {
     FSLock lock;
     return _refBase._fl.test(FSFlag::POPULATED_WITH_DIRECTORIES);
@@ -837,7 +837,7 @@ FSContainer::isPopulatedWithDirectories()
  *  See getContents() for what that means.
  */
 bool
-FSContainer::isCompletelyPopulated()
+FSContainer::isCompletelyPopulated() const
 {
     FSLock lock;
     return _refBase._fl.test(FSFlag::POPULATED_WITH_ALL);
@@ -1161,7 +1161,7 @@ FSContainer::createSubdirectory(const std::string &strName)
     {
         // To create a new subdirectory via Gio::File, create an empty Gio::File first
         // and then invoke make_directory on it.
-        std::string strPath = pDirParent->getRelativePath() + "/" + strName;
+        std::string strPath = pDirParent->getPath() + "/" + strName;
         Debug::Log(FILE_HIGH, string(__func__) + ": creating directory \"" + strPath + "\"");
 
         // The follwing cannot fail.
@@ -1205,7 +1205,7 @@ FSContainer::createEmptyDocument(const std::string &strName)
     {
         // To create a new subdirectory via Gio::File, create an empty Gio::File first
         // and then invoke make_directory on it.
-        std::string strPath = pDirParent->getRelativePath() + "/" + strName;
+        std::string strPath = pDirParent->getPath() + "/" + strName;
         Debug::Log(FILE_HIGH, string(__func__) + ": creating directory \"" + strPath + "\"");
 
         // The follwing cannot fail.
@@ -1235,9 +1235,9 @@ FSContainer::createEmptyDocument(const std::string &strName)
  *  Call this on the GUI thread after calling FSContainer::create*().
  */
 void
-FSContainer::notifyFileAdded(PFSModelBase pFS)
+FSContainer::notifyFileAdded(PFSModelBase pFS) const
 {
-    Debug::Enter(FILEMONITORS, string(__func__) + "(" + pFS->getRelativePath() + ")");
+    Debug::Enter(FILEMONITORS, string(__func__) + "(" + pFS->getPath() + ")");
     for (auto &pMonitor : _pImpl->llMonitors)
         pMonitor->onItemAdded(pFS);
     Debug::Leave();
@@ -1251,16 +1251,16 @@ FSContainer::notifyFileAdded(PFSModelBase pFS)
  *  an empty shell any more.
  */
 void
-FSContainer::notifyFileRemoved(PFSModelBase pFS)
+FSContainer::notifyFileRemoved(PFSModelBase pFS) const
 {
-    Debug::Enter(FILEMONITORS, string(__func__) + "(" + pFS->getRelativePath() + ")");
+    Debug::Enter(FILEMONITORS, string(__func__) + "(" + pFS->getPath() + ")");
     for (auto &pMonitor : _pImpl->llMonitors)
         pMonitor->onItemRemoved(pFS);
     Debug::Leave();
 }
 
 void
-FSContainer::notifyFileRenamed(PFSModelBase pFS, const std::string &strOldName, const std::string &strNewName)
+FSContainer::notifyFileRenamed(PFSModelBase pFS, const std::string &strOldName, const std::string &strNewName) const
 {
     Debug::Enter(FILEMONITORS, string(__func__) + "(" + strOldName + " -> " + strNewName + ")");
     for (auto &pMonitor : _pImpl->llMonitors)
@@ -1428,6 +1428,10 @@ FSSymlink::Create(Glib::RefPtr<Gio::File> pGioFile)
     return std::make_shared<Derived>(pGioFile);
 }
 
+/**
+ *  Returns the symlink target, or nullptr if the symlink is broken. This is not const
+ *  as the target may need to be resolved on the first call.
+ */
 PFSModelBase
 FSSymlink::getTarget()
 {
@@ -1444,7 +1448,7 @@ std::condition_variable_any g_condSymlinkResolved;
 FSSymlink::State
 FSSymlink::follow()
 {
-    Debug::Enter(FILE_LOW, "FSSymlink::follow(\"" + getRelativePath() + "\"");
+    Debug::Enter(FILE_LOW, "FSSymlink::follow(\"" + getPath() + "\"");
 
     // Make sure that only one thread resolves this link at a time. We
     // set the link's state to State::RESOLVING below while we're following,
@@ -1468,7 +1472,7 @@ FSSymlink::follow()
         _state = State::RESOLVING;
         lock.unlock();
 
-        string strParentDir = _pParent->getRelativePath();
+        string strParentDir = _pParent->getPath();
         Debug::Log(FILE_LOW, "parent = \"" + strParentDir + "\"");
 
         Glib::RefPtr<Gio::FileInfo> pInfo = _pGioFile->query_info(G_FILE_ATTRIBUTE_STANDARD_SYMLINK_TARGET,
@@ -1476,7 +1480,7 @@ FSSymlink::follow()
         std::string strContents = pInfo->get_symlink_target();
         if (strContents.empty())
         {
-            Debug::Log(FILE_MID, "readlink(\"" + getRelativePath() + "\") returned empty string -> BROKEN_SYMLINK");
+            Debug::Log(FILE_MID, "readlink(\"" + getPath() + "\") returned empty string -> BROKEN_SYMLINK");
             lock.lock();
             _state = State::BROKEN;
         }

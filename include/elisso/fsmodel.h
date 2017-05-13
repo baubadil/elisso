@@ -181,17 +181,22 @@ public:
         return _pGioFile;
     }
 
-    const std::string& getBasename()
+    std::string getURI() const
+    {
+        return _pGioFile->get_uri();
+    }
+
+    const std::string& getBasename() const
     {
         return _strBasename;
     }
 
-    uint64_t getFileSize()
+    uint64_t getFileSize() const
     {
         return _cbSize;
     }
 
-    Glib::ustring getIcon();
+    Glib::ustring getIcon() const;
 
     FSType getType() const
     {
@@ -200,7 +205,7 @@ public:
 
     virtual FSTypeResolved getResolvedType() = 0;
 
-    bool hasFlag(FSFlag f)
+    bool hasFlag(FSFlag f) const
     {
         return _fl.test(f);
     }
@@ -230,16 +235,14 @@ public:
 
     bool isHidden();
 
-    std::string getRelativePath();
-    std::string getAbsolutePath(bool fThrow = false);
-    std::string getFormattedPath();
+    std::string getPath() const;
 
-    PFSModelBase getParent();
+    PFSModelBase getParent() const;
 
-    bool isUnder(PFSDirectory pDir);
+    bool isUnder(PFSDirectory pDir) const;
 
-    const std::string& describeType();
-    std::string describe(bool fLong = false);
+    const std::string& describeType() const;
+    std::string describe(bool fLong = false) const;
 
     /*
      *  Public operation methods
@@ -301,7 +304,7 @@ public:
     }
 
     void setThumbnail(uint32_t thumbsize, PPixbuf ppb);
-    PPixbuf getThumbnail(uint32_t thumbsize);
+    PPixbuf getThumbnail(uint32_t thumbsize) const;
 
 protected:
     friend class FSContainer;
@@ -351,9 +354,9 @@ public:
 
     PFSModelBase find(const std::string &strParticle);
 
-    bool isPopulatedWithDirectories();
+    bool isPopulatedWithDirectories() const;
 
-    bool isCompletelyPopulated();
+    bool isCompletelyPopulated() const;
 
     void unsetPopulated();
 
@@ -365,9 +368,9 @@ public:
     PFSDirectory createSubdirectory(const std::string &strName);
     PFSFile createEmptyDocument(const std::string &strName);
 
-    void notifyFileAdded(PFSModelBase pFS);
-    void notifyFileRemoved(PFSModelBase pFS);
-    void notifyFileRenamed(PFSModelBase pFS, const std::string &strOldName, const std::string &strNewName);
+    void notifyFileAdded(PFSModelBase pFS) const;
+    void notifyFileRemoved(PFSModelBase pFS) const;
+    void notifyFileRenamed(PFSModelBase pFS, const std::string &strOldName, const std::string &strNewName) const;
 
 protected:
     friend class FSModelBase;
@@ -381,7 +384,7 @@ protected:
 
     void addChild(ContentsLock &lock, PFSModelBase p);
     void removeChild(ContentsLock &lock, PFSModelBase p);
-    PFSModelBase isAwake(ContentsLock &lock, const std::string &strParticle);
+    PFSModelBase isAwake(ContentsLock &lock, const std::string &strParticle) const;
 
     struct Impl;
     Impl                *_pImpl;

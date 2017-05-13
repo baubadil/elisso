@@ -305,7 +305,7 @@ ElissoFolderTree::select(PFSModelBase pDir)
     if (!pDir)
         return;
 
-    Debug::Enter(FOLDER_POPULATE_HIGH, string(__func__) + "(" + pDir->getRelativePath() + ")");
+    Debug::Enter(FOLDER_POPULATE_HIGH, string(__func__) + "(" + pDir->getPath() + ")");
     PFSModelBase pSelectRoot;
     Gtk::TreeModel::iterator itRoot;
 
@@ -335,8 +335,8 @@ ElissoFolderTree::select(PFSModelBase pDir)
         // an item into the tree if it's not there yet; the "expanded" signal that gets fired will then populate the
         // tree nodes with the remaining items and "add first" subfolders as if they had been expanded manually.
 
-        std::string strDir = pDir->getRelativePath();                   // $(HOME)/dir1/dir2/dir3
-        std::string strRoot = pSelectRoot->getRelativePath();           // $(HOME)
+        std::string strDir = pDir->getPath();                   // $(HOME)/dir1/dir2/dir3
+        std::string strRoot = pSelectRoot->getPath();           // $(HOME)
         if (strDir.length() <= strRoot.length())
         {
             itSelect = itRoot;
@@ -347,7 +347,7 @@ ElissoFolderTree::select(PFSModelBase pDir)
         {
             std::string strRestOfDir = strDir.substr(strRoot.length() + 1); //         dir1/dir2/dir3
 
-            Debug::Log(FOLDER_POPULATE_HIGH, "ElissoFolderTree: selected " + pDir->getRelativePath() + ", rest of root: " + strRestOfDir);
+            Debug::Log(FOLDER_POPULATE_HIGH, "ElissoFolderTree: selected " + pDir->getPath() + ", rest of root: " + strRestOfDir);
 
             FolderTreeModelColumns &cols = FolderTreeModelColumns::Get();
 
@@ -444,7 +444,7 @@ ElissoFolderTree::spawnPopulate(const Gtk::TreeModel::iterator &it)
         FSContainer *pDir2 = pDir->getContainer();
         if (pDir2)
         {
-            Debug::Log(FOLDER_POPULATE_HIGH, "POPULATING TREE \"" + ((pDir2) ? pDir->getRelativePath() : "NULL") + "\"");
+            Debug::Log(FOLDER_POPULATE_HIGH, "POPULATING TREE \"" + ((pDir2) ? pDir->getPath() : "NULL") + "\"");
 
             (*it)[cols._colState] = TreeNodeState::POPULATING;
 
@@ -497,7 +497,7 @@ ElissoFolderTree::onPopulateDone()
     // Fetch the SubtreePopulated result from the queue.
     PSubtreePopulated pSubtreePopulated = this->_pImpl->workerSubtreePopulated.fetchResult();
 
-    Debug::Log(FOLDER_POPULATE_HIGH, "ElissoFolderTree::onPopulateDone(\"" + pSubtreePopulated->_pDirOrSymlink->getRelativePath() + "\")");
+    Debug::Log(FOLDER_POPULATE_HIGH, "ElissoFolderTree::onPopulateDone(\"" + pSubtreePopulated->_pDirOrSymlink->getPath() + "\")");
 
     // Turn off sorting before inserting a lot of items. This can really slow things down exponentially otherwise.
     _pImpl->pTreeStore->set_sort_column(Gtk::TreeSortable::DEFAULT_UNSORTED_COLUMN_ID,
@@ -575,10 +575,10 @@ ElissoFolderTree::addMonitor(Gtk::TreeModel::iterator it)
     {
         PFolderTreeMonitor pMonitor = row[cols._colPMonitor];
         if (pMonitor)
-            Debug::Log(FILEMONITORS, string(__func__) + ": " + pFSMonitored->getRelativePath() + " already has a monitor");
+            Debug::Log(FILEMONITORS, string(__func__) + ": " + pFSMonitored->getPath() + " already has a monitor");
         else
         {
-            Debug::Log(FILEMONITORS, string(__func__) + ": adding for " + pFSMonitored->getRelativePath());
+            Debug::Log(FILEMONITORS, string(__func__) + ": adding for " + pFSMonitored->getPath());
             auto pContainer = pFSMonitored->getContainer();
             if (pContainer)
             {
@@ -682,7 +682,7 @@ void ElissoFolderTree::onNodeSelected()
         {
             const FolderTreeModelColumns &cols = FolderTreeModelColumns::Get();
             PFSModelBase pDir = (*it)[cols._colPDir];
-            Debug::Log(FOLDER_POPULATE_LOW, "Selected: " + pDir->getRelativePath());
+            Debug::Log(FOLDER_POPULATE_LOW, "Selected: " + pDir->getPath());
             if (pDir)
             {
                 auto pActiveFolderView = _mainWindow.getActiveFolderView();
@@ -705,7 +705,7 @@ ElissoFolderTree::onNodeExpanded(const Gtk::TreeModel::iterator &it,
 {
     const FolderTreeModelColumns &cols = FolderTreeModelColumns::Get();
     PFSModelBase pDir = (*it)[cols._colPDir];
-    Debug::Log(FOLDER_POPULATE_HIGH, "Expanded: " + pDir->getRelativePath());
+    Debug::Log(FOLDER_POPULATE_HIGH, "Expanded: " + pDir->getPath());
 
     switch ((*it)[cols._colState])
     {

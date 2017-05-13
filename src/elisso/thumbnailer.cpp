@@ -347,7 +347,7 @@ void Thumbnailer::fileReaderThread()
 
         if (pThumbnailIn->pFormat)
         {
-            string strPath = pThumbnailIn->pFile->getRelativePath();
+            string strPath = pThumbnailIn->pFile->getPath();
             std::shared_ptr<FileContents> pFileContents = make_shared<FileContents>(strPath);
 
             auto pThumbnailTemp = make_shared<ThumbnailTemp>(pThumbnailIn,

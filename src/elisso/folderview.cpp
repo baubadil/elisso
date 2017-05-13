@@ -476,10 +476,10 @@ ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
         // Push the new path into the history.
         if (fl.test(SetDirectoryFlag::PUSH_TO_HISTORY))
         {
-            Debug::Log(FOLDER_STACK, string(__func__) + "(): SetDirectoryFlag::PUSH_TO_HISTORY is set: pushing new " + _pDir->getRelativePath());
+            Debug::Log(FOLDER_STACK, string(__func__) + "(): SetDirectoryFlag::PUSH_TO_HISTORY is set: pushing new " + _pDir->getPath());
             if (_pDir)
             {
-                auto strFull = _pDir->getRelativePath();
+                auto strFull = _pDir->getPath();
                 // Do not push if this is the same as the last item on the stack.
                 if (    (!_aPathHistory.size())
                      || (_aPathHistory.back() != strFull)
@@ -521,7 +521,7 @@ ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
         if (pWatching)
             _pImpl->pMonitor->stopWatching(*pWatching);
 
-        Debug::Log(FOLDER_POPULATE_HIGH, "POPULATING LIST \"" + _pDir->getRelativePath() + "\"");
+        Debug::Log(FOLDER_POPULATE_HIGH, "POPULATING LIST \"" + _pDir->getPath() + "\"");
 
         _pImpl->pPopulateThread = PopulateThread::Create(this->_pDir,
                                                          this->_pImpl->workerPopulated,
@@ -574,7 +574,7 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
         ;
     else
     {
-        Debug::Log(FOLDER_POPULATE_LOW, "ElissoFolderView::onPopulateDone(\"" + _pDir->getRelativePath() + "\")");
+        Debug::Log(FOLDER_POPULATE_LOW, "ElissoFolderView::onPopulateDone(\"" + _pDir->getPath() + "\")");
 
         Gtk::ListStore::iterator itSelect;
 
@@ -1447,7 +1447,7 @@ ElissoFolderView::openFile(PFSModelBase pFS,        //!< in: file or folder to o
                 if (pAppInfo2)
                     pAppInfo2->launch(pFS->getGioFile());
                 else
-                    _mainWindow.errorBox("Cannot determine default application for file \"" + pFS->getRelativePath() + "\"");
+                    _mainWindow.errorBox("Cannot determine default application for file \"" + pFS->getPath() + "\"");
             }
         }
         break;
@@ -2113,7 +2113,7 @@ ElissoFolderView::onPathActivated(const Gtk::TreeModel::Path &path)
     PFSModelBase pFS = row[cols._colPFile];
     if (pFS)
     {
-        Debug::Log(FOLDER_POPULATE_HIGH, string(__func__) + "(\"" + pFS->getRelativePath() + "\")");
+        Debug::Log(FOLDER_POPULATE_HIGH, string(__func__) + "(\"" + pFS->getPath() + "\")");
         this->openFile(pFS, {});
     }
 }
@@ -2145,7 +2145,7 @@ ElissoFolderView::onSelectionChanged()
 void
 FolderViewMonitor::onItemAdded(PFSModelBase &pFS) /* override */
 {
-    Debug::Enter(FILEMONITORS, string(__func__) + "(" + pFS->getRelativePath() + ")");
+    Debug::Enter(FILEMONITORS, string(__func__) + "(" + pFS->getPath() + ")");
     _view.insertFile(pFS);
     Debug::Leave();
 }
@@ -2154,7 +2154,7 @@ FolderViewMonitor::onItemAdded(PFSModelBase &pFS) /* override */
 void
 FolderViewMonitor::onItemRemoved(PFSModelBase &pFS) /* override */
 {
-    Debug::Enter(FILEMONITORS, string(__func__) + "(" + pFS->getRelativePath() + ")");
+    Debug::Enter(FILEMONITORS, string(__func__) + "(" + pFS->getPath() + ")");
     _view.removeFile(pFS);
     Debug::Leave();
 }
@@ -2163,7 +2163,7 @@ FolderViewMonitor::onItemRemoved(PFSModelBase &pFS) /* override */
 void
 FolderViewMonitor::onItemRenamed(PFSModelBase &pFS, const std::string &strOldName, const std::string &strNewName) /* override */
 {
-    Debug::Enter(FILEMONITORS, string(__func__) + "(" + pFS->getRelativePath() + ")");
+    Debug::Enter(FILEMONITORS, string(__func__) + "(" + pFS->getPath() + ")");
     _view.renameFile(pFS, strOldName, strNewName);
     Debug::Leave();
 }

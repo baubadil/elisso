@@ -69,7 +69,7 @@ ContentType::Guess(PFSFile pFile)
         GetAll();
 
         gboolean fResultUncertain = false;
-        gchar *pGuess = g_content_type_guess(pFile->getRelativePath().c_str(),
+        gchar *pGuess = g_content_type_guess(pFile->getPath().c_str(),
                                              nullptr,
                                              0,
                                              &fResultUncertain);

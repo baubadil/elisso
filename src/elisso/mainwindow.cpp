@@ -637,7 +637,7 @@ ElissoApplicationWindow::onLoadingFolderView(ElissoFolderView &view)
 
         Glib::ustring strTitle = "?";
         if (pDir)
-            strTitle = pDir->getRelativePath();
+            strTitle = pDir->getPath();
 
         this->setWindowTitle(strTitle);
 
@@ -728,7 +728,7 @@ ElissoApplicationWindow::selectInFolderTree(PFSModelBase pDir)
 void
 ElissoApplicationWindow::openFolderInTerminal(PFSModelBase pFS)
 {
-    auto strPath = pFS->getRelativePath();
+    auto strPath = pFS->getPath();
     g_subprocess_new(G_SUBPROCESS_FLAGS_NONE,
                      NULL,
                      "open", "--screen", "auto", strPath.c_str(), nullptr);

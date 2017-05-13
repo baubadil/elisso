@@ -218,7 +218,7 @@ FileOperation::onItemProcessed(PFSModelBase pFS)
 {
     if (pFS)
     {
-        Debug::Log(FILE_HIGH, "File ops item processed: " + pFS->getRelativePath());
+        Debug::Log(FILE_HIGH, "File ops item processed: " + pFS->getPath());
 
         switch (_t)
         {
