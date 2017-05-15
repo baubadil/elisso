@@ -414,7 +414,6 @@ public:
     }
 
     static PFSDirectory GetHome();
-    static PFSDirectory GetRoot();
 
 protected:
     friend class FSModelBase;
@@ -428,19 +427,20 @@ class RootDirectory;
 typedef std::shared_ptr<RootDirectory> PRootDirectory;
 
 /**
- *  Specialization of the root directory, "/".
+ *  Specialization of root directories ("/") with a URI scheme.
+ *  Most commonly, "/" for the "file" scheme is the root of the
+ *  local file system, but we can instantiate all of the schemes
+ *  supported by Gio::File.
  */
 class RootDirectory : public FSDirectory
 {
-    friend class FSModelBase;
-    friend class FSDirectory;
+public:
+    static PRootDirectory Get(const std::string &strScheme);
 
 private:
-    RootDirectory();
+    RootDirectory(const std::string &strScheme, PGioFile pGioFile);
 
-    static PRootDirectory s_theRoot;
-
-    static PRootDirectory GetImpl();
+    std::string     _strScheme;
 };
 
 class CurrentDirectory;

@@ -69,6 +69,39 @@ enum class ViewState
                            setDirectory() to try and display a directory again. */
 };
 
+enum class FolderAction
+{
+    EDIT_COPY,
+    EDIT_CUT,
+    EDIT_PASTE,
+    EDIT_SELECT_ALL,
+    EDIT_OPEN_SELECTED,
+    FILE_CREATE_FOLDER,
+    FILE_CREATE_DOCUMENT,
+    EDIT_RENAME,
+    EDIT_TRASH,
+#ifdef USE_TESTFILEOPS
+    EDIT_TEST_FILEOPS,
+#endif
+    VIEW_ICONS,
+    VIEW_LIST,
+    VIEW_COMPACT,
+    VIEW_REFRESH,
+    GO_BACK,
+    GO_FORWARD,
+    GO_PARENT,
+    GO_HOME,
+    GO_COMPUTER,
+    GO_TRASH,
+};
+
+enum class CopyOrCut
+{
+    UNDEFINED,
+    COPY,
+    CUT
+};
+
 class ElissoApplicationWindow;
 
 /**
@@ -158,7 +191,11 @@ public:
     /*
      *  Public file action methods
      */
-    void handleAction(const std::string &strAction);
+
+    void handleAction(FolderAction action);
+
+    void clipboardCopyOrCutSelected(bool fCut);
+    void clipboardPaste();
 
     void openFile(PFSModelBase pFS,
                   PAppInfo pAppInfo);

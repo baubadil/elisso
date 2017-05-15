@@ -18,6 +18,21 @@
 #include "xwp/exec.h"
 
 
+Glib::ustring implode(const std::string &strGlue, const std::vector<Glib::ustring> v)
+{
+    Glib::ustring str;
+    for (const auto &s : v)
+        if (!s.empty())
+        {
+            if (!str.empty())
+                str += strGlue + s;
+            else
+                str += s;
+        }
+
+    return str;
+}
+
 /***************************************************************************
  *
  *  Public ElissoApplication methods
@@ -209,6 +224,8 @@ ElissoApplication::on_startup() /* override */
     addMenuItem(pSubSection, "Forward", ACTION_GO_FORWARD, "<Alt>Right");
     pSubSection = addMenuSection(pSubmenu);
     addMenuItem(pSubSection, "Home", ACTION_GO_HOME, "<Alt>Home");
+    addMenuItem(pSubSection, "Computer", ACTION_GO_COMPUTER);
+    addMenuItem(pSubSection, "Trash", ACTION_GO_TRASH);
 
     pSubmenu = Gio::Menu::create();
     pMenuBar->append_submenu("_Help", pSubmenu);
@@ -299,6 +316,7 @@ main(int argc, char *argv[])
 //                   | WINDOWHIERARCHY
 //                   | FILEMONITORS
 //                   | FOLDER_STACK
+                    | CLIPBOARD
                   ;
 
     auto app = ElissoApplication::create(argc,

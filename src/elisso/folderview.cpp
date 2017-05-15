@@ -285,6 +285,9 @@ struct ElissoFolderView::Impl : public ProhibitCopy
     // This is a map which allows us to look up rows quickly for efficient removal of items by name.
     std::map<std::string, Gtk::TreeRowReference> mapRowReferences;
 
+    // Clipboard buffer filled by copy/cut
+    vector<Glib::ustring>           vURIs;
+
     Impl()
         : pIconTheme(Gtk::IconTheme::get_default())
     { }
@@ -1338,59 +1341,208 @@ ElissoFolderView::onMouseButton3Pressed(GdkEventButton *pEvent,
  *  Some of these are asynchronous, most are not.
  */
 void
-ElissoFolderView::handleAction(const std::string &strAction)
+ElissoFolderView::handleAction(FolderAction action)
 {
     try
     {
-        if (strAction == ACTION_FILE_CREATE_FOLDER)
-            createSubfolderDialog();
-        else if (strAction == ACTION_FILE_CREATE_DOCUMENT)
-            createEmptyFileDialog();
-        else if (strAction == ACTION_EDIT_OPEN_SELECTED)
-            openFile(nullptr, {});
-        else if (strAction == ACTION_EDIT_SELECT_ALL)
-            selectAll();
-        else if (strAction == ACTION_EDIT_RENAME)
-            renameSelected();
-        else if (strAction == ACTION_EDIT_TRASH)
-            trashSelected();
+        switch (action)
+        {
+            case FolderAction::EDIT_COPY:
+                clipboardCopyOrCutSelected(false);       // not cut
+            break;
+
+            case FolderAction::EDIT_CUT:
+                clipboardCopyOrCutSelected(true);        // cut
+            break;
+
+            case FolderAction::EDIT_PASTE:
+                clipboardPaste();        // cut
+            break;
+
+            case FolderAction::EDIT_SELECT_ALL:
+                selectAll();
+            break;
+
+            case FolderAction::EDIT_OPEN_SELECTED:
+                openFile(nullptr, {});
+            break;
+
+            case FolderAction::FILE_CREATE_FOLDER:
+                createSubfolderDialog();
+            break;
+
+            case FolderAction::FILE_CREATE_DOCUMENT:
+                createEmptyFileDialog();
+            break;
+
+            case FolderAction::EDIT_RENAME:
+                renameSelected();
+            break;
+
+            case FolderAction::EDIT_TRASH:
+                trashSelected();
+            break;
+
 #ifdef USE_TESTFILEOPS
-        else if (strAction == ACTION_EDIT_TEST_FILEOPS)
-            testFileopsSelected();
+            case FolderAction::EDIT_TEST_FILEOPS:
+                testFileopsSelected();
+            break;
 #endif
-        else if (strAction == ACTION_VIEW_ICONS)
-            setViewMode(FolderViewMode::ICONS);
-        else if (strAction == ACTION_VIEW_LIST)
-            setViewMode(FolderViewMode::LIST);
-        else if (strAction == ACTION_VIEW_COMPACT)
-            setViewMode(FolderViewMode::COMPACT);
-        else if (strAction == ACTION_VIEW_REFRESH)
-            refresh();
-        else if (strAction == ACTION_GO_BACK)
-            goBack();
-        else if (strAction == ACTION_GO_FORWARD)
-            goForward();
-        else if (strAction == ACTION_GO_PARENT)
-        {
-            PFSModelBase pDir = _pDir->getParent();
-            if (pDir)
+
+            case FolderAction::VIEW_ICONS:
+                setViewMode(FolderViewMode::ICONS);
+            break;
+
+            case FolderAction::VIEW_LIST:
+                setViewMode(FolderViewMode::LIST);
+            break;
+
+            case FolderAction::VIEW_COMPACT:
+                setViewMode(FolderViewMode::COMPACT);
+            break;
+
+            case FolderAction::VIEW_REFRESH:
+                refresh();
+            break;
+
+            case FolderAction::GO_BACK:
+                goBack();
+            break;
+
+            case FolderAction::GO_FORWARD:
+                goForward();
+            break;
+
+            case FolderAction::GO_PARENT:
             {
-                setDirectory(pDir,  SetDirectoryFlag::SELECT_PREVIOUS | SetDirectoryFlag::PUSH_TO_HISTORY);
+                PFSModelBase pDir = _pDir->getParent();
+                if (pDir)
+                {
+                    setDirectory(pDir,  SetDirectoryFlag::SELECT_PREVIOUS | SetDirectoryFlag::PUSH_TO_HISTORY);
+                }
             }
+            break;
+
+            case FolderAction::GO_HOME:
+            {
+                auto pHome = FSDirectory::GetHome();
+                if (pHome)
+                    setDirectory(pHome, SetDirectoryFlag::PUSH_TO_HISTORY);
+            }
+            break;
+
+            case FolderAction::GO_COMPUTER:
+            {
+                auto pTrash = RootDirectory::Get("computer");
+                if (pTrash)
+                    setDirectory(pTrash, SetDirectoryFlag::PUSH_TO_HISTORY);
+            }
+            break;
+
+            case FolderAction::GO_TRASH:
+            {
+                auto pTrash = RootDirectory::Get("trash");
+                if (pTrash)
+                    setDirectory(pTrash, SetDirectoryFlag::PUSH_TO_HISTORY);
+            }
+            break;
         }
-        else if (strAction == ACTION_GO_HOME)
-        {
-            auto pHome = FSDirectory::GetHome();
-            if (pHome)
-                setDirectory(pHome, SetDirectoryFlag::PUSH_TO_HISTORY);
-        }
-        else
-            _mainWindow.errorBox("Not implemented yet");
     }
     catch(FSException &e)
     {
         _mainWindow.errorBox(e.what());
     }
+}
+
+void
+ElissoFolderView::clipboardCopyOrCutSelected(bool fCut)
+{
+    FileSelection sel;
+    if (getSelection(sel))
+    {
+        _pImpl->vURIs.clear();
+        for (auto &pFS : sel.llAll)
+            _pImpl->vURIs.push_back(pFS->getURI());
+
+        vector<Gtk::TargetEntry> vTargets;
+        vTargets.push_back(Gtk::TargetEntry(CLIPBOARD_TARGET_GNOME_COPIED_FILES));     // TODO others?
+        vTargets.push_back(Gtk::TargetEntry(CLIPBOARD_TARGET_UTF8_STRING));
+
+        auto pCB = Gtk::Clipboard::get();
+        pCB->set(   vTargets,
+                    [this, fCut](Gtk::SelectionData &selectionData, guint /* info */)
+                    {
+                        if (selectionData.get_target() == CLIPBOARD_TARGET_GNOME_COPIED_FILES)
+                        {
+                            // Format info courtesy of http://stackoverflow.com/questions/7339084/gtk-clipboard-copy-cut-paste-files
+                            selectionData.set(CLIPBOARD_TARGET_GNOME_COPIED_FILES,
+                                              Glib::ustring(fCut ? "cut" : "copy") + "\n" + implode("\n", _pImpl->vURIs));
+                        }
+                        else if (selectionData.get_target() == CLIPBOARD_TARGET_UTF8_STRING)
+                            selectionData.set(CLIPBOARD_TARGET_UTF8_STRING, implode(" ", _pImpl->vURIs));
+                    },
+                    [](){
+
+                    });
+
+        if (sel.llAll.size() == 1)
+        {
+            Glib::ustring str = quote(sel.llAll.front()->getBasename());
+            if (fCut)
+                _mainWindow.setStatusbarCurrent(str + " will be moved if you select the " + quote("Paste") + " command");
+            else
+                _mainWindow.setStatusbarCurrent(str + " will be copied if you select the " + quote("Paste") + " command");
+        }
+        else
+        {
+            if (fCut)
+                _mainWindow.setStatusbarCurrent(formatNumber(sel.llAll.size()) + " items will be moved if you select the " + quote("Paste") + " command");
+            else
+                _mainWindow.setStatusbarCurrent(formatNumber(sel.llAll.size()) + " items will be copied if you select the " + quote("Paste") + " command");
+        }
+    }
+}
+
+void ElissoFolderView::clipboardPaste()
+{
+    Glib::RefPtr<Gtk::Clipboard> pClip = Gtk::Clipboard::get();
+    pClip->request_contents(CLIPBOARD_TARGET_GNOME_COPIED_FILES, [this](const Gtk::SelectionData &selectionData)
+    {
+        try
+        {
+            Glib::ustring data = selectionData.get_data_as_string();
+            StringVector lines = explodeVector(data, "\n");
+            FSList llFiles;
+            if (lines.size())
+            {
+                CopyOrCut mode(CopyOrCut::UNDEFINED);
+                auto it = lines.begin();
+                auto cmd = *it;
+                if (cmd == "copy")
+                    mode = CopyOrCut::COPY;
+                else if (cmd == "cut")
+                    mode = CopyOrCut::CUT;
+                else
+                    throw FSException("Invalid command " + quote(cmd) + " in clipboard");
+
+                ++it;
+                while (it != lines.end())
+                {
+                    auto line = *it;
+                    Debug::Log(CLIPBOARD, "getting file for " + quote(line));
+                    auto pFS = FSModelBase::FindPath(line);
+                    ++it;
+                }
+            }
+
+            if (!llFiles.size())
+                throw FSException("Did not recognize clipboard format");
+        }
+        catch (exception &e)
+        {
+            _mainWindow.errorBox(e.what());
+        }
+    });
 }
 
 /**
@@ -2048,7 +2200,7 @@ ElissoFolderView::setListViewColumns()
 
 /**
  *  Fills the given FileSelection object with the selected items from the
- *  active icon or tree view.
+ *  active icon or tree view. Returns the total no. of item selected.
  */
 size_t
 ElissoFolderView::getSelection(FileSelection &sel)

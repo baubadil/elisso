@@ -14,6 +14,7 @@
 #include "xwp/debug.h"
 #include "xwp/stringhelp.h"
 #include "xwp/except.h"
+#include "xwp/regex.h"
 #include <mutex>
 #include <condition_variable>
 #include <atomic>
@@ -30,7 +31,6 @@
 
 std::atomic<std::uint64_t>  g_uFSID(1);
 
-PRootDirectory RootDirectory::s_theRoot = NULL;
 PCurrentDirectory CurrentDirectory::s_theCWD = NULL;
 
 
@@ -167,13 +167,33 @@ FSMonitorBase::stopWatching(FSContainer &cnr)
  *  This is the most common entry point into the file-system model. From here
  *  on up, you can iterate over folder contents or find more files.
  *
+ *  This supports URI prefixes like "file://" or "trash://" as far as Gio::File
+ *  recognizes them.
+ *
  *  This is thread-safe. This throws FSException if the path is invalid.
  */
 /* static */
 PFSModelBase
-FSModelBase::FindPath(const std::string &strPath)
+FSModelBase::FindPath(const std::string &strPath0)
 {
-    Debug::Enter(FILE_LOW, __func__ + string("(" + strPath + ")"));
+    Debug::Enter(FILE_LOW, __func__ + string("(" + strPath0 + ")"));
+
+    string strPath;
+    static Regex s_reScheme(R"i____(^([-+a-z]+)://(.*))i____");
+    RegexMatches aMatches;
+    string strScheme;
+    if (s_reScheme.matches(strPath0, aMatches))
+    {
+        strScheme = aMatches.get(1);
+        strPath = aMatches.get(2);
+    }
+    else
+    {
+        strScheme = "file";
+        strPath = strPath0;
+    }
+
+    Debug::Log(CLIPBOARD, string(__func__) + ": scheme=" + quote(strScheme) + ", path=" + quote(strPath));
 
     string strPathSplit;
     bool fAbsolute;
@@ -207,8 +227,11 @@ FSModelBase::FindPath(const std::string &strPath)
             if (!pCurrent)
             {
                 if (fAbsolute)
+                {
                     // First item on an absolute path must be a child of the root directory.
-                    pDir = RootDirectory::GetImpl()->getContainer();
+                    auto pRoot = RootDirectory::Get(strScheme);     // This throws on errors.
+                    pDir = pRoot->getContainer();
+                }
                 else
                 {
                     // First item on a relative path must be a child of the curdir.
@@ -297,6 +320,9 @@ FSModelBase::getContainer()
  *
  *  If this returns something, it is a dangling file object without an owner. You MUST call
  *  FSContainer::addChild() with the return value.
+ *
+ *  In any case, DO NOT CALL THIS FOR ROOT DIRECTORIES since this will mess up our internal
+ *  management. Use RootDirectory::Get() instead.
  */
 /* static */
 PFSModelBase
@@ -1314,34 +1340,70 @@ FSDirectory::GetHome()
     return nullptr;
 }
 
-PFSDirectory
-FSDirectory::GetRoot()
-{
-    return RootDirectory::GetImpl();
-}
-
-RootDirectory::RootDirectory()
-    : FSDirectory(Gio::File::create_for_path("/"))
+RootDirectory::RootDirectory(const std::string &strScheme, PGioFile pGioFile)
+    : FSDirectory(pGioFile),
+      _strScheme(strScheme)
 {
     _fl = FSFlag::IS_ROOT_DIRECTORY;
 }
 
+/**
+ *  Returns the root directory for the given URI scheme, e.g. "file" or "trash" or
+ *  "ftp". Throws on errors.
+ */
 /*static */
 PRootDirectory
-RootDirectory::GetImpl()
+RootDirectory::Get(const std::string &strScheme)        //<! in: URI scheme (e.g. "file")
 {
-    FSLock lock;
-    if (!s_theRoot)
-    {
-        // Class has a private constructor, so make_shared doesn't work without this hackery which derives a class from it.
-        class Derived : public RootDirectory { };
-        s_theRoot = make_shared<Derived>();
-        Debug::Log(FILE_MID, "RootDirectory::Get(): instantiated the root");
-    }
-    else
-        Debug::Log(FILE_MID, "RootDirectory::Get(): subsequent call, returning theRoot");
+    PRootDirectory pReturn;
 
-    return s_theRoot;
+    static Mutex                                    s_mutexRootDirectories;
+    static std::map<std::string, PRootDirectory>    s_mapRootDirectories;
+    Lock rLock(s_mutexRootDirectories);
+
+    auto it = s_mapRootDirectories.find(strScheme);
+    if (it != s_mapRootDirectories.end())
+        return it->second;
+
+    try
+    {
+        string strPath = strScheme + ":///";
+        auto pGioFile = Gio::File::create_for_uri(strPath);
+        // The above never fails; the following checks for whether this exists. Shouldn't
+        // be a problem for file:/// but who knows about webdav or trash or whatever else
+        // is available.
+        if (!pGioFile->query_exists())
+            throw FSException("Cannot get root directory for URI scheme " + quote(strScheme));
+
+        /* This nasty trickery is necessary to make std::make_shared work with a protected constructor. */
+        class Derived : public RootDirectory
+        {
+        public:
+            Derived(const std::string &strScheme, PGioFile pGioFile) : RootDirectory(strScheme, pGioFile) { }
+        };
+
+        pReturn = make_shared<Derived>(strScheme, pGioFile);
+        s_mapRootDirectories[strScheme] = pReturn;
+    }
+    catch (Gio::Error &e)
+    {
+        throw FSException(e.what());
+    }
+
+    return pReturn;
+
+
+//     if (!s_theRoot)
+//     {
+//         // Class has a private constructor, so make_shared doesn't work without this hackery which derives a class from it.
+//         class Derived : public RootDirectory { };
+//         s_theRoot = make_shared<Derived>();
+//         Debug::Log(FILE_MID, "RootDirectory::Get(): instantiated the root");
+//     }
+//     else
+//         Debug::Log(FILE_MID, "RootDirectory::Get(): subsequent call, returning theRoot");
+//
+//     return s_theRoot;
 }
 
 CurrentDirectory::CurrentDirectory()

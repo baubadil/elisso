@@ -20,6 +20,8 @@
 
 typedef std::shared_ptr<Gtk::TreeRowReference> PRowReference;
 
+Glib::ustring implode(const std::string &strGlue, const std::vector<Glib::ustring> v);
+
 #define USE_XICONVIEW
 // #define USE_TESTFILEOPS
 
@@ -41,6 +43,7 @@ const DebugFlag FOLDER_STACK            = (1 << 23);
 const DebugFlag THUMBNAILER             = (1 << 24);
 const DebugFlag WINDOWHIERARCHY         = (1 << 25);
 const DebugFlag FILEMONITORS            = (1 << 26);
+const DebugFlag CLIPBOARD               = (1 << 27);
 
 #define ICON_SIZE_SMALL     16
 #define ICON_SIZE_BIG       128
@@ -48,6 +51,9 @@ const DebugFlag FILEMONITORS            = (1 << 26);
 using namespace XWP;
 
 DEF_STRING(APPLICATION_NAME, "elisso");
+
+DEF_STRING(CLIPBOARD_TARGET_UTF8_STRING, "UTF8_STRING");
+DEF_STRING(CLIPBOARD_TARGET_GNOME_COPIED_FILES, "x-special/gnome-copied-files");
 
 DEF_STRING(TYPE_FILE, "File");
 DEF_STRING(TYPE_FOLDER, "Folder");
@@ -93,6 +99,8 @@ DEF_STRING(ACTION_GO_PARENT, "go-parent");
 DEF_STRING(ACTION_GO_BACK, "go-back");
 DEF_STRING(ACTION_GO_FORWARD, "go-forward");
 DEF_STRING(ACTION_GO_HOME, "go-home");
+DEF_STRING(ACTION_GO_COMPUTER, "go-computer");
+DEF_STRING(ACTION_GO_TRASH, "go-trash");
 DEF_STRING(ACTION_ABOUT, "about");
 
 DEF_STRING(SETTINGS_WINDOWPOS, "window-pos");

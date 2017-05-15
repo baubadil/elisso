@@ -31,6 +31,25 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app)      //
     this->set_icon(app.getIcon());
 
     /*
+     *  Clipboard
+     */
+
+    Glib::RefPtr<Gtk::Clipboard> pClip = Gtk::Clipboard::get();
+
+    pClip->signal_owner_change().connect([this](GdkEventOwnerChange*)
+    {
+        this->onClipboardChanged();
+    });
+
+//     std::vector<Gtk::TargetEntry> targets;
+// //     targets.push_back( Gtk::TargetEntry("example_custom_target") );
+//     targets.push_back( Gtk::TargetEntry("UTF8_STRING") );
+//
+//     pClip->set(targets,
+//                sigc::mem_fun(*this, &ElissoApplicationWindow::onClipboardGet),
+//                sigc::mem_fun(*this, &ElissoApplicationWindow::onClipboardClear));
+//
+    /*
      *  Toolbar
      */
 
@@ -395,6 +414,16 @@ ElissoApplicationWindow::initActionHandlers()
         this->handleViewAction(ACTION_GO_HOME);
     });
 
+    this->add_action(ACTION_GO_COMPUTER, [this]()
+    {
+        this->handleViewAction(ACTION_GO_COMPUTER);
+    });
+
+    this->add_action(ACTION_GO_TRASH, [this]()
+    {
+        this->handleViewAction(ACTION_GO_TRASH);
+    });
+
 
     /*
      *  Help menu
@@ -535,6 +564,27 @@ ElissoApplicationWindow::on_delete_event(GdkEventAny *ev) /* override */
 }
 
 /**
+ *  Called once on window creation and then via a signal callback whenever the
+ *  clipboard contents change. This updates whether the "paste" action is available.
+ */
+void ElissoApplicationWindow::onClipboardChanged()
+{
+    Glib::RefPtr<Gtk::Clipboard> pClip = Gtk::Clipboard::get();
+    pClip->request_targets([this](const vector<Glib::ustring> &vTargets)
+    {
+        bool fPaste = false;
+        for (auto &s : vTargets)
+            if (s == CLIPBOARD_TARGET_GNOME_COPIED_FILES)
+            {
+                fPaste = true;
+                break;
+            }
+
+        _pActionEditPaste->set_enabled(fPaste);
+    });
+}
+
+/**
  *  Closes the notebook tab for the given ElissoFolderView. If this is the last
  *  tab, it closes the entire ElissoApplicationWindow.
  */
@@ -604,7 +654,6 @@ ElissoApplicationWindow::enableEditActions(size_t cFolders, size_t cOtherFiles)
     _pActionEditOpenSelectedInTerminal->set_enabled(fSingleFolder);
     _pActionEditCopy->set_enabled(cTotal > 0);
     _pActionEditCut->set_enabled(cTotal > 0);
-    _pActionEditPaste->set_enabled(false);
     _pActionEditRename->set_enabled(cTotal == 1);
     _pActionEditTrash->set_enabled(cTotal > 0);
     _pActionEditProperties->set_enabled(cTotal == 1);
@@ -790,7 +839,39 @@ ElissoApplicationWindow::handleViewAction(const std::string &strAction)
                 this->openFolderInTerminal(pFS);
         }
         else
+        {
+            static std::map<string, FolderAction> mapActions =
+            {
+                { ACTION_EDIT_COPY, FolderAction::EDIT_COPY },
+                { ACTION_EDIT_CUT, FolderAction::EDIT_CUT },
+                { ACTION_EDIT_PASTE, FolderAction::EDIT_PASTE },
+                { ACTION_EDIT_SELECT_ALL, FolderAction::EDIT_SELECT_ALL },
+                { ACTION_EDIT_OPEN_SELECTED, FolderAction::EDIT_OPEN_SELECTED },
+                { ACTION_FILE_CREATE_FOLDER, FolderAction::FILE_CREATE_FOLDER },
+                { ACTION_FILE_CREATE_DOCUMENT, FolderAction::FILE_CREATE_DOCUMENT },
+                { ACTION_EDIT_RENAME, FolderAction::EDIT_RENAME },
+                { ACTION_EDIT_TRASH, FolderAction::EDIT_TRASH },
+#ifdef USE_TESTFILEOPS
+                { ACTION_EDIT_TEST_FILEOPS, FolderAction::EDIT_TEST_FILEOPS },
+#endif
+                { ACTION_VIEW_ICONS, FolderAction::VIEW_ICONS },
+                { ACTION_VIEW_LIST, FolderAction::VIEW_LIST },
+                { ACTION_VIEW_COMPACT, FolderAction::VIEW_COMPACT },
+                { ACTION_VIEW_REFRESH, FolderAction::VIEW_REFRESH },
+                { ACTION_GO_BACK, FolderAction::GO_BACK },
+                { ACTION_GO_FORWARD, FolderAction::GO_FORWARD },
+                { ACTION_GO_PARENT, FolderAction::GO_PARENT },
+                { ACTION_GO_HOME, FolderAction::GO_HOME },
+                { ACTION_GO_COMPUTER, FolderAction::GO_COMPUTER },
+                { ACTION_GO_TRASH, FolderAction::GO_TRASH },
+            };
+
             // Forward all others to currently active folder view.
-            pView->handleAction(strAction);
+            auto it = mapActions.find(strAction);
+            if (it != mapActions.end())
+                pView->handleAction(it->second);
+            else
+                this->errorBox("Action " + strAction + " not implemented yet");
+        }
     }
 }

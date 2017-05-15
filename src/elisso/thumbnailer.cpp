@@ -311,21 +311,6 @@ Thumbnailer::stop()
     }
 }
 
-string implode(const string &strGlue, const std::vector<Glib::ustring> v)
-{
-    string str;
-    for (const auto &s : v)
-        if (!s.empty())
-        {
-            if (!str.empty())
-                str += strGlue + s;
-            else
-                str += s;
-        }
-
-    return str;
-}
-
 /**
  *  First thread spawned by the constructor. This blocks on the primary
  *  queue that is fed by enqueue() and then creates a FileContents for

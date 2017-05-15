@@ -146,6 +146,8 @@ protected:
     virtual bool on_window_state_event(GdkEventWindowState*) override;
     virtual bool on_delete_event(GdkEventAny *) override;
 
+    void onClipboardChanged();
+
     ElissoApplication               &_app;
 
     PSimpleAction                   _pActionEditOpenSelected;
