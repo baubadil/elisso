@@ -1,0 +1,108 @@
+#!/usr/bin/env perl
+
+use strict;
+
+my $g_progname = "configure";
+
+my $g_withXIconView = '';
+
+while (my $this = shift(@ARGV))
+{
+    if (($this eq '-h') || ($this eq '--help') || ($this eq 'help'))
+    {
+        print "elisso configure script (C) 2017 Baubadil GmbH\n".
+              "Licensed under the GPL V2. No warranty. See LICENSE file.\n".
+              "Options:\n".
+              "  --enable-xiconview: compile with GtkIconView replacment\n";
+        exit 0;
+    }
+    elsif ($this eq '--enable-xiconview')
+    {
+        $g_withXIconView = 1;
+    }
+    else
+    {
+        die "Unknown option \"$this\". Please type \"$g_progname help\" for help. Stopped";
+    }
+}
+
+my $kmk = which("kmk");
+die "Cannot find kmk, do you have kBuild installed?\n".
+    "See http://trac.netlabs.org/kbuild\n".
+    "On Gentoo: emerge -av kbuild\n".
+    "On Debian: apt-get install kbuild\n".
+#     "On Fedora: apt-get install kbuild\n".
+    "Stopped" if (!$kmk);
+print "kmk is $kmk\n";
+
+my $pkgconfig = which("pkg-config");
+die "Cannot find pkg-config, do you have the gtkmm development packages\n".
+    "installed? See http://www.gtkmm.org/en/download.html.\n".
+    "On Gentoo: emerge -av gtkmm\n".
+    "On Debian: apt-get install libgtkmm-3.0-dev\n".
+#     "On Fedora: yum install gtkmm30-docs\n".
+    "Stopped" if (!$pkgconfig);
+print "pkg-config is $pkgconfig\n";
+
+chomp(my $libpcre = `pkg-config --libs libpcre`);
+die "Cannot find libpcre (Perl-compatible regular expressions), do you have it installed?\n".
+    "On Gentoo: emerge -av libpcre\n".
+    "On Debian: apt-get install libpcre3-dev\n".
+#     "On Fedora: yum install gtkmm30-docs\n".
+    "Stopped" if (!$libpcre);
+
+chomp(my $gtkmm_version = `pkg-config gtkmm-3.0 --modversion`);
+die "Cannot find gtkmm, do you have it installed?\n".
+    "On Gentoo: emerge -av gtkmm\n".
+    "On Debian: apt-get install libgtkmm-3.0-dev\n".
+#     "On Fedora: yum install gtkmm30-docs\n".
+    "Stopped" if (!$gtkmm_version);
+(my $verMajor, my $verMinor) = $gtkmm_version =~ /(\d+)\.(\d+).\d+/;
+print "gtkmm version is $verMajor.$verMinor\n";
+die "Your gtkmm is too old; elisso needs at least version 3.22. Stopped"
+    if ( ($verMajor < 3) || ($verMajor == 3 && $verMinor < 22) );
+
+chomp(my $pcI = `pkg-config gtkmm-3.0 --cflags-only-I`);
+chomp(my $pcL = `pkg-config gtkmm-3.0 --libs`);
+
+my $cdefines = '';
+$cdefines .= " -DUSE_XICONVIEW"
+    if ($g_withXIconView);
+
+open(CKMK, "> Config.kmk") or die "Cannot write to Config.kmk: $!. Stopped";
+print CKMK "WITH_XICONVIEW      := $g_withXIconView\n";
+print CKMK "\n";
+print CKMK "TEMPLATE_EXE                     = Executable\n";
+print CKMK "TEMPLATE_EXE_TOOL                = GXX\n";
+print CKMK "\n";
+print CKMK 'GTKMM_PKGCONFIG_I   := '.$pcI."\n";
+print CKMK 'GTKMM_INCLUDES      := $(patsubst -I%,%,$(GTKMM_PKGCONFIG_I))'."\n";
+print CKMK 'GTKMM_PKGCONFIG_L   := '.$pcL."\n";
+print CKMK 'GTKMM_LIBS          := $(patsubst -l%,%,$(GTKMM_PKGCONFIG_L))'."\n";
+print CKMK "\n";
+print CKMK "TEMPLATE_EXE_CXXFLAGS           = -Wall -std=c++11$cdefines\n";
+print CKMK "TEMPLATE_EXE_CXXFLAGS.debug     = -ggdb -O0$cdefines\n";
+print CKMK 'TEMPLATE_EXE_CFLAGS             = $(TEMPLATE_EXE_CXXFLAGS)'."\n";
+print CKMK 'TEMPLATE_EXE_CFLAGS.debug       = $(TEMPLATE_EXE_CXXFLAGS.debug)'."\n";
+print CKMK "TEMPLATE_EXE_LDFLAGS.debug      = -g\n";
+print CKMK 'TEMPLATE_EXE_INCS               = include $(GTKMM_INCLUDES)'."\n";
+print CKMK "\n";
+
+close(CKMK);
+
+exit 0;
+
+sub which
+{
+    my $program = shift;
+    return if (not defined($program));
+    my $path = $ENV{PATH};
+    $path =~ s/\\/\//g;
+    $path =~ s/\/;/;/g;
+    foreach my $dir (split(/:/,$path))
+    {
+        my $test = "$dir/$program";
+        return $test if ((-e $test) && (-f $test));
+    }
+}
+

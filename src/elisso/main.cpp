@@ -273,24 +273,19 @@ ElissoApplication::on_open(const type_vec_files &files,
     for (auto &pFile : files)
     {
         std::string strPath = pFile->get_path();
-        PFSModelBase pFSBase;
-        std::string strError;
 
         try
         {
             Debug::Log(CMD_TOP, std::string(__FUNCTION__) + ": handling " + strPath);
-            pFSBase = FSModelBase::FindPath(strPath);
+            PFSModelBase pFSBase = FSModelBase::FindPath(strPath);
+            pWindow->addFolderTab(pFSBase);
         }
         catch(std::exception &e)
         {
             Debug::Log(CMD_TOP, std::string(__FUNCTION__) + ": error " + e.what());
-            strError = e.what();
-        }
-
-        if (strError.empty())
-            pWindow->addFolderTab(pFSBase);
-        else
+            std::string strError = e.what();
             pWindow->addFolderTab(strError);
+        }
     }
 
     Debug::Leave();
