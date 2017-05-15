@@ -29,12 +29,18 @@ Biggies that are still missing:
 Development happens on 64-bit Gentoo Linux, but other Linuxes should work. Other operating systems have not been
 tested, but patches are welcome.
 
+To build, run `./configure` and then `kmk`. "kmk" is the make utility of kBuild.
+`kmk BUILD_TYPE=debug` will create a debug build instead of a release build.
+
+There is no "kmk install" yet; after building, you will find the executable under
+`out/linux.amd64/{release|debug}/stage/bin/elisso`.
+
 Requirements:
 
  1) The elisso repository requires the XWP library from phoxygen (https://github.com/baubadil/phoxygen) to build. 
     I haven't yet figured out how to do this with git submodules. Instead, the elisso tree has symlinks that point 
-    into ../phoxygen/include and ../phoxygen/src. So clone both the phoxygen and the elisso repos under the same 
-    parent directory (e.g. as src/phoxygen and src/elisso).
+    into `../phoxygen/include` and `../phoxygen/src`. So clone both the phoxygen and the elisso repos under the same
+    parent directory (e.g. as `src/phoxygen` and `src/elisso`).
 
  2) Like phoxygen, elisso uses kBuild (the VirtualBox build system; http://trac.netlabs.org/kbuild). On Gentoo, 
     it's dev-util/kbuild and should be installed already if you have VirtualBox installed as it's required for 
@@ -44,21 +50,21 @@ Requirements:
     libpcre must be somewhere where the linker can find it. On Gentoo it seems to be installed pretty much by 
     default, on Debian you need "libpcre3-dev".
 
-Run "kmk" in the elisso source root directory to build. "kmk" is the make utility of kBuild. 
-"kmk BUILD_TYPE=debug" will create a debug build instead of a release build.
+ 4) elisso uses gtkmm for C++ GTK development. It seems to need the current stable version 3.22, so that's what
+    the configure script tests for. Stock Debian jesse ships with 3.14, and compile fails with that.
 
-There is no configuration presently, nor is there any install. After building, you will find the executable under out/linux.amd64/{release|debug}/stage/bin/elisso.
 
 ## Hacking the GtkIconView
 
 Note that currently {include|src}/x-gtk contain a heavily edited copy of the GtkIconView control from GTK+ 3.22
 (and gtkmm bindings as well). The code is functionally identical to the GTK IconView control but with edits
 to try and fix the performance bottlenecks therein with folders that have more than a few hundred files. 
-The replacement control has the same API but is called XGtkIconView to avoid conflicts. Depending on whether 
-USE_XICONVIEW is defined at compile time in include/elisso/elisso.h, either the stock GtkIconView or the 
-improved XGtkIconView control is used. 
+The replacement control has the same API but is called XGtkIconView to avoid conflicts.
 
-Its still slightly buggy. Eventually I will port the changes that actually made a speed difference back to GTK+ 3.22 and supply a patch.
+If you run `./configure --enable-xiconview`, elisso build and use the replacement IconView, which is both
+faster and buggier. Otherwise the stock GTK icon view is used.
+
+Eventually I will port the changes that actually made a speed difference back to GTK+ 3.22 and supply a patch.
 
 Enjoy!
 

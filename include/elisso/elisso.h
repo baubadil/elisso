@@ -20,7 +20,7 @@
 
 typedef std::shared_ptr<Gtk::TreeRowReference> PRowReference;
 
-#define USE_XICONVIEW
+// #define USE_XICONVIEW
 // #define USE_TESTFILEOPS
 
 // const DebugFlag DEBUG_ALWAYS          = 0;
