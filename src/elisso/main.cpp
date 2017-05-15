@@ -305,13 +305,14 @@ main(int argc, char *argv[])
 //                   | CMD_TOP
 //                   | FOLDER_POPULATE_HIGH
 //                   | FILE_LOW
+//                   | FILE_MID
 //                   | FILE_HIGH
 //                   | THUMBNAILER
 //                   | XICONVIEW
 //                   | WINDOWHIERARCHY
 //                   | FILEMONITORS
 //                   | FOLDER_STACK
-                    | CLIPBOARD
+                  | CLIPBOARD
                   ;
 
     auto app = ElissoApplication::create(argc,

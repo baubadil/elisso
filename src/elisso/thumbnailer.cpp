@@ -13,6 +13,7 @@
 #include "elisso/worker.h"
 #include "xwp/debug.h"
 #include "xwp/stringhelp.h"
+#include "xwp/except.h"
 #include <thread>
 #include <ctime>
 #include <ratio>
@@ -27,20 +28,24 @@
  */
 struct FileContents
 {
-    FileContents(const string &strPath)
+    FileContents(PGioFile pFile)
          : _pData(nullptr), _size(0)
     {
-        FILE *f = fopen(strPath.c_str(), "rb");
-        if (f)
+        try
         {
-            fseek(f, 0, SEEK_END);
-            _size = ftell(f);
-            fseek(f, 0, SEEK_SET);  //same as rewind(f);
+            auto pStream = pFile->read();
+            Glib::RefPtr<Gio::FileInfo> pInfo = pStream->query_info(G_FILE_ATTRIBUTE_STANDARD_SIZE);
+            _size = pInfo->get_attribute_uint64(G_FILE_ATTRIBUTE_STANDARD_SIZE);
 
-            if ((_pData = (char*)malloc(_size)))
-                fread(_pData, _size, 1, f);
-
-            fclose(f);
+            if (!(_pData = (char*)malloc(_size)))
+                throw FSException("Not enough memory");
+            gsize zRead;
+            pStream->read_all(_pData, _size, zRead);
+            pStream->close();
+        }
+        catch (Gio::Error &e)
+        {
+            throw FSException(e.what());
         }
     }
 
@@ -332,8 +337,7 @@ void Thumbnailer::fileReaderThread()
 
         if (pThumbnailIn->pFormat)
         {
-            string strPath = pThumbnailIn->pFile->getPath();
-            std::shared_ptr<FileContents> pFileContents = make_shared<FileContents>(strPath);
+            std::shared_ptr<FileContents> pFileContents = make_shared<FileContents>(pThumbnailIn->pFile->getGioFile());
 
             auto pThumbnailTemp = make_shared<ThumbnailTemp>(pThumbnailIn,
                                                              pFileContents);

@@ -196,8 +196,6 @@ public:
         return _cbSize;
     }
 
-    Glib::ustring getIcon() const;
-
     FSType getType() const
     {
         return _type;
@@ -220,8 +218,6 @@ public:
         _fl.clear(f);
     }
 
-    PFSFile getFile();
-
     /**
      *  Returns true if this is a directory or a symlink to one. Can cause I/O if this
      *  is a symlink as this calls the virtual getResolvedType() method.
@@ -231,15 +227,19 @@ public:
         return (_type == FSType::DIRECTORY) || (getResolvedType() == FSTypeResolved::SYMLINK_TO_DIRECTORY);
     }
 
-    FSContainer* getContainer();
-
     bool isHidden();
 
     std::string getPath() const;
 
+    Glib::ustring getIcon() const;
+
+    PFSFile getFile();
+
     PFSModelBase getParent() const;
 
     bool isUnder(PFSDirectory pDir) const;
+
+    FSContainer* getContainer();
 
     const std::string& describeType() const;
     std::string describe(bool fLong = false) const;
@@ -435,6 +435,11 @@ typedef std::shared_ptr<RootDirectory> PRootDirectory;
 class RootDirectory : public FSDirectory
 {
 public:
+    const std::string& getURIScheme() const
+    {
+        return _strScheme;
+    }
+
     static PRootDirectory Get(const std::string &strScheme);
 
 private:

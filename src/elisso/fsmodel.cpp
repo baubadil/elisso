@@ -29,7 +29,7 @@
  *
  **************************************************************************/
 
-std::atomic<std::uint64_t>  g_uFSID(1);
+atomic<uint64_t>  g_uFSID(1);
 
 PCurrentDirectory CurrentDirectory::s_theCWD = NULL;
 
@@ -40,7 +40,7 @@ PCurrentDirectory CurrentDirectory::s_theCWD = NULL;
  *
  **************************************************************************/
 
-typedef map<const std::string, PFSModelBase> FilesMap;
+typedef map<const string, PFSModelBase> FilesMap;
 typedef list<PFSMonitorBase> FSMonitorsList;
 
 struct FSContainer::Impl
@@ -174,7 +174,7 @@ FSMonitorBase::stopWatching(FSContainer &cnr)
  */
 /* static */
 PFSModelBase
-FSModelBase::FindPath(const std::string &strPath0)
+FSModelBase::FindPath(const string &strPath0)
 {
     Debug::Enter(FILE_LOW, __func__ + string("(" + strPath0 + ")"));
 
@@ -186,14 +186,14 @@ FSModelBase::FindPath(const std::string &strPath0)
     {
         strScheme = aMatches.get(1);
         strPath = aMatches.get(2);
+        Debug::Log(FILE_LOW, "explicit scheme=" + quote(strScheme) + ", path=" + quote(strPath));
     }
     else
     {
         strScheme = "file";
         strPath = strPath0;
+        Debug::Log(FILE_LOW, "implicit scheme=" + quote(strScheme) + ", path=" + quote(strPath));
     }
-
-    Debug::Log(CLIPBOARD, string(__func__) + ": scheme=" + quote(strScheme) + ", path=" + quote(strPath));
 
     string strPathSplit;
     bool fAbsolute;
@@ -208,11 +208,11 @@ FSModelBase::FindPath(const std::string &strPath0)
     // Do not hold any locks in this method. We iterate over the path on the stack
     // and call into FSContainer::find(), which has proper locking.
 
-    string strForStat;
     uint c = 0;
     PFSModelBase pCurrent;
     for (auto const &strParticle : aParticles)
     {
+        Debug::Log(FILE_LOW, "Particle: " + quote(strParticle));
         if (strParticle == ".")
         {
             if (aParticles.size() > 1)
@@ -231,13 +231,11 @@ FSModelBase::FindPath(const std::string &strPath0)
                     // First item on an absolute path must be a child of the root directory.
                     auto pRoot = RootDirectory::Get(strScheme);     // This throws on errors.
                     pDir = pRoot->getContainer();
+                    Debug::Log(FILE_LOW, "got root dir " + quote(pRoot->getBasename()));
                 }
                 else
-                {
                     // First item on a relative path must be a child of the curdir.
                     pDir = CurrentDirectory::GetImpl()->getContainer();
-                    strForStat = ".";
-                }
             }
             else
             {
@@ -255,7 +253,6 @@ FSModelBase::FindPath(const std::string &strPath0)
 
                     // Go back to the parent and skip over the rest of this step.
                     pCurrent = pCurrent->_pParent;
-                    strForStat = getDirnameString(strForStat);
 
                     Debug::Log(FILE_LOW, "Loop " + to_string(c) + ": collapsed \"" + pPrev->getPath() + "/" + strParticle + "\" to " + quote(pCurrent->getPath()));
                 }
@@ -267,8 +264,6 @@ FSModelBase::FindPath(const std::string &strPath0)
 
             if (!fCollapsing)
             {
-                strForStat += "/" + strParticle;
-
                 // The following can throw.
                 if (!(pCurrent = pDir->find(strParticle)))
                 {
@@ -285,29 +280,6 @@ FSModelBase::FindPath(const std::string &strPath0)
     Debug::Log(FILE_LOW, "Result: " + (pCurrent ? pCurrent->describe() : "NULL"));
 
     return pCurrent;
-}
-
-/**
- *  Returns the FSContainer component of this directory or symlink.
- *
- *  We use C++ multiple inheritance to be able to store directory contents for
- *  both real directories and symlinks to real directories. In both cases,
- *  this returns a pointer to the FSContainer class of this instance. Otherwise
- *  (including for non-directory symlinks), this returns nullptr.
- *
- *  This allows you to call container methods like find() and getContents() for
- *  both directories and directory symlinks without losing path information.
- */
-FSContainer*
-FSModelBase::getContainer()
-{
-    if (getType() == FSType::DIRECTORY)
-        return (static_cast<FSDirectory*>(this));
-
-    if (getResolvedType() == FSTypeResolved::SYMLINK_TO_DIRECTORY)
-        return (static_cast<FSSymlink*>(this));
-
-    return nullptr;
 }
 
 /**
@@ -329,7 +301,7 @@ PFSModelBase
 FSModelBase::MakeAwake(Glib::RefPtr<Gio::File> pGioFile)
 {
     PFSModelBase pReturn = nullptr;
-    static std::string star("*");
+    static string star("*");
 
     try
     {
@@ -377,13 +349,13 @@ FSModelBase::MakeAwake(Glib::RefPtr<Gio::File> pGioFile)
 
 /* static */
 PFSDirectory
-FSModelBase::FindDirectory(const std::string &strPath)
+FSModelBase::FindDirectory(const string &strPath)
 {
     if (auto pFS = FindPath(strPath))
     {
         Debug::Log(FILE_MID, "result for \"" + strPath + "\": " + pFS->describe());
         if (pFS->getType() == FSType::DIRECTORY)
-            return std::static_pointer_cast<FSDirectory>(pFS);
+            return static_pointer_cast<FSDirectory>(pFS);
     }
 
     return nullptr;
@@ -434,21 +406,25 @@ FSModelBase::isHidden()
 /*
  *  Expands the path without resorting to realpath(), which would hit the disk.
  */
-std::string
+string
 FSModelBase::getPath() const
 {
-    std::string strFullpath;
-    if (_pParent)
+    string strFullpath;
+
+    if (!_pParent)
     {
+//         if (_fl.test(FSFlag::IS_ROOT_DIRECTORY))
+//             strFullpath = (static_cast<const RootDirectory*>(this))->getURIScheme() + "://";
+    }
+    else
+    {
+        // If we have a parent, recurse FIRST.
         strFullpath = _pParent->getPath();
         if (strFullpath != "/")
             strFullpath += '/';
-        strFullpath += getBasename();
     }
-    else
-        /* This is a relative path: then we need the current working dir.
-         * For example, if we're in /home/user and _strOriginal is ../user2. */
-        strFullpath = getBasename();
+
+    strFullpath += getBasename();
 
     return strFullpath;
 }
@@ -510,12 +486,35 @@ FSModelBase::isUnder(PFSDirectory pDir) const
     return false;
 }
 
-const std::string g_strFile("file");
-const std::string g_strDirectory("directory");
-const std::string g_strSymlink("symlink");
-const std::string g_strOther("other");
+/**
+ *  Returns the FSContainer component of this directory or symlink.
+ *
+ *  We use C++ multiple inheritance to be able to store directory contents for
+ *  both real directories and symlinks to real directories. In both cases,
+ *  this returns a pointer to the FSContainer class of this instance. Otherwise
+ *  (including for non-directory symlinks), this returns nullptr.
+ *
+ *  This allows you to call container methods like find() and getContents() for
+ *  both directories and directory symlinks without losing path information.
+ */
+FSContainer*
+FSModelBase::getContainer()
+{
+    if (getType() == FSType::DIRECTORY)
+        return (static_cast<FSDirectory*>(this));
 
-const std::string&
+    if (getResolvedType() == FSTypeResolved::SYMLINK_TO_DIRECTORY)
+        return (static_cast<FSSymlink*>(this));
+
+    return nullptr;
+}
+
+const string g_strFile("file");
+const string g_strDirectory("directory");
+const string g_strSymlink("symlink");
+const string g_strOther("other");
+
+const string&
 FSModelBase::describeType() const
 {
     switch (_type)
@@ -538,7 +537,7 @@ FSModelBase::describeType() const
     return g_strOther;
 }
 
-std::string
+string
 FSModelBase::describe(bool fLong /* = false */ ) const
 {
     return  describeType() + " \"" + (fLong ? getPath() : getBasename()) + "\" (#" + to_string(_uID) + ")";
@@ -552,7 +551,7 @@ FSModelBase::describe(bool fLong /* = false */ ) const
  *  GUI dispatcher which calls it instead.
  */
 void
-FSModelBase::rename(const std::string &strNewName)
+FSModelBase::rename(const string &strNewName)
 {
     auto pCnr = _pParent->getContainer();
     if (pCnr)
@@ -613,7 +612,7 @@ FSModelBase::sendToTrash()
 void
 FSModelBase::testFileOps()
 {
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    this_thread::sleep_for(chrono::milliseconds(50));
 }
 
 
@@ -638,14 +637,14 @@ struct FSFile::ThumbData
 PFSFile
 FSFile::Create(Glib::RefPtr<Gio::File> pGioFile, uint64_t cbSize)
 {
-    /* This nasty trickery is necessary to make std::make_shared work with a protected constructor. */
+    /* This nasty trickery is necessary to make make_shared work with a protected constructor. */
     class Derived : public FSFile
     {
     public:
         Derived(Glib::RefPtr<Gio::File> pGioFile, uint64_t cbSize) : FSFile(pGioFile, cbSize) { }
     };
 
-    return std::make_shared<Derived>(pGioFile, cbSize);
+    return make_shared<Derived>(pGioFile, cbSize);
 }
 
 FSFile::FSFile(Glib::RefPtr<Gio::File> pGioFile,
@@ -749,7 +748,7 @@ FSContainer::~FSContainer()
  */
 void FSContainer::addChild(ContentsLock &lock, PFSModelBase p)
 {
-    const std::string &strBasename = p->getBasename();
+    const string &strBasename = p->getBasename();
     Debug::Log(FILE_LOW, "storing \"" + strBasename + "\" in parent map");
 
     if (p->_pParent)
@@ -828,13 +827,13 @@ FSContainer::find(const string &strParticle)
     PFSModelBase pReturn;
     ContentsLock cLock(*this);
     if ((pReturn = isAwake(cLock, strParticle)))
-        Debug::Log(FILE_MID, "Directory::find(\"" + strParticle + "\") => already awake " + pReturn->describe());
+        Debug::Log(FILE_MID, "Directory::find(" + quote(strParticle) + ") => already awake " + pReturn->describe());
     else
     {
-        const string strPath(_refBase.getPath() + "/" + strParticle);
-        Debug::Enter(FILE_MID, "Directory::find(\"" + strPath + "\")");
+        string strPath(_refBase.getPath() + "/" + strParticle);
+        Debug::Enter(FILE_MID, "Directory::find(" + quote(strPath) + ")");
 
-        auto pGioFile = Gio::File::create_for_path(strPath);
+        auto pGioFile = Gio::File::create_for_uri(strPath);
         // The above never fails. To find out whether the path is valid we need to query the type, which does blocking I/O.
         if (!(pReturn = FSModelBase::MakeAwake(pGioFile)))
             Debug::Log(FILE_LOW, "  could not make awake");
@@ -882,7 +881,7 @@ FSContainer::unsetPopulated()
     _refBase._fl.clear(FSFlag::POPULATED_WITH_DIRECTORIES);
 }
 
-std::condition_variable_any g_condFolderPopulated;
+condition_variable_any g_condFolderPopulated;
 
 /**
  *  Returns the container's contents by copying them into the given list.
@@ -943,7 +942,7 @@ FSContainer::getContents(FSList &llFiles,
 
         // If this container is being populated on another thread, block on the global
         // condition variable until the other thread posts it (when populate is done).
-        std::unique_lock<std::recursive_mutex> lock(g_mutexFiles);
+        unique_lock<recursive_mutex> lock(g_mutexFiles);
         while (_refBase._fl.test(FSFlag::POPULATING))
             g_condFolderPopulated.wait(lock);
         // Lock is held again now. Folder state is now guaranteed to not be POPULATING
@@ -989,7 +988,7 @@ FSContainer::getContents(FSList &llFiles,
                 while ((pInfo = en->next_file()))
                 {
                     auto pGioFile = en->get_child(pInfo);
-                    std::string strThis = pGioFile->get_basename();
+                    string strThis = pGioFile->get_basename();
                     if (    (strThis != ".")
                          && (strThis != "..")
                        )
@@ -1176,7 +1175,7 @@ FSContainer::getContents(FSList &llFiles,
  *  the GUI thread. Call notifyFileAdded() with the returned instance afterwards.
  */
 PFSDirectory
-FSContainer::createSubdirectory(const std::string &strName)
+FSContainer::createSubdirectory(const string &strName)
 {
     PFSDirectory pDirReturn;
 
@@ -1187,7 +1186,7 @@ FSContainer::createSubdirectory(const std::string &strName)
     {
         // To create a new subdirectory via Gio::File, create an empty Gio::File first
         // and then invoke make_directory on it.
-        std::string strPath = pDirParent->getPath() + "/" + strName;
+        string strPath = pDirParent->getPath() + "/" + strName;
         Debug::Log(FILE_HIGH, string(__func__) + ": creating directory \"" + strPath + "\"");
 
         // The follwing cannot fail.
@@ -1220,7 +1219,7 @@ FSContainer::createSubdirectory(const std::string &strName)
  *  the GUI thread. Call notifyFileAdded() with the returned instance afterwards.
  */
 PFSFile
-FSContainer::createEmptyDocument(const std::string &strName)
+FSContainer::createEmptyDocument(const string &strName)
 {
     PFSFile pFileReturn;
 
@@ -1231,7 +1230,7 @@ FSContainer::createEmptyDocument(const std::string &strName)
     {
         // To create a new subdirectory via Gio::File, create an empty Gio::File first
         // and then invoke make_directory on it.
-        std::string strPath = pDirParent->getPath() + "/" + strName;
+        string strPath = pDirParent->getPath() + "/" + strName;
         Debug::Log(FILE_HIGH, string(__func__) + ": creating directory \"" + strPath + "\"");
 
         // The follwing cannot fail.
@@ -1286,7 +1285,7 @@ FSContainer::notifyFileRemoved(PFSModelBase pFS) const
 }
 
 void
-FSContainer::notifyFileRenamed(PFSModelBase pFS, const std::string &strOldName, const std::string &strNewName) const
+FSContainer::notifyFileRenamed(PFSModelBase pFS, const string &strOldName, const string &strNewName) const
 {
     Debug::Enter(FILEMONITORS, string(__func__) + "(" + strOldName + " -> " + strNewName + ")");
     for (auto &pMonitor : _pImpl->llMonitors)
@@ -1317,14 +1316,14 @@ FSDirectory::FSDirectory(Glib::RefPtr<Gio::File> pGioFile)
 PFSDirectory
 FSDirectory::Create(Glib::RefPtr<Gio::File> pGioFile)
 {
-    /* This nasty trickery is necessary to make std::make_shared work with a protected constructor. */
+    /* This nasty trickery is necessary to make make_shared work with a protected constructor. */
     class Derived : public FSDirectory
     {
     public:
         Derived(Glib::RefPtr<Gio::File> pGioFile) : FSDirectory(pGioFile) { }
     };
 
-    return std::make_shared<Derived>(pGioFile);
+    return make_shared<Derived>(pGioFile);
 }
 
 /**
@@ -1340,11 +1339,14 @@ FSDirectory::GetHome()
     return nullptr;
 }
 
-RootDirectory::RootDirectory(const std::string &strScheme, PGioFile pGioFile)
+RootDirectory::RootDirectory(const string &strScheme, PGioFile pGioFile)
     : FSDirectory(pGioFile),
       _strScheme(strScheme)
 {
     _fl = FSFlag::IS_ROOT_DIRECTORY;
+
+    // Override the basename set in the FSModelBase constructor.
+    _strBasename = strScheme + "://";
 }
 
 /**
@@ -1353,12 +1355,12 @@ RootDirectory::RootDirectory(const std::string &strScheme, PGioFile pGioFile)
  */
 /*static */
 PRootDirectory
-RootDirectory::Get(const std::string &strScheme)        //<! in: URI scheme (e.g. "file")
+RootDirectory::Get(const string &strScheme)        //<! in: URI scheme (e.g. "file")
 {
     PRootDirectory pReturn;
 
     static Mutex                                    s_mutexRootDirectories;
-    static std::map<std::string, PRootDirectory>    s_mapRootDirectories;
+    static map<string, PRootDirectory>    s_mapRootDirectories;
     Lock rLock(s_mutexRootDirectories);
 
     auto it = s_mapRootDirectories.find(strScheme);
@@ -1375,11 +1377,11 @@ RootDirectory::Get(const std::string &strScheme)        //<! in: URI scheme (e.g
         if (!pGioFile->query_exists())
             throw FSException("Cannot get root directory for URI scheme " + quote(strScheme));
 
-        /* This nasty trickery is necessary to make std::make_shared work with a protected constructor. */
+        /* This nasty trickery is necessary to make make_shared work with a protected constructor. */
         class Derived : public RootDirectory
         {
         public:
-            Derived(const std::string &strScheme, PGioFile pGioFile) : RootDirectory(strScheme, pGioFile) { }
+            Derived(const string &strScheme, PGioFile pGioFile) : RootDirectory(strScheme, pGioFile) { }
         };
 
         pReturn = make_shared<Derived>(strScheme, pGioFile);
@@ -1480,14 +1482,14 @@ FSSymlink::getResolvedType() /* override */
 PFSSymlink
 FSSymlink::Create(Glib::RefPtr<Gio::File> pGioFile)
 {
-    /* This nasty trickery is necessary to make std::make_shared work with a protected constructor. */
+    /* This nasty trickery is necessary to make make_shared work with a protected constructor. */
     class Derived : public FSSymlink
     {
     public:
         Derived(Glib::RefPtr<Gio::File> pGioFile) : FSSymlink(pGioFile) { }
     };
 
-    return std::make_shared<Derived>(pGioFile);
+    return make_shared<Derived>(pGioFile);
 }
 
 /**
@@ -1501,7 +1503,7 @@ FSSymlink::getTarget()
     return _pTarget;
 }
 
-std::condition_variable_any g_condSymlinkResolved;
+condition_variable_any g_condSymlinkResolved;
 
 /**
  *  Atomically resolves the symlink and caches the result. This may need to
@@ -1518,7 +1520,7 @@ FSSymlink::follow()
     // thread is already in the process of resolving this link. In that
     // case, block on a condition variable which will get posted by the
     // other thread.
-    std::unique_lock<std::recursive_mutex> lock(g_mutexFiles);
+    unique_lock<recursive_mutex> lock(g_mutexFiles);
     while (_state == State::RESOLVING)
         g_condSymlinkResolved.wait(lock);
 
@@ -1539,7 +1541,7 @@ FSSymlink::follow()
 
         Glib::RefPtr<Gio::FileInfo> pInfo = _pGioFile->query_info(G_FILE_ATTRIBUTE_STANDARD_SYMLINK_TARGET,
                                                                   Gio::FileQueryInfoFlags::FILE_QUERY_INFO_NOFOLLOW_SYMLINKS);
-        std::string strContents = pInfo->get_symlink_target();
+        string strContents = pInfo->get_symlink_target();
         if (strContents.empty())
         {
             Debug::Log(FILE_MID, "readlink(\"" + getPath() + "\") returned empty string -> BROKEN_SYMLINK");
@@ -1612,14 +1614,14 @@ FSSpecial::FSSpecial(Glib::RefPtr<Gio::File> pGioFile)
 PFSSpecial
 FSSpecial::Create(Glib::RefPtr<Gio::File> pGioFile)
 {
-    /* This nasty trickery is necessary to make std::make_shared work with a protected constructor. */
+    /* This nasty trickery is necessary to make make_shared work with a protected constructor. */
     class Derived : public FSSpecial
     {
     public:
         Derived(Glib::RefPtr<Gio::File> pGioFile) : FSSpecial(pGioFile) { }
     };
 
-    return std::make_shared<Derived>(pGioFile);
+    return make_shared<Derived>(pGioFile);
 }
 
 
@@ -1644,12 +1646,12 @@ FSMountable::FSMountable(Glib::RefPtr<Gio::File> pGioFile)
 PFSMountable
 FSMountable::Create(Glib::RefPtr<Gio::File> pGioFile)
 {
-    /* This nasty trickery is necessary to make std::make_shared work with a protected constructor. */
+    /* This nasty trickery is necessary to make make_shared work with a protected constructor. */
     class Derived : public FSMountable
     {
     public:
         Derived(Glib::RefPtr<Gio::File> pGioFile) : FSMountable(pGioFile) { }
     };
 
-    return std::make_shared<Derived>(pGioFile);
+    return make_shared<Derived>(pGioFile);
 }
