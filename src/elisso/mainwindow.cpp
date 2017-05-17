@@ -778,6 +778,8 @@ void
 ElissoApplicationWindow::openFolderInTerminal(PFSModelBase pFS)
 {
     auto strPath = pFS->getPath();
+    if (startsWith(strPath, "file:///"))
+        strPath = strPath.substr(7);
     g_subprocess_new(G_SUBPROCESS_FLAGS_NONE,
                      NULL,
                      "open", "--screen", "auto", strPath.c_str(), nullptr);
