@@ -218,7 +218,10 @@ FSModelBase::FindPath(const string &strPath0)
             if (aParticles.size() > 1)
                 Debug::Log(FILE_LOW, "Ignoring particle . in list");
             else
-                return CurrentDirectory::GetImpl();
+            {
+                pCurrent = CurrentDirectory::GetImpl();
+                break;
+            }
         }
         else
         {
@@ -275,9 +278,7 @@ FSModelBase::FindPath(const string &strPath0)
         }
     }
 
-    Debug::Leave();
-
-    Debug::Log(FILE_LOW, "Result: " + (pCurrent ? pCurrent->describe() : "NULL"));
+    Debug::Leave("Result: " + (pCurrent ? pCurrent->describe() : "NULL"));
 
     return pCurrent;
 }
@@ -760,6 +761,10 @@ void FSContainer::addChild(ContentsLock &lock, PFSModelBase p)
 
     _pImpl->mapContents[strBasename] = p;
 
+    // Propagate DIR_IS_LOCAL from parents.
+    if (_refBase.hasFlag(FSFlag::IS_LOCAL))
+        p->setFlag(FSFlag::IS_LOCAL);
+
     p->_pParent = _refBase.getSharedFromThis();
 }
 
@@ -776,6 +781,8 @@ FSContainer::removeChild(ContentsLock &lock, PFSModelBase p)
 
     _pImpl->mapContents.erase(it);
     p->_pParent = nullptr;
+
+    p->clearFlag(FSFlag::IS_LOCAL);
 }
 
 PFSDirectory
@@ -835,9 +842,13 @@ FSContainer::find(const string &strParticle)
     else
     {
         string strPath(_refBase.getPath() + "/" + strParticle);
-        Debug::Enter(FILE_MID, "Directory::find(" + quote(strPath) + ")");
+        Debug::Enter(FILE_MID, "Directory::find(" + quote(strParticle) + "): looking up " + quote(strPath));
 
-        auto pGioFile = Gio::File::create_for_uri(strPath);
+        PGioFile pGioFile;
+        if (_refBase.hasFlag(FSFlag::IS_LOCAL))
+            pGioFile = Gio::File::create_for_path(strPath.substr(7));
+        else
+            pGioFile = Gio::File::create_for_uri(strPath);
         // The above never fails. To find out whether the path is valid we need to query the type, which does blocking I/O.
         if (!(pReturn = FSModelBase::MakeAwake(pGioFile)))
             Debug::Log(FILE_LOW, "  could not make awake");
@@ -1390,6 +1401,10 @@ RootDirectory::Get(const string &strScheme)        //<! in: URI scheme (e.g. "fi
 
         pReturn = make_shared<Derived>(strScheme, pGioFile);
         s_mapRootDirectories[strScheme] = pReturn;
+
+        // This will get propagated to all children.
+        if (strScheme == "file")
+            pReturn->setFlag(FSFlag::IS_LOCAL);
     }
     catch (Gio::Error &e)
     {

@@ -146,6 +146,8 @@ enum class FSFlag : uint16_t
     HIDDEN_CHECKED             =  (1 <<  6),
     HIDDEN                     =  (1 <<  7),
     THUMBNAILING               =  (1 <<  8),
+    IS_LOCAL                   =  (1 <<  9),        // path has file:/// URI
+
 };
 // DEFINE_FLAGSET(FSFlag)
 
