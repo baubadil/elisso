@@ -658,6 +658,7 @@ FSFile::FSFile(Glib::RefPtr<Gio::File> pGioFile,
 /* virtual */
 FSFile::~FSFile()
 {
+    FSLock lock;
     if (_pThumbData)
         delete _pThumbData;
 }
@@ -695,6 +696,7 @@ FSFile::getThumbnail(uint32_t thumbsize) const
 {
     PPixbuf ppb;
 
+    FSLock lock;
     if (_pThumbData)
     {
         auto it = _pThumbData->mapThumbnails.find(thumbsize);
