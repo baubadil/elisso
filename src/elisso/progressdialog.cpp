@@ -103,6 +103,10 @@ public:
                     case FileOperation::Type::TRASH:
                         _label.set_markup("Sending <b>" + Glib::Markup::escape_text(pfsCurrent->getBasename()) + "</b> to trash");
                     break;
+
+                    case FileOperation::Type::MOVE:
+                        _label.set_markup("Moving <b>" + Glib::Markup::escape_text(pfsCurrent->getBasename()) + "</b>");
+                    break;
                 }
             }
         }
@@ -142,6 +146,9 @@ public:
 
             case FileOperation::Type::TRASH:
                 return "Sending files to trash";
+
+            case FileOperation::Type::MOVE:
+                return "Moving files";
         }
 
         return "";

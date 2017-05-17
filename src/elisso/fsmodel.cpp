@@ -612,6 +612,51 @@ FSModelBase::sendToTrash()
     }
 }
 
+/**
+ *  Moves *this to the given target directory. pTarget mus either be a directory
+ *  or a symlink to one.
+ *
+ *  This does not notify file monitors since we can't be sure which thread we're running on. Call
+ *  FSContainer::notifyFileRemoved() and FSContainer::notifyFileAdded() either afterwards if you
+ *  call this on thread one, or have a GUI dispatcher which calls it instead.
+
+ */
+void
+FSModelBase::moveTo(PFSModelBase pTarget)
+{
+    try
+    {
+        auto pParent = getParent();
+        if (!pParent)
+            throw FSException("cannot get parent for moving");
+
+        auto pParentCnr = pParent->getContainer();
+        if (!pParentCnr)
+            throw FSException("cannot get parent container for moving");
+
+        auto pTargetCnr = pTarget->getContainer();
+        if (!pTargetCnr)
+            throw FSException("cannot get target container for moving");
+
+        {
+            ContentsLock cLock(*pParentCnr);
+            pParentCnr->removeChild(cLock, shared_from_this());
+        }
+
+        _pGioFile->move(pTarget->getGioFile(),
+                        Gio::FileCopyFlags::FILE_COPY_NOFOLLOW_SYMLINKS | Gio::FileCopyFlags::FILE_COPY_NO_FALLBACK_FOR_MOVE );
+
+        {
+            ContentsLock cLock(*pTargetCnr);
+            pParentCnr->addChild(cLock, shared_from_this());
+        }
+    }
+    catch(Gio::Error &e)
+    {
+        throw FSException(e.what());
+    }
+}
+
 void
 FSModelBase::testFileOps()
 {
@@ -942,9 +987,9 @@ condition_variable_any g_condFolderPopulated;
  *  before calling this.
  */
 size_t
-FSContainer::getContents(FSList &llFiles,
+FSContainer::getContents(FSVector &vFiles,
                          Get getContents,
-                         FSList *pllFilesRemoved,        //!< out: list of file-system object that have been removed, or nullptr (optional)
+                         FSVector *pvFilesRemoved,        //!< out: list of file-system object that have been removed, or nullptr (optional)
                          StopFlag *pStopFlag)
 {
     Debug::Enter(FILE_LOW, "FSContainer::getContents(\"" + _refBase.getBasename() + "\")");
@@ -999,7 +1044,7 @@ FSContainer::getContents(FSList &llFiles,
             else
             {
                 Glib::RefPtr<Gio::FileInfo> pInfo;
-                FSList llSymlinksForFirstFolder;
+                FSVector vSymlinksForFirstFolder;
                 while ((pInfo = en->next_file()))
                 {
                     auto pGioFile = en->get_child(pInfo);
@@ -1038,8 +1083,8 @@ FSContainer::getContents(FSList &llFiles,
                             if (pAwake)
                             {
                                 // Type of file changed: then remove it from the folder before adding the new one.
-                                if (pllFilesRemoved)
-                                    pllFilesRemoved->push_back(pAwake);
+                                if (pvFilesRemoved)
+                                    pvFilesRemoved->push_back(pAwake);
                                 _pImpl->mapContents.erase(strThis);
                             }
 
@@ -1105,8 +1150,8 @@ FSContainer::getContents(FSList &llFiles,
                      && (p->_fl.test(FSFlag::DIRTY))
                    )
                 {
-                    if (pllFilesRemoved)
-                        pllFilesRemoved->push_back(p);
+                    if (pvFilesRemoved)
+                        pvFilesRemoved->push_back(p);
                     // Note the post increment. http://stackoverflow.com/questions/180516/how-to-filter-items-from-a-stdmap/180616#180616
                     _pImpl->mapContents.erase(it++);
                 }
@@ -1124,7 +1169,7 @@ FSContainer::getContents(FSList &llFiles,
                                  || (!p->isHidden())
                                )
                             {
-                                llFiles.push_back(p);
+                                vFiles.push_back(p);
                                 ++c;
 
                                 if (getContents == Get::FIRST_FOLDER_ONLY)
@@ -1151,7 +1196,7 @@ FSContainer::getContents(FSList &llFiles,
                     if (p != _refBase._pParent)
                         if (p->getResolvedType() == FSTypeResolved::SYMLINK_TO_DIRECTORY)
                         {
-                            llFiles.push_back(p);
+                            vFiles.push_back(p);
                             ++c;
                             break;
                         }

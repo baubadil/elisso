@@ -26,9 +26,9 @@
  */
 struct FileSelection
 {
-    FSList llFolders;       // directories or symlinks to directories
-    FSList llOthers;        // other files
-    FSList llAll;           // both lists combined, in order
+    FSVector vFolders;       // directories or symlinks to directories
+    FSVector vOthers;        // other files
+    FSVector vAll;           // both lists combined, in order
 };
 
 
@@ -70,11 +70,14 @@ public:
     enum class Type
     {
         TEST,
-        TRASH
+        TRASH,
+        COPY,
+        MOVE
     };
 
     static PFileOperation Create(Type t,
-                                 const FileSelection &sel,
+                                 const FSVector &vFiles,
+                                 PFSModelBase pTarget,
                                  FileOperationsList &refQueue,
                                  PProgressDialog *ppProgressDialog,
                                  Gtk::Window *pParentWindow);
@@ -99,13 +102,14 @@ protected:
     void threadFunc();
 
     void onProgress();
-    void onItemProcessed(PFSModelBase pFS);
+    void onProcessingNextItem(PFSModelBase pFS);
 
     Type                _t;
     StopFlag            _stopFlag;
     std::string         _strError;
     FileOperationsList  &_refQueue;
-    FSList              _llFiles;
+    FSVector            _vFiles;
+    PFSModelBase        _pTarget;
     struct Impl;
     Impl                *_pImpl;
 };

@@ -23,7 +23,7 @@ typedef std::shared_ptr<Gtk::TreeRowReference> PRowReference;
 Glib::ustring implode(const std::string &strGlue, const std::vector<Glib::ustring> v);
 
 // #define USE_XICONVIEW
-// #define USE_TESTFILEOPS
+#define USE_TESTFILEOPS
 
 // const DebugFlag DEBUG_ALWAYS          = 0;
 

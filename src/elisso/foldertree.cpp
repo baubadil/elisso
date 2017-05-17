@@ -109,8 +109,8 @@ public:
 
 struct SubtreePopulated : ResultBase
 {
-    FSList                  _llContents;
-    FSList                  _llRemoved;
+    FSVector                  _vContents;
+    FSVector                  _vRemoved;
 
     SubtreePopulated(PFSModelBase pDirOrSymlink,
               const PRowReference &pRowRef)
@@ -461,9 +461,9 @@ ElissoFolderTree::spawnPopulate(const Gtk::TreeModel::iterator &it)
 
                 try
                 {
-                    pDir2->getContents(pResult->_llContents,
+                    pDir2->getContents(pResult->_vContents,
                                        FSDirectory::Get::FOLDERS_ONLY,
-                                       &pResult->_llRemoved,
+                                       &pResult->_vRemoved,
                                        nullptr);        // ptr to stop flag
                 }
                 catch(exception &e)
@@ -520,7 +520,7 @@ ElissoFolderTree::onPopulateDone()
         mapChildren[row[cols._colIconAndName]] = itChild;
     }
 
-    for (auto &pFS : pSubtreePopulated->_llContents)
+    for (auto &pFS : pSubtreePopulated->_vContents)
         if (!pFS->isHidden())
         {
             Gtk::TreeModel::iterator itChild = children.end();
@@ -611,12 +611,12 @@ ElissoFolderTree::spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst)
                 FSContainer *pDir = pAddOneFirst->_pDirOrSymlink->getContainer();
                 if (pDir)
                 {
-                    FSList llFiles;
-                    pDir->getContents(llFiles,
+                    FSVector vFiles;
+                    pDir->getContents(vFiles,
                                       FSDirectory::Get::FIRST_FOLDER_ONLY,
                                       nullptr,
                                       nullptr);
-                    for (auto &pFS : llFiles)
+                    for (auto &pFS : vFiles)
                         if (!pFS->isHidden())
                         {
                             pAddOneFirst->_pFirstSubfolder = pFS;

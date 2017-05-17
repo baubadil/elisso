@@ -95,13 +95,6 @@ enum class FolderAction
     GO_TRASH,
 };
 
-enum class CopyOrCut
-{
-    UNDEFINED,
-    COPY,
-    CUT
-};
-
 class ElissoApplicationWindow;
 
 /**

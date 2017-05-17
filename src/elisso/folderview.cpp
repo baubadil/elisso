@@ -97,14 +97,14 @@ FolderContentsModelColumns* FolderContentsModelColumns::s_p = nullptr;
 
 struct ViewPopulatedResult
 {
-    PFSList         pllContents;
-    FSList          llRemoved;
+    PFSVector       pvContents;
+    FSVector        vRemoved;
     uint            idPopulateThread;
     bool            fClickFromTree;     // true if SetDirectoryFlag::CLICK_FROM_TREE was set.
     Glib::ustring   strError;
 
     ViewPopulatedResult(uint idPopulateThread_, bool fClickFromTree_)
-        : pllContents(make_shared<FSList>()),
+        : pvContents(make_shared<FSVector>()),
           idPopulateThread(idPopulateThread_),
           fClickFromTree(fClickFromTree_)
     { }
@@ -224,9 +224,9 @@ private:
         {
             FSContainer *pCnr = _pDir->getContainer();
             if (pCnr)
-                pCnr->getContents(*pResult->pllContents,
+                pCnr->getContents(*pResult->pvContents,
                                   FSDirectory::Get::ALL,
-                                  &pResult->llRemoved,
+                                  &pResult->vRemoved,
                                   &_stopFlag);
         }
         catch(exception &e)
@@ -262,7 +262,7 @@ struct ElissoFolderView::Impl : public ProhibitCopy
     // Glib::Dispatcher                dispatcherPopulateDone;
     ViewPopulatedWorker             workerPopulated;
 
-    PFSList                         pllFolderContents;      // This includes hidden items.
+    PFSVector                         pllFolderContents;      // This includes hidden items.
     Glib::RefPtr<Gtk::ListStore>    pListStore;             // The model, without hidden items.
     size_t                          cFolders,
                                     cFiles,
@@ -581,7 +581,7 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
 
         Gtk::ListStore::iterator itSelect;
 
-        _pImpl->pllFolderContents = pResult->pllContents;
+        _pImpl->pllFolderContents = pResult->pvContents;
 
         // This sets the wait cursor.
         this->setState(ViewState::INSERTING);
@@ -683,7 +683,7 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
         {
             // Notify other monitors (tree view) of the items that have been removed
             // if this was a refresh.
-            for (auto &pRemoved : pResult->llRemoved)
+            for (auto &pRemoved : pResult->vRemoved)
                 pCnr->notifyFileRemoved(pRemoved);
 
             // And make sure we have a monitor.
@@ -1122,17 +1122,17 @@ ElissoFolderView::updateStatusbar(FileSelection *pSel)
         {
             str = formatNumber(_pImpl->cTotal) + " items in folder";
             uint64_t z = 0;
-            FSList *pList = nullptr;
+            FSVector *pList = nullptr;
 
-            if (pSel && pSel->llAll.size())
+            if (pSel && pSel->vAll.size())
             {
-                if (pSel->llAll.size() == 1)
-                    str += ", " + quote(pSel->llAll.front()->getBasename()) + " selected";
+                if (pSel->vAll.size() == 1)
+                    str += ", " + quote(pSel->vAll.front()->getBasename()) + " selected";
                 else
-                    str += ", " + formatNumber(pSel->llAll.size()) + " selected";
+                    str += ", " + formatNumber(pSel->vAll.size()) + " selected";
 
-                if (pSel->llOthers.size())
-                    pList = &pSel->llOthers;
+                if (pSel->vOthers.size())
+                    pList = &pSel->vOthers;
             }
             else if (_pImpl->pllFolderContents)
                 pList = &(*_pImpl->pllFolderContents);
@@ -1186,8 +1186,8 @@ ElissoFolderView::getSelectedFolder()
     FileSelection sel;
     size_t cTotal = getSelection(sel);
     if (cTotal == 1)
-        if (sel.llFolders.size() == 1)
-            return sel.llFolders.front();
+        if (sel.vFolders.size() == 1)
+            return sel.vFolders.front();
 
     return nullptr;
 }
@@ -1228,7 +1228,7 @@ ElissoFolderView::onMouseButton3Pressed(GdkEventButton *pEvent,
 
             if (cTotal == 1)
             {
-                if (sel.llFolders.size() == 1)
+                if (sel.vFolders.size() == 1)
                 {
                     app.addMenuItem(pMenu, "Open", ACTION_EDIT_OPEN_SELECTED);
                     app.addMenuItem(pMenu, "Open in new tab", ACTION_EDIT_OPEN_SELECTED_IN_TAB);
@@ -1236,7 +1236,7 @@ ElissoFolderView::onMouseButton3Pressed(GdkEventButton *pEvent,
                 }
                 else
                 {
-                    PFSModelBase pFS = sel.llOthers.front();
+                    PFSModelBase pFS = sel.vOthers.front();
                     if (pFS)
                     {
                         PFSFile pFile = pFS->getFile();
@@ -1461,7 +1461,7 @@ ElissoFolderView::clipboardCopyOrCutSelected(bool fCut)
     if (getSelection(sel))
     {
         _pImpl->vURIs.clear();
-        for (auto &pFS : sel.llAll)
+        for (auto &pFS : sel.vAll)
             _pImpl->vURIs.push_back(pFS->getURI());
 
         vector<Gtk::TargetEntry> vTargets;
@@ -1485,9 +1485,9 @@ ElissoFolderView::clipboardCopyOrCutSelected(bool fCut)
 
                     });
 
-        if (sel.llAll.size() == 1)
+        if (sel.vAll.size() == 1)
         {
-            Glib::ustring str = quote(sel.llAll.front()->getBasename());
+            Glib::ustring str = quote(sel.vAll.front()->getBasename());
             if (fCut)
                 _mainWindow.setStatusbarCurrent(str + " will be moved if you select the " + quote("Paste") + " command");
             else
@@ -1496,9 +1496,9 @@ ElissoFolderView::clipboardCopyOrCutSelected(bool fCut)
         else
         {
             if (fCut)
-                _mainWindow.setStatusbarCurrent(formatNumber(sel.llAll.size()) + " items will be moved if you select the " + quote("Paste") + " command");
+                _mainWindow.setStatusbarCurrent(formatNumber(sel.vAll.size()) + " items will be moved if you select the " + quote("Paste") + " command");
             else
-                _mainWindow.setStatusbarCurrent(formatNumber(sel.llAll.size()) + " items will be copied if you select the " + quote("Paste") + " command");
+                _mainWindow.setStatusbarCurrent(formatNumber(sel.vAll.size()) + " items will be copied if you select the " + quote("Paste") + " command");
         }
     }
 }
@@ -1513,18 +1513,19 @@ void ElissoFolderView::clipboardPaste()
     {
         try
         {
+            FileOperation::Type fopType(FileOperation::Type::TEST);
+
             Glib::ustring data = selectionData.get_data_as_string();
             StringVector lines = explodeVector(data, "\n");
-            FSList llFiles;
+            FSVector vFiles;
             if (lines.size())
             {
-                CopyOrCut mode(CopyOrCut::UNDEFINED);
                 auto it = lines.begin();
                 auto cmd = *it;
                 if (cmd == "copy")
-                    mode = CopyOrCut::COPY;
+                    fopType = FileOperation::Type::COPY;
                 else if (cmd == "cut")
-                    mode = CopyOrCut::CUT;
+                    fopType = FileOperation::Type::MOVE;
                 else
                     throw FSException("Invalid command " + quote(cmd) + " in clipboard");
 
@@ -1532,14 +1533,30 @@ void ElissoFolderView::clipboardPaste()
                 while (it != lines.end())
                 {
                     auto line = *it;
-                    Debug::Log(CLIPBOARD, "getting file for " + quote(line));
-                    auto pFS = FSModelBase::FindPath(line);
+                    char *pszUnescaped = g_uri_unescape_string(line.c_str(), NULL);
+                    if (!pszUnescaped)
+                        throw FSException("Invalid file name in clipboard");
+                    string strUnescaped(pszUnescaped);
+                    g_free(pszUnescaped);
+                    Debug::Log(CLIPBOARD, "getting file for " + quote(strUnescaped));
+                    // This will throw if the path is invalid:
+                    auto pFS = FSModelBase::FindPath(strUnescaped);
+                    vFiles.push_back(pFS);
                     ++it;
                 }
             }
 
-            if (!llFiles.size())
-                throw FSException("Did not recognize clipboard format");
+            if (!vFiles.size())
+                throw FSException("Did not find any files to copy in clipboard");
+            if (fopType == FileOperation::Type::TEST)
+                throw FSException("Invalid file operation in clipboard");
+
+            FileOperation::Create(fopType,
+                                  vFiles,
+                                  _pDir,
+                                  _pImpl->llFileOperations,
+                                  &_pImpl->pProgressDialog,
+                                  &_mainWindow);
         }
         catch (exception &e)
         {
@@ -1566,10 +1583,10 @@ ElissoFolderView::openFile(PFSModelBase pFS,        //!< in: file or folder to o
         size_t cTotal = getSelection(sel);
         if (cTotal == 1)
         {
-            if (sel.llFolders.size() == 1)
-                pFS = sel.llFolders.front();
+            if (sel.vFolders.size() == 1)
+                pFS = sel.vFolders.front();
             else
-                pFS = sel.llOthers.front();
+                pFS = sel.vOthers.front();
         }
 
         if (!pFS)
@@ -1700,13 +1717,13 @@ ElissoFolderView::renameSelected()
 {
     FileSelection sel;
     if (    (getSelection(sel))
-         && (sel.llAll.size() == 1)
+         && (sel.vAll.size() == 1)
        )
     {
         FSContainer *pContainer = this->_pDir->getContainer();
         if (pContainer)
         {
-            PFSModelBase pFile = sel.llAll.front();
+            PFSModelBase pFile = sel.vAll.front();
             Glib::ustring strOld(pFile->getBasename());
             TextEntryDialog dlg(this->_mainWindow,
                                 "Rename file",
@@ -1737,7 +1754,8 @@ ElissoFolderView::trashSelected()
     FileSelection sel;
     if (getSelection(sel))
         FileOperation::Create(FileOperation::Type::TRASH,
-                              sel,
+                              sel.vAll,
+                              nullptr,      // pTargetContainer
                               _pImpl->llFileOperations,
                               &_pImpl->pProgressDialog,
                               &_mainWindow);
@@ -1750,7 +1768,8 @@ ElissoFolderView::testFileopsSelected()
     FileSelection sel;
     if (getSelection(sel))
         FileOperation::Create(FileOperation::Type::TEST,
-                              sel,
+                              sel.vAll,
+                              nullptr,      // pTargetContainer
                               _pImpl->llFileOperations,
                               &_pImpl->pProgressDialog,
                               &_mainWindow);
@@ -2273,17 +2292,17 @@ ElissoFolderView::getSelection(FileSelection &sel)
                 PFSModelBase pFS = row[cols._colPFile];
                 if (pFS)
                 {
-                    sel.llAll.push_back(pFS);
+                    sel.vAll.push_back(pFS);
                     if (pFS->isDirectoryOrSymlinkToDirectory())
-                        sel.llFolders.push_back(pFS);
+                        sel.vFolders.push_back(pFS);
                     else
-                        sel.llOthers.push_back(pFS);
+                        sel.vOthers.push_back(pFS);
                 }
             }
         }
     }
 
-    return sel.llAll.size();
+    return sel.vAll.size();
 }
 
 /**
@@ -2313,7 +2332,7 @@ ElissoFolderView::onSelectionChanged()
     {
         FileSelection sel;
         this->getSelection(sel);
-        _mainWindow.enableEditActions(sel.llFolders.size(), sel.llOthers.size());
+        _mainWindow.enableEditActions(sel.vFolders.size(), sel.vOthers.size());
 
         updateStatusbar(&sel);
     }

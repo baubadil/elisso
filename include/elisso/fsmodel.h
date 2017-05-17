@@ -61,8 +61,8 @@ typedef std::shared_ptr<FSSpecial> PFSSpecial;
 class FSMountable;
 typedef std::shared_ptr<FSMountable> PFSMountable;
 
-typedef std::list<PFSModelBase> FSList;
-typedef std::shared_ptr<FSList> PFSList;
+typedef std::vector<PFSModelBase> FSVector;
+typedef std::shared_ptr<FSVector> PFSVector;
 
 typedef Glib::RefPtr<Gio::File> PGioFile;
 
@@ -254,6 +254,8 @@ public:
 
     void sendToTrash();
 
+    void moveTo(PFSModelBase pTarget);
+
     void testFileOps();
 
 protected:
@@ -362,9 +364,9 @@ public:
 
     void unsetPopulated();
 
-    size_t getContents(FSList &llFiles,
+    size_t getContents(FSVector &vFiles,
                        Get getContents,
-                       FSList *pllFilesRemoved,
+                       FSVector *pvFilesRemoved,
                        StopFlag *pStopFlag);
 
     PFSDirectory createSubdirectory(const std::string &strName);

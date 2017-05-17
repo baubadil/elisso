@@ -12,6 +12,7 @@
 
 #include <thread>
 
+#include "elisso/elisso.h"
 #include "elisso/progressdialog.h"
 
 #include "xwp/debug.h"
@@ -33,6 +34,8 @@ struct FileOperation::Impl
 
     // Shared source container of all objects, set & validated during init.
     FSContainer             *pSourceContainer = nullptr;
+    // Target container for copy and move operations only.
+    FSContainer             *pTargetContainer = nullptr;
 
     // Progress data. Protected by the parent WorkerResult mutex.
     PFSModelBase            pFSCurrent;
@@ -47,12 +50,14 @@ struct FileOperation::Impl
  **************************************************************************/
 
 /**
- *  Factory method which creates a shared_ptr<FileOperation>.
+ *  Factory method which creates a shared_ptr<FileOperation> and starts the thread
+ *  that operates on it.
  */
 /* static */
 PFileOperation
 FileOperation::Create(Type t,
-                      const FileSelection &sel,
+                      const FSVector &vFiles,
+                      PFSModelBase pTarget,                 //!< in: target directory or symlink to directory (required for copy or move, otherwise nullptr)
                       FileOperationsList &refQueue,         //!< in: list to append new FileOperation instance to
                       PProgressDialog *ppProgressDialog,    //!< in: progress dialog to append file operation to
                       Gtk::Window *pParentWindow)           //!< in: parent window for (modal) progress dialog
@@ -72,7 +77,7 @@ FileOperation::Create(Type t,
     p->_pImpl->connDispatch = p->connect([p]()
     {
         auto pFS = p->fetchResult();
-        p->onItemProcessed(pFS);
+        p->onProcessingNextItem(pFS);
     });
 
     // Instantiate a timer for progress reporting.
@@ -96,9 +101,9 @@ FileOperation::Create(Type t,
     }
 
     // Deep-copy the list of files to operate on.
-    for (auto &pFS : sel.llAll)
+    for (auto &pFS : vFiles)
     {
-        p->_llFiles.push_back(pFS);
+        p->_vFiles.push_back(pFS);
         auto pParent = pFS->getParent();
         if (!pParent)
             throw FSException("File has no parent");
@@ -108,6 +113,10 @@ FileOperation::Create(Type t,
         else if (pContainerThis != p->_pImpl->pSourceContainer)
             throw FSException("Files in given list have more than one parent container");
     }
+
+    p->_pTarget = pTarget;
+    if (!(p->_pImpl->pTargetContainer = pTarget->getContainer()))
+        throw FSException("Missing target container");
 
     // Launch the thread.
     auto pThread = new std::thread([p]()
@@ -154,9 +163,9 @@ FileOperation::threadFunc()
 {
     try
     {
-        size_t cFiles = _llFiles.size();
+        size_t cFiles = _vFiles.size();
         size_t cCurrent = 0;
-        for (auto &pFS : _llFiles)
+        for (auto &pFS : _vFiles)
         {
             postResultToGUI(pFS);     // Temporarily requests the lock.
 
@@ -175,6 +184,13 @@ FileOperation::threadFunc()
 
                 case Type::TRASH:
                     pFS->sendToTrash();
+                break;
+
+                case Type::COPY:
+                break;
+
+                case Type::MOVE:
+                    pFS->moveTo(_pTarget);
                 break;
             }
 
@@ -210,11 +226,11 @@ FileOperation::onProgress()
 }
 
 /**
- *  GUI callback invoked by the "item processed" dispatcher for every item that
- *  was processed. This should update the folder contents model.
+ *  GUI callback invoked by the dispatcher for every item that is about to be processed
+ *  (when the thread calls postResultToGUI()). This should update the folder contents model.
  */
 void
-FileOperation::onItemProcessed(PFSModelBase pFS)
+FileOperation::onProcessingNextItem(PFSModelBase pFS)
 {
     if (pFS)
     {
@@ -227,6 +243,11 @@ FileOperation::onItemProcessed(PFSModelBase pFS)
 
             case Type::TRASH:
                 _pImpl->pSourceContainer->notifyFileRemoved(pFS);
+            break;
+
+            case Type::MOVE:
+                _pImpl->pSourceContainer->notifyFileRemoved(pFS);
+                _pImpl->pTargetContainer->notifyFileAdded(pFS);
             break;
         }
     }
