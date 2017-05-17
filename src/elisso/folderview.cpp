@@ -1503,6 +1503,9 @@ ElissoFolderView::clipboardCopyOrCutSelected(bool fCut)
     }
 }
 
+/**
+ *  Called from handleAction() to handle the "Paste" action.
+ */
 void ElissoFolderView::clipboardPaste()
 {
     Glib::RefPtr<Gtk::Clipboard> pClip = Gtk::Clipboard::get();
@@ -1604,7 +1607,37 @@ ElissoFolderView::openFile(PFSModelBase pFS,        //!< in: file or folder to o
         }
         break;
 
-        default:
+        case FSTypeResolved::MOUNTABLE:
+        {
+            try
+            {
+                Glib::RefPtr<Gio::MountOperation> pMountOp;
+                Glib::RefPtr<Gio::Cancellable> pCancellable;
+                pFS->getGioFile()->mount_mountable( pMountOp,
+                                                    [pFS, this](Glib::RefPtr<Gio::AsyncResult> &pResult)
+                                                    {
+                                                        try
+                                                        {
+                                                            pFS->getGioFile()->mount_mountable_finish(pResult);
+                                                            Debug::Log(DEBUG_ALWAYS, "mount success");
+                                                        }
+                                                        catch (Gio::Error &e)
+                                                        {
+                                                            this->_mainWindow.errorBox(e.what());
+                                                        }
+                                                    },
+                                                    pCancellable,
+                                                    Gio::MOUNT_MOUNT_NONE);
+            }
+            catch (Gio::Error &e)
+            {
+                throw FSException(e.what());
+            }
+        }
+        break;
+
+        case FSTypeResolved::BROKEN_SYMLINK:
+        case FSTypeResolved::SPECIAL:
         break;
     }
 }
