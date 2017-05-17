@@ -305,8 +305,10 @@ FSModelBase::MakeAwake(Glib::RefPtr<Gio::File> pGioFile)
 
     try
     {
+        static string s_attrs = string(G_FILE_ATTRIBUTE_STANDARD_TYPE) + string(",") + string(G_FILE_ATTRIBUTE_STANDARD_SIZE);
         // The following can throw Gio::Error.
-        auto pInfo = pGioFile->query_info(star, Gio::FileQueryInfoFlags::FILE_QUERY_INFO_NOFOLLOW_SYMLINKS);
+        auto pInfo = pGioFile->query_info(s_attrs,
+                                          Gio::FileQueryInfoFlags::FILE_QUERY_INFO_NOFOLLOW_SYMLINKS);
 //         auto type = pGioFile->query_file_type(Gio::FileQueryInfoFlags::FILE_QUERY_INFO_NOFOLLOW_SYMLINKS);
 
         switch (pInfo->get_file_type())
