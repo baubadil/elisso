@@ -10,8 +10,6 @@
 
 #include "elisso/foldertree.h"
 
-#include <thread>
-
 #include "elisso/mainwindow.h"
 #include "elisso/worker.h"
 
@@ -110,7 +108,6 @@ public:
 struct SubtreePopulated : ResultBase
 {
     FSVector                  _vContents;
-    FSVector                  _vRemoved;
 
     SubtreePopulated(PFSModelBase pDirOrSymlink,
               const PRowReference &pRowRef)
@@ -454,7 +451,7 @@ ElissoFolderTree::spawnPopulate(const Gtk::TreeModel::iterator &it)
              * Launch the thread!
              */
             ++_pImpl->cThreadsRunning;
-            auto pThread = new std::thread([this, pDir, pDir2, pRowRefPopulating]()
+            XWP::Thread::Create([this, pDir, pDir2, pRowRefPopulating]()
             {
                 // Create an FSList on the thread's stack and have it filled by the back-end.
                 PSubtreePopulated pResult = std::make_shared<SubtreePopulated>(pDir, pRowRefPopulating);
@@ -463,7 +460,8 @@ ElissoFolderTree::spawnPopulate(const Gtk::TreeModel::iterator &it)
                 {
                     pDir2->getContents(pResult->_vContents,
                                        FSDirectory::Get::FOLDERS_ONLY,
-                                       &pResult->_vRemoved,
+                                       nullptr,
+                                       nullptr,
                                        nullptr);        // ptr to stop flag
                 }
                 catch(exception &e)
@@ -476,7 +474,6 @@ ElissoFolderTree::spawnPopulate(const Gtk::TreeModel::iterator &it)
 
                 --_pImpl->cThreadsRunning;
             });
-            pThread->detach();
 
             this->updateCursor();
 
@@ -602,7 +599,7 @@ ElissoFolderTree::spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst)
      * Launch the thread!
      */
     ++_pImpl->cThreadsRunning;
-    auto pThread = new std::thread([this, pllToAddFirst]()
+    XWP::Thread::Create([this, pllToAddFirst]()
     {
         for (PAddOneFirst pAddOneFirst : *pllToAddFirst)
         {
@@ -614,6 +611,7 @@ ElissoFolderTree::spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst)
                     FSVector vFiles;
                     pDir->getContents(vFiles,
                                       FSDirectory::Get::FIRST_FOLDER_ONLY,
+                                      nullptr,
                                       nullptr,
                                       nullptr);
                     for (auto &pFS : vFiles)
@@ -633,7 +631,6 @@ ElissoFolderTree::spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst)
         }
         --_pImpl->cThreadsRunning;
     });
-    pThread->detach();
 
     this->updateCursor();
 }

@@ -60,6 +60,7 @@ enum class ViewState
     POPULATING,         /* setDirectory() has been called, and a populate thread is running in
                            the background. All calls are valid during this time, including another
                            setDirectory() (which will kill the existing populate thread). */
+    REFRESHING,         // Like POPULATING except that we're not clearing the view first.
     INSERTING,          /* Temporary state after the populate thread has finished and items are being inserted
                            into the tree/icon view's model. Since this has to happen on the GUI thread, this
                            might block the GUI for a second. */
@@ -104,7 +105,8 @@ enum class SetDirectoryFlag : uint8_t
 {
     PUSH_TO_HISTORY         = (1 << 0),         // If set, the directory is added to the back/forward history stack.
     SELECT_PREVIOUS         = (1 << 1),         // If set, the previous directory is selected in the new contents list (useful for go back/parent).
-    CLICK_FROM_TREE         = (1 << 2)          // If set, the contents are shown as a result of a click on the tree view, and we can spare the effort of finding the node in the tree.
+    CLICK_FROM_TREE         = (1 << 2),         // If set, the contents are shown as a result of a click on the tree view, and we can spare the effort of finding the node in the tree.
+    IS_REFRESH              = (1 << 3),         // If set, do not empty container; in that case, current pDir must be the same as the old pDir
 };
 // DEFINE_FLAGSET(SetDirectoryFlag)
 
@@ -204,8 +206,6 @@ public:
 #ifdef USE_TESTFILEOPS
     void testFileopsSelected();
 #endif
-
-    class PopulateThread;
 
 private:
     friend class FolderViewMonitor;

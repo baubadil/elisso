@@ -45,6 +45,7 @@ public:
     void updateOperation(PFileOperation pOp,
                          PFSModelBase pFSCurrent,
                          double dProgress);
+    void setError(PFileOperation pOp, const Glib::ustring &strError);
 
 private:
     void removeOperationDone(POperationRow pRow);

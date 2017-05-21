@@ -117,6 +117,9 @@ public:
 
     void onLoadingFolderView(ElissoFolderView &view);
     void onFolderViewLoaded(ElissoFolderView &view);
+    void onNotebookTabChanged(ElissoFolderView &view);
+
+    Glib::ustring updateWindowTitle(ElissoFolderView &view);
 
     void setStatusbarCurrent(const Glib::ustring &str);
     void setThumbnailerProgress(uint current, uint max, ShowHideOrNothing shn);

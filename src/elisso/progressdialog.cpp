@@ -11,6 +11,7 @@
 
 #include "elisso/progressdialog.h"
 
+#include "elisso/elisso.h"
 #include "elisso/fileops.h"
 
 #include "xwp/debug.h"
@@ -85,9 +86,11 @@ public:
         add(_boxMain);
     }
 
-    void update(PFSModelBase pfsCurrent,
-                double dProgress)
+    void
+    update(PFSModelBase pfsCurrent,
+           double dProgress)
     {
+        Debug::Log(PROGRESSDIALOG, __func__);
         if (pfsCurrent)
         {
             if (pfsCurrent != _pfsLast)
@@ -137,7 +140,14 @@ public:
         }
     }
 
-    Glib::ustring getDescription()
+    void setError(const Glib::ustring &strError)
+    {
+        Debug::Log(PROGRESSDIALOG, __func__);
+        _label.set_markup("<b>Error:</b> " + Glib::Markup::escape_text(strError));
+    }
+
+    Glib::ustring
+    getDescription()
     {
         switch (_pOp->getType())
         {
@@ -207,7 +217,8 @@ ProgressDialog::~ProgressDialog()
  *  and this method adds another item to it. Each such item has a label and a
  *  progress bar.
  */
-void ProgressDialog::addOperation(PFileOperation pOp)
+void
+ProgressDialog::addOperation(PFileOperation pOp)
 {
     auto pOpBox = std::make_shared<OperationRow>(*this, pOp);
     // Store in list for sequence.
@@ -227,9 +238,10 @@ void ProgressDialog::addOperation(PFileOperation pOp)
  *  As a special case, calling this with pFSCurrent == nullptr declares
  *  the operation finished and removes it from the dialog's VBox.
  */
-void ProgressDialog::updateOperation(PFileOperation pOp,
-                                     PFSModelBase pFSCurrent,
-                                     double dProgress)
+void
+ProgressDialog::updateOperation(PFileOperation pOp,
+                                PFSModelBase pFSCurrent,
+                                double dProgress)
 {
     auto it1 = _pImpl->mapOpRows.find(pOp);
     if (it1 == _pImpl->mapOpRows.end())
@@ -255,7 +267,19 @@ void ProgressDialog::updateOperation(PFileOperation pOp,
     }
 }
 
-void ProgressDialog::removeOperationDone(POperationRow pRow)
+void
+ProgressDialog::setError(PFileOperation pOp, const Glib::ustring &strError)
+{
+    auto it1 = _pImpl->mapOpRows.find(pOp);
+    if (it1 == _pImpl->mapOpRows.end())
+        throw FSException("Cannot find file operation box in map");
+
+    POperationRow pOpBox = it1->second;
+    pOpBox->setError(strError);
+}
+
+void
+ProgressDialog::removeOperationDone(POperationRow pRow)
 {
     // Remove the item from the list.
     auto it2 = std::find(_pImpl->llOpRows.begin(), _pImpl->llOpRows.end(), pRow);

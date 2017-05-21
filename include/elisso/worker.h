@@ -16,7 +16,7 @@
 #include <condition_variable>
 #include <deque>
 
-#include "xwp/lock.h"
+#include "xwp/thread.h"
 
 
 /***************************************************************************

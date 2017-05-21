@@ -16,8 +16,8 @@
 #include "elisso/textentrydialog.h"
 #include "elisso/thumbnailer.h"
 #include "elisso/contenttype.h"
+#include "elisso/populate.h"
 #include "xwp/except.h"
-#include <thread>
 #include <iostream>
 #include <iomanip>
 
@@ -91,178 +91,20 @@ FolderContentsModelColumns* FolderContentsModelColumns::s_p = nullptr;
 
 /***************************************************************************
  *
- *  PopulateResult
- *
- **************************************************************************/
-
-struct ViewPopulatedResult
-{
-    PFSVector       pvContents;
-    FSVector        vRemoved;
-    uint            idPopulateThread;
-    bool            fClickFromTree;     // true if SetDirectoryFlag::CLICK_FROM_TREE was set.
-    Glib::ustring   strError;
-
-    ViewPopulatedResult(uint idPopulateThread_, bool fClickFromTree_)
-        : pvContents(make_shared<FSVector>()),
-          idPopulateThread(idPopulateThread_),
-          fClickFromTree(fClickFromTree_)
-    { }
-};
-typedef std::shared_ptr<ViewPopulatedResult> PViewPopulatedResult;
-
-typedef WorkerResultQueue<PViewPopulatedResult> ViewPopulatedWorker;
-
-/***************************************************************************
- *
- *  ElissoFolderView::PopulateThread
- *
- **************************************************************************/
-
-typedef std::shared_ptr<ElissoFolderView::PopulateThread> PPopulateThread;
-
-std::atomic<uint> g_uPopulateThreadID(0);
-
-/**
- *  Populate thread implementation. This works as follows:
- *
- *   1) ElissoFolderView::setDirectory() calls Create(), which creates a shared_ptr
- *      to an instance and spawns the thread. The instance is also passed to the
- *      thread, which increases the refcount.
- *
- *   2) Create() takes a reference to a Glib::Dispatcher which gets fired when
- *      the populate thread ends. Create() also takes a reference to an FSList,
- *      which gets filled by the populate thread with the contents from
- *      FSContainer::getContents().
- *
- *   3) When the dispatcher then fires on the GUI thread, it should check
- *      getError() if an exception occured on the populate thread. If not,
- *      it can take the folder contents that was referenced by Create()
- *      and fill the folder view with it.
- *
- *   4) If, for any reason, the populate needs to be stopped early, the caller
- *      can call stop() which will set the stop flag passed to
- *      FSContainer::getContents() and block until the populate thread has ended.
- */
-class ElissoFolderView::PopulateThread : public ProhibitCopy
-{
-public:
-    /**
-     *  Creates an instance and returns a shared_ptr to it. Caller MUST store that shared_ptr
-     *  in instance data until the thread ends.
-     */
-    static PPopulateThread Create(PFSModelBase &pDir,               //!< in: directory or symlink to directory to populate
-                                  ViewPopulatedWorker &workerResult,
-                                  bool fClickFromTree,              //!< in: stored in instance data for dispatcher handler
-                                  PFSModelBase pDirSelectPrevious)  //!< in: if set, select this item after populating
-    {
-        /* This nasty trickery is necessary to make std::make_shared work with a protected constructor. */
-        class Derived : public PopulateThread
-        {
-        public:
-            Derived(PFSModelBase &pDir, ViewPopulatedWorker &workerResult, PFSModelBase pDirSelectPrevious)
-                : PopulateThread(pDir, workerResult, pDirSelectPrevious) { }
-        };
-
-        auto p = std::make_shared<Derived>(pDir, workerResult, pDirSelectPrevious);
-
-        // We capture the shared_ptr "p" without &, meaning we create a copy, which increases the refcount
-        // while the thread is running.
-        auto pThread = new std::thread([p, fClickFromTree]()
-        {
-            /*
-             *  Thread function!
-             */
-            p->threadFunc(p->_id, fClickFromTree);
-        });
-        pThread->detach();
-
-        return p;
-    }
-
-    /**
-     *  Returns the unique thread ID for this populate thread. This allows for identifying which
-     *  results come from which thread.
-     */
-    uint getID()
-    {
-        return _id;
-    }
-
-    /**
-     *  Sets the stop flag for the thread and returns immediately; does not wait for the
-     *  thread to terminate.
-     */
-    void stop()
-    {
-        _stopFlag.set();
-    }
-
-    bool shouldBeSelected(PFSModelBase &pFS)
-    {
-        return (pFS == _pDirSelectPrevious);
-    }
-
-private:
-    /**
-     *  Constructor.
-     */
-    PopulateThread(PFSModelBase &pDir,
-                   ViewPopulatedWorker &workerResult,
-                   PFSModelBase pDirSelectPrevious)
-        : _pDir(pDir),
-          _refWorkerResult(workerResult),
-          _pDirSelectPrevious(pDirSelectPrevious)
-    {
-        _id = ++g_uPopulateThreadID;
-    }
-
-    void threadFunc(uint idPopulateThread, bool fClickFromTree)
-    {
-        PViewPopulatedResult pResult = std::make_shared<ViewPopulatedResult>(idPopulateThread, fClickFromTree);
-        try
-        {
-            FSContainer *pCnr = _pDir->getContainer();
-            if (pCnr)
-                pCnr->getContents(*pResult->pvContents,
-                                  FSDirectory::Get::ALL,
-                                  &pResult->vRemoved,
-                                  &_stopFlag);
-        }
-        catch(exception &e)
-        {
-            pResult->strError = e.what();
-        }
-
-        if (!_stopFlag)
-            // Trigger the dispatcher, which will call "populate done".
-            _refWorkerResult.postResultToGUI(pResult);
-    }
-
-    uint                _id;
-    PFSModelBase        _pDir;
-    ViewPopulatedWorker &_refWorkerResult;
-    StopFlag            _stopFlag;
-    PFSModelBase        _pDirSelectPrevious;
-};
-
-
-/***************************************************************************
- *
  *  ElissoFolderView::Impl (private)
  *
  **************************************************************************/
 
 struct ElissoFolderView::Impl : public ProhibitCopy
 {
-    PPopulateThread                 pPopulateThread;      // only set while state == POPULATING
+    PPopulateThread                 pPopulateThread;      // only set while state == POPULATING or REFRESHING
     uint                            idCurrentPopulateThread = 0;
 
     // GUI thread dispatcher for when a folder populate is done.
-    // Glib::Dispatcher                dispatcherPopulateDone;
-    ViewPopulatedWorker             workerPopulated;
+    PViewPopulatedWorker            pWorkerPopulated;
+    sigc::connection                connWorker;
 
-    PFSVector                         pllFolderContents;      // This includes hidden items.
+    PFSVector                       pllFolderContents;      // This includes hidden items.
     Glib::RefPtr<Gtk::ListStore>    pListStore;             // The model, without hidden items.
     size_t                          cFolders,
                                     cFiles,
@@ -289,11 +131,14 @@ struct ElissoFolderView::Impl : public ProhibitCopy
     vector<Glib::ustring>           vURIs;
 
     Impl()
-        : pIconTheme(Gtk::IconTheme::get_default())
+        : pWorkerPopulated(make_shared<ViewPopulatedWorker>()),
+          pIconTheme(Gtk::IconTheme::get_default())
     { }
 
     ~Impl()
     {
+        // Disconnect the populated worker in case something is still in the populate queue.
+        connWorker.disconnect();
         // Just in case the thumbnailer is running.
         connThumbnailProgressTimer.disconnect();
     }
@@ -339,9 +184,9 @@ ElissoFolderView::ElissoFolderView(ElissoApplicationWindow &mainWindow, int &iPa
     _iconView.property_selection_mode() = Gtk::SELECTION_MULTIPLE;
 
     // Connect the GUI thread dispatcher for when a folder populate is done.
-    _pImpl->workerPopulated.connect([this]()
+    _pImpl->connWorker = _pImpl->pWorkerPopulated->connect([this]()
     {
-        auto p = _pImpl->workerPopulated.fetchResult();
+        auto p = _pImpl->pWorkerPopulated->fetchResult();
         this->onPopulateDone(p);
     });
 
@@ -461,6 +306,7 @@ ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
         break;
 
         case ViewState::POPULATING:
+        case ViewState::REFRESHING:
             // stop the populate thread
             if (_pImpl->pPopulateThread)
             {
@@ -474,7 +320,13 @@ ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
     FSContainer *pContainer;
     if ((pContainer = pDirOrSymlinkToDir->getContainer()))
     {
-        _pDir = pDirOrSymlinkToDir;
+        if (fl.test(SetDirectoryFlag::IS_REFRESH))
+        {
+            if (_pDir != pDirOrSymlinkToDir)
+                throw FSException("Cannot change directory when refreshing");
+        }
+        else
+            _pDir = pDirOrSymlinkToDir;
 
         // Push the new path into the history.
         if (fl.test(SetDirectoryFlag::PUSH_TO_HISTORY))
@@ -509,14 +361,18 @@ ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
             Debug::Log(FOLDER_STACK, string(__func__) + "(): SetDirectoryFlag::PUSH_TO_HISTORY is NOT set");
 
         // Change view state early to avoid "selection changed" signals overflowing us.
-        this->setState(ViewState::POPULATING);
+        if (fl.test(SetDirectoryFlag::IS_REFRESH))
+            this->setState(ViewState::REFRESHING);
+        else
+            this->setState(ViewState::POPULATING);
 
         // If we're currently displaying an error, remove it.
         if (_mode == FolderViewMode::ERROR)
             setViewMode(_modeBeforeError);
 
         // Remove all old data, if any.
-        _pImpl->clearModel();
+        if (!(fl.test(SetDirectoryFlag::IS_REFRESH)))
+            _pImpl->clearModel();
 
         _pImpl->thumbnailer.stop();
 
@@ -527,7 +383,7 @@ ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
         Debug::Log(FOLDER_POPULATE_HIGH, "POPULATING LIST \"" + _pDir->getPath() + "\"");
 
         _pImpl->pPopulateThread = PopulateThread::Create(this->_pDir,
-                                                         this->_pImpl->workerPopulated,
+                                                         this->_pImpl->pWorkerPopulated,
                                                          fl.test(SetDirectoryFlag::CLICK_FROM_TREE),
                                                          pDirSelectPrevious);
         _pImpl->idCurrentPopulateThread = _pImpl->pPopulateThread->getID();
@@ -583,6 +439,8 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
 
         _pImpl->pllFolderContents = pResult->pvContents;
 
+        bool fRefreshing = _state == ViewState::REFRESHING;
+
         // This sets the wait cursor.
         this->setState(ViewState::INSERTING);
 
@@ -590,10 +448,13 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
         _pImpl->cToThumbnail = 0;
         _pImpl->cThumbnailed = 0;
 
+        // If we're refreshing, we only insert newly added files to avoid duplicates.
+        FSVector &vFiles = (fRefreshing) ? pResult->vAdded : *_pImpl->pllFolderContents;
+
         /*
-         * Insert all the files and collect some statistics.
+         *  Insert all the files and collect some statistics.
          */
-        for (auto &pFS : *_pImpl->pllFolderContents)
+        for (auto &pFS : vFiles)
         {
             auto it = this->insertFile(pFS);
             if (it)
@@ -624,11 +485,14 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
             }
         }
 
-        // This does not yet connect the model, since we haven't set the state to populated yet.
-        if (_pImpl->cImageFiles)
-            this->setViewMode(FolderViewMode::ICONS);
-        else
-            this->setViewMode(FolderViewMode::LIST);
+        if (!fRefreshing)
+        {
+            // This does not yet connect the model, since we haven't set the state to populated yet.
+            if (_pImpl->cImageFiles)
+                this->setViewMode(FolderViewMode::ICONS);
+            else
+                this->setViewMode(FolderViewMode::LIST);
+        }
 
         // This connects the model and also calls onFolderViewLoaded().
         this->setState(ViewState::POPULATED);
@@ -797,7 +661,8 @@ ElissoFolderView::removeFile(PFSModelBase pFS)
         auto &rowref= itSTL->second;
         Gtk::TreePath path = rowref.get_path();
         auto itModel = _pImpl->pListStore->get_iter(path);
-        _pImpl->pListStore->erase(itModel);
+        if (itModel)
+            _pImpl->pListStore->erase(itModel);
     }
 }
 
@@ -831,7 +696,7 @@ ElissoFolderView::refresh()
         if (pDir)
         {
             pDir->unsetPopulated();
-            this->setDirectory(_pDir, {});     // do not push to history
+            this->setDirectory(_pDir, SetDirectoryFlag::IS_REFRESH);     // but do not push to history
         }
     }
 }
@@ -911,7 +776,9 @@ ElissoFolderView::setState(ViewState s)
 {
     if (s != _state)
     {
-        if (_state == ViewState::POPULATING)
+        if (    (_state == ViewState::POPULATING)
+             || (_state == ViewState::REFRESHING)
+           )
         {
             delete _pLoading;
             _pLoading = nullptr;
@@ -920,11 +787,12 @@ ElissoFolderView::setState(ViewState s)
         switch (s)
         {
             case ViewState::POPULATING:
-            {
                 // Disconnect model, disable sorting to speed up inserting lots of rows.
                 this->connectModel(false);
-//                 _mainWindow.getNotebook().set_tab_label(*this, _spinnerNotebookPage);
+                // Fall though!
 
+            case ViewState::REFRESHING:
+            {
                 this->setNotebookTabTitle();
 
                 _pLoading = Gtk::manage(new Gtk::EventBox);
@@ -1462,7 +1330,7 @@ ElissoFolderView::clipboardCopyOrCutSelected(bool fCut)
     {
         _pImpl->vURIs.clear();
         for (auto &pFS : sel.vAll)
-            _pImpl->vURIs.push_back(pFS->getURI());
+            _pImpl->vURIs.push_back(pFS->getPath());
 
         vector<Gtk::TargetEntry> vTargets;
         vTargets.push_back(Gtk::TargetEntry(CLIPBOARD_TARGET_GNOME_COPIED_FILES));     // TODO others?

@@ -17,7 +17,7 @@
 #include "glibmm.h"
 #include "giomm.h"
 
-#include "xwp/lock.h"
+#include "xwp/thread.h"
 #include "xwp/flagset.h"
 
 #define FS_BUF_LEN 1024
@@ -178,15 +178,7 @@ public:
      *  Public Information methods
      */
 
-    PGioFile getGioFile()
-    {
-        return _pGioFile;
-    }
-
-    std::string getURI() const
-    {
-        return _pGioFile->get_uri();
-    }
+    PGioFile getGioFile();
 
     const std::string& getBasename() const
     {
@@ -279,7 +271,7 @@ protected:
     uint64_t                    _uID = 0;
     FSType                      _type = FSType::UNINITIALIZED;
     FSFlagSet                   _fl;
-    PGioFile                    _pGioFile;
+//     PGioFile                    _pGioFile;
     std::string                 _strBasename;
     uint64_t                    _cbSize;
     Glib::RefPtr<Gio::Icon>     _pIcon;
@@ -366,6 +358,7 @@ public:
 
     size_t getContents(FSVector &vFiles,
                        Get getContents,
+                       FSVector *pvFilesAdded,
                        FSVector *pvFilesRemoved,
                        StopFlag *pStopFlag);
 
@@ -388,7 +381,6 @@ protected:
 
     void addChild(ContentsLock &lock, PFSModelBase p);
     void removeChild(ContentsLock &lock, PFSModelBase p);
-    PFSModelBase isAwake(ContentsLock &lock, const std::string &strParticle) const;
 
     struct Impl;
     Impl                *_pImpl;

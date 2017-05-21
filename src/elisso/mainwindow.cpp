@@ -136,11 +136,7 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app)      //
     {
         auto p = static_cast<ElissoFolderView*>(pw);
         if (p)
-        {
-            this->onFolderViewLoaded(*p);
-            this->selectInFolderTree(p->getDirectory());
-            this->enableViewTabActions();
-        }
+            this->onNotebookTabChanged(*p);
     });
 
 
@@ -621,7 +617,6 @@ int ElissoApplicationWindow::errorBox(Glib::ustring strMessage)
                               false /* use_markup */,
                               Gtk::MESSAGE_QUESTION,
                               Gtk::BUTTONS_CANCEL);
-//     dialog.set_secondary_text("Launch \"" + pAppInfo->get_commandline() + "\"?");
     return dialog.run();
 }
 
@@ -682,13 +677,7 @@ ElissoApplicationWindow::onLoadingFolderView(ElissoFolderView &view)
     auto pCurrentViewPage = getActiveFolderView();
     if (pCurrentViewPage && (pCurrentViewPage == &view))
     {
-        PFSModelBase pDir = view.getDirectory();
-
-        Glib::ustring strTitle = "?";
-        if (pDir)
-            strTitle = pDir->getPath();
-
-        this->setWindowTitle(strTitle);
+        Glib::ustring strTitle = this->updateWindowTitle(view);
 
         this->setStatusbarCurrent("Loading " + quote(strTitle) + HELLIP);
 
@@ -712,6 +701,35 @@ void
 ElissoApplicationWindow::onFolderViewLoaded(ElissoFolderView &view)
 {
     this->enableViewTypeActions(true);
+}
+
+void
+ElissoApplicationWindow::onNotebookTabChanged(ElissoFolderView &view)
+{
+    this->onFolderViewLoaded(view);
+    this->updateWindowTitle(view);
+    this->selectInFolderTree(view.getDirectory());
+    this->enableViewTabActions();
+}
+
+/**
+ *  Sets the main window title to the full path of the current folder view.
+ *  This is in a separate method because it needs to be called both from
+ *  onLoadingFolderView() and onNotebookTabChanged(). Returns the full path
+ *  so the caller can use it elsewhere.
+ */
+Glib::ustring
+ElissoApplicationWindow::updateWindowTitle(ElissoFolderView &view)
+{
+    PFSModelBase pDir = view.getDirectory();
+
+    Glib::ustring strTitle = "?";
+    if (pDir)
+        strTitle = pDir->getPath();
+
+    this->setWindowTitle(strTitle);
+
+    return strTitle;
 }
 
 /**

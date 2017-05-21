@@ -18,8 +18,6 @@
 #include <mutex>
 #include <condition_variable>
 #include <atomic>
-#include <chrono>
-#include <thread>
 #include <set>
 
 
@@ -48,6 +46,37 @@ struct FSContainer::Impl
     Mutex           contentsMutex;
     FilesMap        mapContents;
     FSMonitorsList  llMonitors;
+
+    /**
+     *  Tests if a file-system object with the given name has already been instantiated in this
+     *  container. If so, it is returned. If this returns nullptr instead, that doesn't mean
+     *  that the file doesn't exist becuase the container might not be fully populated, or
+     *  directory contents may have changed since.
+     */
+    PFSModelBase
+    isAwake(ContentsLock &lock,
+            const string &strParticle,
+            FilesMap::iterator *pIt)
+    {
+        FilesMap::iterator it = mapContents.find(strParticle);
+        if (it != mapContents.end())
+        {
+            if (pIt)
+                *pIt = it;
+            return it->second;
+        }
+
+        return nullptr;
+    }
+
+    void removeImpl(ContentsLock &lock,
+                    FilesMap::iterator it)
+    {
+        auto p = it->second;
+        mapContents.erase(it);
+        p->_pParent = nullptr;
+        p->clearFlag(FSFlag::IS_LOCAL);
+    }
 };
 
 
@@ -347,6 +376,9 @@ FSModelBase::MakeAwake(Glib::RefPtr<Gio::File> pGioFile)
         throw FSException(e.what());
     }
 
+    if (!pReturn)
+        throw FSException("Unknown error waking up file-system object");
+
     return pReturn;
 }
 
@@ -369,11 +401,20 @@ FSModelBase::FSModelBase(FSType type,
                          uint64_t cbSize)
     : _uID(g_uFSID++),      // atomic
       _type(type),
-      _pGioFile(pGioFile),
-      _strBasename(_pGioFile->get_basename()),
+      _strBasename(pGioFile->get_basename()),
       _cbSize(cbSize)
 {
-    _pIcon = _pGioFile->query_info()->get_icon();
+    _pIcon = pGioFile->query_info()->get_icon();
+}
+
+PGioFile FSModelBase::getGioFile()
+{
+    auto strPath = getPath();
+
+    if (hasFlag(FSFlag::IS_LOCAL))
+        return Gio::File::create_for_path(strPath.substr(7));
+
+    return Gio::File::create_for_uri(strPath);
 }
 
 /**
@@ -560,8 +601,8 @@ FSModelBase::rename(const string &strNewName)
     if (pCnr)
         try
         {
-            // This interface is bizarre. It returns a new Gio::File on rename.
-            _pGioFile = _pGioFile->set_display_name(strNewName);
+            auto pGioFile = getGioFile();
+            pGioFile->set_display_name(strNewName);
 
             // Update the contents map, which sorts by name.
             ContentsLock cLock(*pCnr);
@@ -592,6 +633,10 @@ FSModelBase::sendToTrash()
 {
     try
     {
+        auto pGioFile = getGioFile();
+        if (!pGioFile)
+            throw FSException("cannot get GIO file");
+
         auto pParent = getParent();
         if (!pParent)
             throw FSException("cannot get parent for trashing");
@@ -604,7 +649,7 @@ FSModelBase::sendToTrash()
             pParentCnr->removeChild(cLock, shared_from_this());
         }
 
-        _pGioFile->trash();
+        pGioFile->trash();
     }
     catch(Gio::Error &e)
     {
@@ -624,6 +669,7 @@ FSModelBase::sendToTrash()
 void
 FSModelBase::moveTo(PFSModelBase pTarget)
 {
+    Debug::Enter(FILE_HIGH, __func__);
     try
     {
         auto pParent = getParent();
@@ -643,8 +689,9 @@ FSModelBase::moveTo(PFSModelBase pTarget)
             pParentCnr->removeChild(cLock, shared_from_this());
         }
 
-        _pGioFile->move(pTarget->getGioFile(),
-                        Gio::FileCopyFlags::FILE_COPY_NOFOLLOW_SYMLINKS | Gio::FileCopyFlags::FILE_COPY_NO_FALLBACK_FOR_MOVE );
+        auto pGioFile = getGioFile();
+        pGioFile->move(pTarget->getGioFile(),
+                       Gio::FileCopyFlags::FILE_COPY_NOFOLLOW_SYMLINKS /*| Gio::FileCopyFlags::FILE_COPY_NO_FALLBACK_FOR_MOVE */);
 
         {
             ContentsLock cLock(*pTargetCnr);
@@ -653,14 +700,16 @@ FSModelBase::moveTo(PFSModelBase pTarget)
     }
     catch(Gio::Error &e)
     {
+        Debug::Leave("Caught Gio::Error: " + e.what());
         throw FSException(e.what());
     }
+    Debug::Leave();
 }
 
 void
 FSModelBase::testFileOps()
 {
-    this_thread::sleep_for(chrono::milliseconds(50));
+    XWP::Thread::Sleep(50);
 }
 
 
@@ -824,10 +873,7 @@ FSContainer::removeChild(ContentsLock &lock, PFSModelBase p)
     if (it == _pImpl->mapContents.end())
         throw FSException("internal: cannot find myself in parent");
 
-    _pImpl->mapContents.erase(it);
-    p->_pParent = nullptr;
-
-    p->clearFlag(FSFlag::IS_LOCAL);
+    _pImpl->removeImpl(lock, it);
 }
 
 PFSDirectory
@@ -854,22 +900,6 @@ FSContainer::resolveDirectory()
 }
 
 /**
- *  Tests if a file-system object with the given name has already been instantiated in this
- *  container. If so, it is returned. If this returns nullptr instead, that doesn't mean
- *  that the file doesn't exist becuase the container might not be fully populated, or
- *  directory contents may have changed since.
- */
-PFSModelBase
-FSContainer::isAwake(ContentsLock &lock, const string &strParticle) const
-{
-    auto it = _pImpl->mapContents.find(strParticle);
-    if (it != _pImpl->mapContents.end())
-        return it->second;
-
-    return nullptr;
-}
-
-/**
  *  Attempts to find a file-system object in the current container (directory or symlink
  *  to a directory). This first calls isAwake() to check if the object has already been
  *  instantiated in memory; if not, we try to find it on disk and instantiate it.
@@ -882,7 +912,7 @@ FSContainer::find(const string &strParticle)
 {
     PFSModelBase pReturn;
     ContentsLock cLock(*this);
-    if ((pReturn = isAwake(cLock, strParticle)))
+    if ((pReturn = _pImpl->isAwake(cLock, strParticle, nullptr)))
         Debug::Log(FILE_MID, "Directory::find(" + quote(strParticle) + ") => already awake " + pReturn->describe());
     else
     {
@@ -984,15 +1014,17 @@ condition_variable_any g_condFolderPopulated;
  *  returns early once the stop flag is set.
  *
  *  To clear all "populated" flags and force a refresh from disk, call unsetPopulated()
- *  before calling this.
+ *  before calling this. For that case, you can pass in two FSVectors with pvFilesAdded
+ *  and pvFilesRemoved so you can call notifiers after the refresh.
  */
 size_t
 FSContainer::getContents(FSVector &vFiles,
                          Get getContents,
+                         FSVector *pvFilesAdded,
                          FSVector *pvFilesRemoved,        //!< out: list of file-system object that have been removed, or nullptr (optional)
                          StopFlag *pStopFlag)
 {
-    Debug::Enter(FILE_LOW, "FSContainer::getContents(\"" + _refBase.getBasename() + "\")");
+    Debug::Enter(FOLDER_POPULATE_HIGH, "FSContainer::getContents(\"" + _refBase.getPath() + "\")");
 
     size_t c = 0;
 
@@ -1037,9 +1069,10 @@ FSContainer::getContents(FSVector &vFiles,
                 }
             }
 
+            auto pgioContainer = _refBase.getGioFile();
             Glib::RefPtr<Gio::FileEnumerator> en;
-            if (!(en = _refBase._pGioFile->enumerate_children("*",
-                                                              Gio::FileQueryInfoFlags::FILE_QUERY_INFO_NOFOLLOW_SYMLINKS)))
+            if (!(en = pgioContainer->enumerate_children("*",
+                                                         Gio::FileQueryInfoFlags::FILE_QUERY_INFO_NOFOLLOW_SYMLINKS)))
                 throw FSException("Error populating!");
             else
             {
@@ -1047,8 +1080,8 @@ FSContainer::getContents(FSVector &vFiles,
                 FSVector vSymlinksForFirstFolder;
                 while ((pInfo = en->next_file()))
                 {
-                    auto pGioFile = en->get_child(pInfo);
-                    string strThis = pGioFile->get_basename();
+                    auto pGioFileThis = en->get_child(pInfo);
+                    string strThis = pGioFileThis->get_basename();
                     if (    (strThis != ".")
                          && (strThis != "..")
                        )
@@ -1063,10 +1096,11 @@ FSContainer::getContents(FSVector &vFiles,
                         ContentsLock cLock(*this);
 
                         // Check if the object is already in this container.
-                        PFSModelBase pAwake = isAwake(cLock, strThis);
+                        FilesMap::iterator it;
+                        PFSModelBase pAwake = _pImpl->isAwake(cLock, strThis, &it);
                         // Also wake up a new object from the GioFile. This is necessary
                         // so we can detect if the type of the file changed. This will not have the dirty flag set.
-                        PFSModelBase pTemp = FSModelBase::MakeAwake(pGioFile);
+                        PFSModelBase pTemp = FSModelBase::MakeAwake(pGioFileThis);
 
                         if (    (pAwake)
                              && (pAwake->getType() == pTemp->getType())
@@ -1078,14 +1112,14 @@ FSContainer::getContents(FSVector &vFiles,
                         }
                         else
                         {
-                            PFSModelBase pKeep;
+                            PFSModelBase pAddToContents;
 
                             if (pAwake)
                             {
                                 // Type of file changed: then remove it from the folder before adding the new one.
                                 if (pvFilesRemoved)
                                     pvFilesRemoved->push_back(pAwake);
-                                _pImpl->mapContents.erase(strThis);
+                                _pImpl->removeImpl(cLock, it);
                             }
 
                             auto t = pTemp->getType();
@@ -1094,14 +1128,14 @@ FSContainer::getContents(FSVector &vFiles,
                                 case FSType::DIRECTORY:
                                     // Always wake up directories.
                                     Debug::Enter(FILE_LOW, "Waking up directory " + strThis);
-                                    pKeep = pTemp;
+                                    pAddToContents = pTemp;
                                     Debug::Leave();
                                 break;
 
                                 case FSType::SYMLINK:
                                     // Need to wake up the symlink to figure out if it's a link to a dir.
                                     Debug::Enter(FILE_LOW, "Waking up symlink " + strThis);
-                                    pKeep = pTemp;
+                                    pAddToContents = pTemp;
                                     Debug::Leave();
                                 break;
 
@@ -1110,24 +1144,27 @@ FSContainer::getContents(FSVector &vFiles,
                                     if (getContents == Get::ALL)
                                     {
                                         Debug::Enter(FILE_LOW, "Waking up plain file " + strThis);
-                                        pKeep = pTemp;
+                                        pAddToContents = pTemp;
                                         Debug::Leave();
                                     }
                                 break;
                             }
 
-                            if (pKeep)
+                            if (pAddToContents)
                             {
-                                this->addChild(cLock, pKeep);
+                                this->addChild(cLock, pAddToContents);
+                                if (pvFilesAdded)
+                                    pvFilesAdded->push_back(pAddToContents);
+
 
                                 if (    (getContents == Get::FIRST_FOLDER_ONLY)
-                                     && (!pKeep->isHidden())
+                                     && (!pAddToContents->isHidden())
                                    )
                                 {
                                     if (t == FSType::DIRECTORY)
                                         break;      // we're done
                                     else if (    (t == FSType::SYMLINK)
-                                              && (pKeep->getResolvedType() == FSTypeResolved::SYMLINK_TO_DIRECTORY)
+                                              && (pAddToContents->getResolvedType() == FSTypeResolved::SYMLINK_TO_DIRECTORY)
                                             )
                                         break;
                                 }
@@ -1152,8 +1189,9 @@ FSContainer::getContents(FSVector &vFiles,
                 {
                     if (pvFilesRemoved)
                         pvFilesRemoved->push_back(p);
+                    _pImpl->removeImpl(cLock, it);
                     // Note the post increment. http://stackoverflow.com/questions/180516/how-to-filter-items-from-a-stdmap/180616#180616
-                    _pImpl->mapContents.erase(it++);
+                    it++;
                 }
                 else
                 {
@@ -1211,14 +1249,14 @@ FSContainer::getContents(FSVector &vFiles,
                 _refBase._fl.set(FSFlag::POPULATED_WITH_ALL);
             }
         } // if (!fStopped)
-
-        _refBase._fl.clear(FSFlag::POPULATING);
-        g_condFolderPopulated.notify_all();
     }
     catch(Gio::Error &e)
     {
         throw FSException(e.what());
     }
+
+    _refBase._fl.clear(FSFlag::POPULATING);
+    g_condFolderPopulated.notify_all();
 
     Debug::Leave();
 
@@ -1250,7 +1288,7 @@ FSContainer::createSubdirectory(const string &strName)
         Debug::Log(FILE_HIGH, string(__func__) + ": creating directory \"" + strPath + "\"");
 
         // The follwing cannot fail.
-        Glib::RefPtr<Gio::File> pGioFileNew = Gio::File::create_for_path(strPath);
+        Glib::RefPtr<Gio::File> pGioFileNew = Gio::File::create_for_uri(strPath);
         // But the following can throw.
         pGioFileNew->make_directory();
 
@@ -1294,7 +1332,7 @@ FSContainer::createEmptyDocument(const string &strName)
         Debug::Log(FILE_HIGH, string(__func__) + ": creating directory \"" + strPath + "\"");
 
         // The follwing cannot fail.
-        Glib::RefPtr<Gio::File> pGioFileNew = Gio::File::create_for_path(strPath);
+        Glib::RefPtr<Gio::File> pGioFileNew = Gio::File::create_for_uri(strPath);
         // But the following can throw.
         auto pStream = pGioFileNew->create_file();
         pStream->close();
@@ -1603,8 +1641,9 @@ FSSymlink::follow()
         string strParentDir = _pParent->getPath();
         Debug::Log(FILE_LOW, "parent = \"" + strParentDir + "\"");
 
-        Glib::RefPtr<Gio::FileInfo> pInfo = _pGioFile->query_info(G_FILE_ATTRIBUTE_STANDARD_SYMLINK_TARGET,
-                                                                  Gio::FileQueryInfoFlags::FILE_QUERY_INFO_NOFOLLOW_SYMLINKS);
+        auto pGioFile = getGioFile();
+        Glib::RefPtr<Gio::FileInfo> pInfo = pGioFile->query_info(G_FILE_ATTRIBUTE_STANDARD_SYMLINK_TARGET,
+                                                                 Gio::FileQueryInfoFlags::FILE_QUERY_INFO_NOFOLLOW_SYMLINKS);
         string strContents = pInfo->get_symlink_target();
         if (strContents.empty())
         {

@@ -10,8 +10,6 @@
 
 #include "elisso/fileops.h"
 
-#include <thread>
-
 #include "elisso/elisso.h"
 #include "elisso/progressdialog.h"
 
@@ -114,19 +112,18 @@ FileOperation::Create(Type t,
             throw FSException("Files in given list have more than one parent container");
     }
 
-    p->_pTarget = pTarget;
-    if (!(p->_pImpl->pTargetContainer = pTarget->getContainer()))
-        throw FSException("Missing target container");
+    if ((p->_pTarget = pTarget))
+        if (!(p->_pImpl->pTargetContainer = pTarget->getContainer()))
+            throw FSException("Missing target container");
 
     // Launch the thread.
-    auto pThread = new std::thread([p]()
+    XWP::Thread::Create([p]()
     {
         /*
          *  Thread function!
          */
         p->threadFunc();
     });
-    pThread->detach();
 
     return p;
 }
@@ -167,10 +164,8 @@ FileOperation::threadFunc()
         size_t cCurrent = 0;
         for (auto &pFS : _vFiles)
         {
-            postResultToGUI(pFS);     // Temporarily requests the lock.
-
             {
-                // Request the lock again.
+                // Temporarily request the lock.
                 Lock lock(mutex);
                 _pImpl->pFSCurrent = pFS;
                 _pImpl->dProgress = (double)cCurrent / (double)cFiles;
@@ -196,6 +191,8 @@ FileOperation::threadFunc()
 
             if (_stopFlag)
                 throw FSCancelledException();
+
+            postResultToGUI(pFS);     // Temporarily requests the lock.
 
             ++cCurrent;
         }
@@ -253,6 +250,7 @@ FileOperation::onProcessingNextItem(PFSModelBase pFS)
     }
     else
     {
+        // Finished:
         Debug::Log(FILE_HIGH, "File ops item processed: NULL");
 
         // nullptr means everything done: then we need to destroy
@@ -263,15 +261,21 @@ FileOperation::onProcessingNextItem(PFSModelBase pFS)
 
         // 1) Remove us from the progress dialog, if one exists.
         if (_pImpl->_ppProgressDialog)
-            (*_pImpl->_ppProgressDialog)->updateOperation(pThis,
-                                                          nullptr,
-                                                          100);
-
-        // 2) We are stored in the parent's queue of file operations; remove us there.
-        size_t c = _refQueue.size();
-        _refQueue.remove(pThis);
-        if (_refQueue.size() != c - 1)
-            throw FSException("failed to remove fileops from list");
+        {
+            if (_strError.empty())
+            {
+                (*_pImpl->_ppProgressDialog)->updateOperation(pThis,
+                                                              nullptr,
+                                                              100);
+                // 2) We are stored in the parent's queue of file operations; remove us there.
+                size_t c = _refQueue.size();
+                _refQueue.remove(pThis);
+                if (_refQueue.size() != c - 1)
+                    throw FSException("failed to remove fileops from list");
+            }
+            else
+                (*_pImpl->_ppProgressDialog)->setError(pThis, _strError);
+        }
 
         // 1) The Glib timer and dispatcher each have a lambda with a shared_ptr to
         //    this, which is really a functor with a copy of the shared_ptr.

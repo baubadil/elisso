@@ -14,10 +14,8 @@
 #include "xwp/debug.h"
 #include "xwp/stringhelp.h"
 #include "xwp/except.h"
-#include <thread>
 #include <ctime>
 #include <ratio>
-#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <vector>
@@ -136,7 +134,7 @@ struct Thumbnailer::Impl : WorkerResultQueue<PThumbnail>
 
         // This returns 8 on a four-core machine with 8 hyperthreads.
         // 3 pixbuf threads are good fit for that, so scale accordingly.
-        unsigned int cHyperThreads = std::thread::hardware_concurrency();
+        unsigned int cHyperThreads = XWP::Thread::getHardwareConcurrency();
         cPixbufLoaders = MAX(1, (cHyperThreads / 2 - 1));
         // Would love to have a vector here to make this easier but WorkerInputQueue is not copyable.
         paqPixbufLoaders = new WorkerInputQueue<PThumbnailTemp>[cPixbufLoaders];
@@ -166,37 +164,33 @@ Thumbnailer::Thumbnailer()
     Debug::Log(THUMBNAILER, "Thumbnailer constructed");
 
      // Create the file reader thread.
-    auto pThread = new std::thread([this]()
+    XWP::Thread::Create([this]()
     {
         this->fileReaderThread();
     });
-    pThread->detach();
 
     // Create the pixmap loader threads.
     for (uint u = 0;
          u < _pImpl->cPixbufLoaders;
          ++u)
     {
-        pThread = new std::thread([this, u]()
+        XWP::Thread::Create([this, u]()
         {
             this->pixbufLoaderThread(u);
         });
-        pThread->detach();
     }
 
     // Create the pixbuf scaler thread.
-    pThread = new std::thread([this]()
+    XWP::Thread::Create([this]()
     {
         this->scalerSmallThread();
     });
-    pThread->detach();
 
     // Create the pixbuf scaler thread.
-    pThread = new std::thread([this]()
+    XWP::Thread::Create([this]()
     {
         this->scalerBigThread();
     });
-    pThread->detach();
 }
 
 Thumbnailer::~Thumbnailer()
