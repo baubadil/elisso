@@ -450,9 +450,9 @@ ElissoFolderTree::spawnPopulate(const Gtk::TreeModel::iterator &it)
             /*
              * Launch the thread!
              */
-            ++_pImpl->cThreadsRunning;
             XWP::Thread::Create([this, pDir, pDir2, pRowRefPopulating]()
             {
+                ++_pImpl->cThreadsRunning;
                 // Create an FSList on the thread's stack and have it filled by the back-end.
                 PSubtreePopulated pResult = std::make_shared<SubtreePopulated>(pDir, pRowRefPopulating);
 
@@ -468,11 +468,11 @@ ElissoFolderTree::spawnPopulate(const Gtk::TreeModel::iterator &it)
                 {
                 }
 
+                --_pImpl->cThreadsRunning;
+
                 // Hand the results over to the instance: add it to the queue, signal the dispatcher.
                 this->_pImpl->workerSubtreePopulated.postResultToGUI(pResult);
                 // This triggers onPopulateDone().
-
-                --_pImpl->cThreadsRunning;
             });
 
             this->updateCursor();
@@ -598,9 +598,9 @@ ElissoFolderTree::spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst)
     /*
      * Launch the thread!
      */
-    ++_pImpl->cThreadsRunning;
     XWP::Thread::Create([this, pllToAddFirst]()
     {
+        ++_pImpl->cThreadsRunning;
         for (PAddOneFirst pAddOneFirst : *pllToAddFirst)
         {
             try
@@ -629,7 +629,9 @@ ElissoFolderTree::spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst)
                 _pImpl->workerAddOneFirst.postResultToGUI(pAddOneFirst);
             }
         }
+
         --_pImpl->cThreadsRunning;
+        _pImpl->workerAddOneFirst.postResultToGUI(nullptr);
     });
 
     this->updateCursor();
