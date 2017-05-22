@@ -545,16 +545,17 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
         auto pCnr = _pDir->getContainer();
         if (pCnr)
         {
-            // Notify other monitors (tree view) of the items that have been removed
-            // if this was a refresh.
-            for (auto &pRemoved : pResult->vRemoved)
-                pCnr->notifyFileRemoved(pRemoved);
-
-            // And make sure we have a monitor.
+            // Make sure we have a monitor.
             auto pOther = _pImpl->pMonitor->isWatching();
             if (pOther)
                 _pImpl->pMonitor->stopWatching(*pOther);
             _pImpl->pMonitor->startWatching(*pCnr);
+
+            // Notify this and other monitors (tree view) of the items that have been removed
+            // if this was a refresh.
+            for (auto &pRemoved : pResult->vRemoved)
+                pCnr->notifyFileRemoved(pRemoved);
+
         }
 
         // The folder view may have inserted a lot of icons and got the thumbnailer going.

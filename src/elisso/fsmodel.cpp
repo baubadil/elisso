@@ -1187,6 +1187,7 @@ FSContainer::getContents(FSVector &vFiles,
                      && (p->_fl.test(FSFlag::DIRTY))
                    )
                 {
+                    Debug::Log(FOLDER_POPULATE_HIGH, "Removing dirty file " + quote(p->getBasename()));
                     if (pvFilesRemoved)
                         pvFilesRemoved->push_back(p);
                     _pImpl->removeImpl(cLock, it);
