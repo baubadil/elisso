@@ -14,7 +14,7 @@
 #include <gtkmm.h>
 
 #include "elisso/elisso.h"
-#include "elisso/fsmodel.h"
+#include "elisso/treemodel.h"
 #include "elisso/treeviewplus.h"
 
 class ElissoApplicationWindow;
@@ -57,13 +57,13 @@ public:
 private:
     friend class FolderTreeMonitor;
 
-    bool spawnPopulate(const Gtk::TreeModel::iterator &it);
+    bool spawnPopulate(PFolderTreeModelRow pRow);
     void onPopulateDone();
 
-    Gtk::TreeModel::iterator insertNode(const Glib::ustring &strName,
-                                        PFSModelBase pFS,
-                                        const Gtk::TreeNodeChildren &children);
-    void addMonitor(Gtk::TreeModel::iterator it);
+//     Gtk::TreeModel::iterator insertNode(const Glib::ustring &strName,
+//                                         PFSModelBase pFS,
+//                                         const Gtk::TreeNodeChildren &children);
+    void addMonitor(PFolderTreeModelRow pRow);
 
     void spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst);
     void onAddAnotherFirst();
@@ -75,7 +75,7 @@ private:
     void updateCursor();
 
     Gtk::TreeModel::iterator getIterator(const PRowReference &pRowRef);
-    PRowReference getRowReference(const Gtk::TreeModel::iterator &it);
+//     PRowReference getRowReference(const Gtk::TreeModel::iterator &it);
 
     ElissoApplicationWindow     &_mainWindow;
     TreeViewPlus                _treeView;
@@ -103,12 +103,10 @@ class FolderTreeMonitor : public FSMonitorBase
 {
 public:
     FolderTreeMonitor(ElissoFolderTree &tree,
-                      PRowReference pRowRefDirWatching,
-                      PFSModelBase pDirWatching)
+                      PFolderTreeModelRow &pRow)
         : FSMonitorBase(),
           _tree(tree),
-          _pRowRefDirWatching(pRowRefDirWatching),
-          _pDirWatching(pDirWatching)
+          _pRow(pRow)
     { };
 
     virtual void onItemAdded(PFSModelBase &pFS) override;
@@ -119,9 +117,9 @@ private:
     Gtk::TreeModel::iterator findIterator(PFSModelBase &pFS);
 
     ElissoFolderTree &_tree;
-    PRowReference _pRowRefDirWatching;
-    PFSModelBase _pDirWatching;
+    PFolderTreeModelRow _pRow;
 };
 typedef shared_ptr<FolderTreeMonitor> PFolderTreeMonitor;
+
 
 #endif // ELISSO_FOLDERTREE_H

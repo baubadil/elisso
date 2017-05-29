@@ -2,6 +2,7 @@
 SUB_DEPTH = ../..
 
 elisso_SOURCES += \
+	src/elisso/treemodel.cpp \
 	src/elisso/contenttype.cpp \
 	src/elisso/main.cpp \
 	src/elisso/mainwindow.cpp \
