@@ -18,7 +18,7 @@
 class FolderTreeModel;
 typedef Glib::RefPtr<FolderTreeModel> PFolderTreeModel;
 
-class GlueItem;
+// class GlueItem;
 
 
 /***************************************************************************
@@ -73,7 +73,6 @@ private:
 
 struct FolderTreeModelRow;
 typedef std::shared_ptr<FolderTreeModelRow> PFolderTreeModelRow;
-typedef std::vector<PFolderTreeModelRow> RowsVector;
 typedef std::map<Glib::ustring, PFolderTreeModelRow> RowsMap;
 
 struct FolderTreeModelRow
@@ -83,16 +82,19 @@ struct FolderTreeModelRow
     TreeNodeState             state;
 
     // Additional private data, not retrievable by GTK.
-    unsigned                  uRowIndex;
+    PFolderTreeModelRow       pParent;
+    int                       uRowIndex;
     PFSModelBase              pDir;
     PFolderTreeMonitor        pMonitor;
 
-    RowsVector                vChildren2;
     RowsMap                   mapChildren;
 
-    FolderTreeModelRow(unsigned sort_, PFSModelBase pDir_, unsigned uRowIndex_);
+    FolderTreeModelRow(PFolderTreeModelRow pParent_,
+                       int uRowIndex_,
+                       unsigned sort_,
+                       PFSModelBase pDir_);
 
-    unsigned getIndex() const
+    int getIndex() const
     {
         return uRowIndex;
     }
@@ -106,7 +108,8 @@ struct FolderTreeModelRow
  *
  **************************************************************************/
 
-class FolderTreeModel : public Gtk::TreeModel, public Glib::Object
+class FolderTreeModel : public Gtk::TreeModel,
+                        public Glib::Object
 {
 public:
     static PFolderTreeModel create();
@@ -116,7 +119,8 @@ public:
     PFolderTreeModelRow append(PFolderTreeModelRow pParent, unsigned sort, PFSModelBase pDir);
 
     PFolderTreeModelRow findRow(PFolderTreeModelRow pParent, const Glib::ustring &strName);
-    PFolderTreeModelRow findRow(const iterator &iter);
+    PFolderTreeModelRow findRow(const iterator &iter) const;
+    int getPathInts(PFolderTreeModelRow pRow, int **pai) const;
     Gtk::TreePath getPath(PFolderTreeModelRow pRow) const;
 
 protected:
@@ -128,7 +132,7 @@ protected:
     virtual int get_n_columns_vfunc() const override;
     virtual GType get_column_type_vfunc(int index) const override;
 
-    virtual bool iter_next_vfunc(const iterator &iter, iterator &iter_next) const override;
+    virtual bool iter_next_vfunc(const iterator &iter, iterator &iterNext) const override;
     virtual bool get_iter_vfunc(const Path &path, iterator &iter) const override;
     virtual bool iter_children_vfunc(const iterator &parent, iterator &iter) const override;
     virtual bool iter_parent_vfunc(const iterator &child, iterator &iter) const override;
@@ -147,35 +151,11 @@ protected:
     virtual bool iter_nth_root_child_vfunc(int n, iterator &iter) const override;
 
 private:
-//     typedef std::vector< Glib::ustring> typeRow; //X columns, all of type string.
-
-    //Allow the GlueList inner class to access the declaration of the GlueItem inner class.
-    //SUN's Forte compiler complains about this.
-//     class GlueList;
-//     friend class GlueList;
-//
-//     class GlueList
-//     {
-//     public:
-//         GlueList()
-//         { }
-//         ~GlueList();
-//
-//         //This is just a list of stuff to delete later:
-//         typedef std::vector<GlueItem*> type_vecOfGlue;
-//         type_vecOfGlue m_list;
-//     };
-
-    RowsVector::iterator get_data_row_iter_from_tree_row_iter(const iterator &iter);
-    RowsVector::const_iterator get_data_row_iter_from_tree_row_iter(const iterator &iter) const;
-    bool check_treeiter_validity(const iterator &iter) const;
-    void* createGlueItem(int rowIndex) const;
+    bool isTreeIterValid(const iterator &iter) const;
+    void makeIter(iterator &iter, FolderTreeModelRow *pParent, int rowIndex) const;
 
     struct Impl;
     Impl *_pImpl;
-
-//     int m_stamp; //When the model's stamp and the TreeIter's stamp are equal, the TreeIter is valid.
-//     mutable GlueList* m_pGlueList;
 };
 
 #endif

@@ -47,6 +47,7 @@ const DebugFlag WINDOWHIERARCHY         = (1 << 25);
 const DebugFlag FILEMONITORS            = (1 << 26);
 const DebugFlag CLIPBOARD               = (1 << 27);
 const DebugFlag PROGRESSDIALOG          = (1 << 28);
+const DebugFlag TREEMODEL               = (1 << 29);
 
 #define ICON_SIZE_SMALL     16
 #define ICON_SIZE_BIG       128

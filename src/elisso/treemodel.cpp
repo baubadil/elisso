@@ -17,6 +17,11 @@
 
 #include <iostream>
 #include "elisso/treemodel.h"
+#include "elisso/elisso.h"
+#include "xwp/debug.h"
+#include "xwp/stringhelp.h"
+#include <cassert>
+
 
 /***************************************************************************
  *
@@ -33,57 +38,18 @@ FolderTreeModelColumns* FolderTreeModelColumns::s_p = nullptr;
  *
  **************************************************************************/
 
-FolderTreeModelRow::FolderTreeModelRow(unsigned sort_,
-                                       PFSModelBase pDir_,
-                                       unsigned uRowIndex_)
+FolderTreeModelRow::FolderTreeModelRow(PFolderTreeModelRow pParent_,
+                                       int uRowIndex_,
+                                       unsigned sort_,
+                                       PFSModelBase pDir_)
     : sort(sort_),
       name(pDir_->getBasename()),
       state(TreeNodeState::UNKNOWN),
+      pParent(pParent_),
       uRowIndex(uRowIndex_),
       pDir(pDir_)
 {
 }
-
-
-/***************************************************************************
- *
- *  FolderTreeModel::GlueItem
- *
- **************************************************************************/
-
-//This maps the GtkTreeIters to potential paths:
-//Each GlueItem might be stored in more than one GtkTreeIter,
-//but it will be deleted only once, because it is stored
-//only once in the GlueList.
-//GtkTreeIter::user_data might contain orphaned GlueList pointers,
-//but nobody will access them because GtkTreeIter::stamp will have the
-//wrong value, marking the user_data as invalid.
-class GlueItem
-{
-public:
-    GlueItem(int row_number)
-        : m_row_number(row_number)
-    { };
-
-    int get_row_number() const
-    {
-        return m_row_number;
-    }
-
-protected:
-    int m_row_number;
-};
-
-typedef std::shared_ptr<GlueItem> PGlueItem;
-
-// FolderTreeModel::GlueList::~GlueList()
-// {
-//     //Delete each GlueItem in the list:
-//     for (const auto &pItem : m_list)
-//     {
-//         delete pItem;
-//     }
-// }
 
 
 /***************************************************************************
@@ -94,11 +60,8 @@ typedef std::shared_ptr<GlueItem> PGlueItem;
 
 struct FolderTreeModel::Impl
 {
-    std::vector<PGlueItem>  vGlueItems;
-    int                     stamp = 1;      //When the model's stamp and the TreeIter's stamp are equal, the TreeIter is valid.
-
-    RowsVector vRows;
-    RowsMap    mapRows;
+    int                     stamp = 1;
+    RowsMap                 mapRows;
 };
 
 
@@ -116,45 +79,29 @@ FolderTreeModel::create()
 }
 
 FolderTreeModel::FolderTreeModel()
-    : Glib::ObjectBase( typeid(FolderTreeModel) ), //register a custom GType.
-      Glib::Object(), //The custom GType is actually registered here.
+    : Glib::ObjectBase(typeid(FolderTreeModel)),
+      Glib::Object(),
       _pImpl(new Impl)
 {
-    //Initialize our underlying data:
-//     const RowsVector::size_type rows_count = 100;
-//     m_rows.resize(rows_count); //100 rows.
-//     for (unsigned int row_number = 0; row_number < rows_count; ++row_number)
-//     {
-//         //Create the row:
-//         m_rows[row_number].resize(columns_count); // 10 cells (columns) for each row.
-//
-//         for (unsigned int column_number = 0; column_number < columns_count; ++column_number)
-//         {
-//             // Set the data in the row cells:
-//             // It is more likely that you would be reusing existing data from some other data structure,
-//             // instead of generating the data here.
-//
-//             char buffer[20]; //You could use a std::stringstream instead.
-//             g_snprintf(buffer, sizeof(buffer), "%d, %d", row_number, column_number);
-//
-//             (m_rows[row_number])[column_number] = buffer; //Note that all 10 columns here are of the same type.
-//         }
-//     }
-//
-    //The Column information that can be used with TreeView::append(), TreeModel::iterator[], etc.
-//     auto &cols = FolderTreeModelColumns::Get();
-//     size_t cColumns = cols.size();
-//     _pImpl->vModelColumns.resize(cColumns);
-//     for (size_t i = 0; i < cColumns; ++i)
-//         _pImpl->vModelColumns.push_back(make_shared<Gtk::TreeModelColumnBase>(
-//     for (unsigned int column_number = 0; column_number < columns_count; ++column_number)
-//     {
-//         m_column_record.add( _pImpl->vModelColumns[column_number] );
-//     }
 }
 
 FolderTreeModel::~FolderTreeModel()
 {
+}
+
+void dumpModel(RowsMap &m, int iLevel = 0)
+{
+    if (m.size())
+    {
+        Debug::Enter(TREEMODEL, "Dumping model level " + to_string(iLevel));
+        for (auto &it : m)
+        {
+            PFolderTreeModelRow pRow = it.second;
+            Debug::Log(TREEMODEL, pRow->pDir->getBasename());
+            dumpModel(pRow->mapChildren, iLevel + 1);
+        }
+        Debug::Leave();
+    }
 }
 
 PFolderTreeModelRow
@@ -162,22 +109,41 @@ FolderTreeModel::append(PFolderTreeModelRow pParent,
                         unsigned sort,
                         PFSModelBase pDir)
 {
-    unsigned uRowIndex = pParent ? pParent->vChildren2.size() : _pImpl->vRows.size();
+    unsigned uRowIndex = pParent ? pParent->mapChildren.size() : _pImpl->mapRows.size();
 
-    PFolderTreeModelRow pRow = make_shared<FolderTreeModelRow>(sort, pDir, uRowIndex);
+    PFolderTreeModelRow pNewRow = make_shared<FolderTreeModelRow>(pParent,
+                                                                  uRowIndex,
+                                                                  sort,
+                                                                  pDir);
 
     if (pParent)
-    {
-        pParent->vChildren2.push_back(pRow);
-        pParent->mapChildren[pRow->name] = pRow;
-    }
+        pParent->mapChildren[pNewRow->name] = pNewRow;
     else
+        _pImpl->mapRows[pNewRow->name] = pNewRow;
+
+//     auto path = getPath(pNewRow);
+//     row_inserted(path, iter);
+
+    int *pai;
+    int z;
+    if ((z = getPathInts(pNewRow, &pai)))
     {
-        _pImpl->vRows.push_back(pRow);
-        _pImpl->mapRows[pRow->name] = pRow;
+        auto pPath = gtk_tree_path_new_from_indicesv(pai, z);
+        iterator iter;
+        FolderTreeModelRow *pParent = (pNewRow->pParent) ? &(*pNewRow->pParent) : nullptr;
+        makeIter(iter, pParent, pNewRow->getIndex());
+        gtk_tree_model_row_inserted(gobj(),
+                                    pPath,
+                                    iter.gobj());
+        gtk_tree_path_free(pPath);
+        free(pai);
     }
 
-    return pRow;
+//     Debug::Enter(TREEMODEL, "Dumping model after append");
+//     dumpModel(_pImpl->mapRows);
+//     Debug::Leave();
+
+    return pNewRow;
 }
 
 PFolderTreeModelRow
@@ -192,24 +158,76 @@ FolderTreeModel::findRow(PFolderTreeModelRow pParent, const Glib::ustring &strNa
 }
 
 PFolderTreeModelRow
-FolderTreeModel::findRow(const iterator &iter)
+FolderTreeModel::findRow(const iterator &iter) const
 {
-    RowsVector::const_iterator it2 = get_data_row_iter_from_tree_row_iter(iter);
-    if (it2 == _pImpl->vRows.end())
-        return nullptr;
+    if (isTreeIterValid(iter))
+    {
+        FolderTreeModelRow *pParent = (FolderTreeModelRow*)iter.gobj()->user_data;
+        int iRowNumber = (int)(size_t)(iter.gobj()->user_data2);
+        RowsMap &m = (pParent) ? pParent->mapChildren : _pImpl->mapRows;
 
-    return *it2;
+        if (iRowNumber < (int)m.size())
+        {
+            auto it = m.begin();
+            std::advance(it, iRowNumber);
+
+            PFolderTreeModelRow &p = it->second;
+            Debug::Log(TREEMODEL, string(__func__) + "(parent=" + (pParent ? quote(pParent->pDir->getBasename()) : "NULL") + ":" + to_string(iRowNumber) + "): " + p->pDir->getBasename());
+            return p;
+        }
+
+        Debug::Log(TREEMODEL, string(__func__) + "(" + to_string(iRowNumber) + "): ERROR");
+    }
+
+    Debug::Log(TREEMODEL, string(__func__) + "(): INVALID ITER");
+
+    return nullptr;
+}
+
+int
+FolderTreeModel::getPathInts(PFolderTreeModelRow pRow, int **ppai) const
+{
+    std::list<int> lli = { pRow->getIndex() };
+    PFolderTreeModelRow pRow2 = pRow->pParent;
+    while (pRow2)
+    {
+        lli.push_front(pRow2->getIndex());
+        pRow2 = pRow2->pParent;
+    }
+
+    int z = lli.size();
+    if ((*ppai = (int*)malloc(sizeof(int) * z)))
+    {
+        StringVector svDebug;
+
+        int *p = *ppai;
+        for (auto &i : lli)
+        {
+            *p++ = i;
+            svDebug.push_back(to_string(i));
+        }
+
+        Debug::Log(TREEMODEL, string(__func__) + "(" + quote(pRow->pDir->getBasename()) + ") => " + quote(implode(":", svDebug)));
+
+        return z;
+    }
+
+    return 0;
 }
 
 Gtk::TreePath
 FolderTreeModel::getPath(PFolderTreeModelRow pRow) const
 {
-    auto iter = iterator();
-    iter.set_stamp(_pImpl->stamp);
+    int *pai;
+    int z;
+    if ((z = getPathInts(pRow, &pai)))
+    {
+        auto pPath = gtk_tree_path_new_from_indicesv(pai, z);
+        free(pai);
+        return Glib::wrap(pPath);
+    }
 
-    iter.gobj()->user_data = createGlueItem(pRow->getIndex());
-
-    return Gtk::TreePath(iter);
+    return Path();
 }
 
 /**
@@ -263,44 +281,44 @@ FolderTreeModel::get_value_vfunc(const TreeModel::iterator &iter,
                                  int column,
                                  Glib::ValueBase &value) const
 {
-    if (check_treeiter_validity(iter))
+    auto pRow = findRow(iter);
+
+    if (pRow)
     {
         auto &cols = FolderTreeModelColumns::Get();
-
         if (column <= (int)cols.size())
         {
-            RowsVector::const_iterator it2 = get_data_row_iter_from_tree_row_iter(iter);
-            if (it2 != _pImpl->vRows.end())
+            GType type = cols.types()[column];
+            value.init(type);
+
+            switch (column)
             {
-                const PFolderTreeModelRow &pRow = *it2;
-
-                GType type = cols.types()[column];
-                value.init(type);
-
-                switch (column)
+                case 0: // cols._colMajorSort:
                 {
-                    case 0: // cols._colMajorSort:
-                    {
-                        Glib::Value<uint8_t> v;
-                        v.set(pRow->sort);
-                        value = v;
-                    }
-                    break;
-                    case 1: // cols._colIconAndName:
-                    {
-                        Glib::Value<Glib::ustring> v;
-                        v.set(pRow->name);
-                        value = v;
-                    }
-                    break;
-                    case 3: // cols._colState:
-                    {
-                        Glib::Value<uint8_t> v;
-                        v.set((uint8_t)pRow->state);
-                        value = v;
-                    }
-                    break;
+                    Glib::Value<uint8_t> v;
+                    v.init(type);
+                    v.set(pRow->sort);
+                    value = v;
                 }
+                break;
+                case 1: // cols._colIconAndName:
+                {
+                    Debug::Log(TREEMODEL, string(__func__) + "(" + quote(pRow->pDir->getBasename()) + ")");
+
+                    Glib::Value<Glib::ustring> v;
+                    v.init(type);
+                    v.set(pRow->name);
+                    value = v;
+                }
+                break;
+                case 3: // cols._colState:
+                {
+                    Glib::Value<uint8_t> v;
+                    v.init(type);
+                    v.set((uint8_t)pRow->state);
+                    value = v;
+                }
+                break;
             }
         }
     }
@@ -317,26 +335,31 @@ FolderTreeModel::set_value_impl(const iterator &row, int column, const Glib::Val
  *  level. If there is no next iter, false is returned and iter_next is set to be invalid.
  */
 bool
-FolderTreeModel::iter_next_vfunc(const iterator &iter, iterator &iter_next) const
+FolderTreeModel::iter_next_vfunc(const iterator &iter, iterator &iterNext) const
 {
-    iter_next = iterator();
+    Debug::Enter(TREEMODEL, __func__);
+    bool rc = false;
 
-    if (check_treeiter_validity(iter))
+    iterNext = iterator();
+
+    if (isTreeIterValid(iter))
     {
-        iter_next.set_stamp(_pImpl->stamp);
+        FolderTreeModelRow *pParent = (FolderTreeModelRow*)iter.gobj()->user_data;
+        int iRowNumber = (int)(size_t)(iter.gobj()->user_data2);
+        RowsMap &m = (pParent) ? pParent->mapChildren : _pImpl->mapRows;
 
-        const auto pItem = (const GlueItem*)iter.gobj()->user_data;
-        RowsVector::size_type row_index = pItem->get_row_number();
+        Debug::Log(TREEMODEL, string(__func__) + "(" + quote(pParent->pDir->getBasename()) + ", " + to_string(iRowNumber) + ")");
 
-        row_index++;
-        if (row_index < _pImpl->vRows.size())
+        iRowNumber++;
+        if (iRowNumber < (int)m.size())
         {
-            iter_next.gobj()->user_data = createGlueItem(row_index);
-            return true; //success
+            makeIter(iterNext, pParent, iRowNumber);
+            rc = true;
         }
     }
 
-    return false; //There is no next row.
+    Debug::Leave("returning " + string((rc) ? "true" : "false"));
+    return rc;
 }
 
 /**
@@ -364,17 +387,18 @@ FolderTreeModel::iter_has_child_vfunc(const iterator &iter) const
 int
 FolderTreeModel::iter_n_children_vfunc(const iterator &iter) const
 {
-    if (check_treeiter_validity(iter))
+    int z = 0;
+    Debug::Enter(TREEMODEL, __func__);
+
+    PFolderTreeModelRow pRow = findRow(iter);
+    if (pRow)
     {
-        RowsVector::const_iterator it2 = get_data_row_iter_from_tree_row_iter(iter);
-        if (it2 != _pImpl->vRows.end())
-        {
-            const PFolderTreeModelRow &pRow = *it2;
-            return pRow->vChildren2.size();
-        }
+        Debug::Log(TREEMODEL, string(__func__) + "(" + quote(pRow->pDir->getBasename()) + ") => " + to_string(pRow->mapChildren.size()) + " children");
+        z = pRow->mapChildren.size();
     }
 
-    return 0; //There are no children
+    Debug::Leave("returning " + to_string(z));
+    return z;
 }
 
 /**
@@ -383,25 +407,39 @@ FolderTreeModel::iter_n_children_vfunc(const iterator &iter) const
 int
 FolderTreeModel::iter_n_root_children_vfunc() const
 {
-    return _pImpl->vRows.size();
+    return _pImpl->mapRows.size();
 }
 
 /**
  *  TreeModel vfunc implementation. Sets iter to be the child of parent using the given index.
  *  The first index is 0. If n is too big, or parent has no children, iter is set to an invalid
- *  iterator and false is returned. See also iter_nth_root_child_vfunc() TODO
+ *  iterator and false is returned. See also iter_nth_root_child_vfunc().
  */
 bool
-FolderTreeModel::iter_nth_child_vfunc(const iterator &parent, int /* n */, iterator &iter) const
+FolderTreeModel::iter_nth_child_vfunc(const iterator &parent,
+                                      int n,
+                                      iterator &iter) const
 {
-    iter = iterator(); //Set is as invalid, as the TreeModel documentation says that it should be.
+    bool rc = false;
+    Debug::Enter(TREEMODEL, __func__);
 
-    if (!check_treeiter_validity(parent))
+    iter = iterator();
+
+    auto pParentRow = findRow(parent);
+    if (pParentRow)
     {
-        return false;
+        if (n < (int)pParentRow->mapChildren.size())
+        {
+            RowsMap::const_iterator it3 = pParentRow->mapChildren.begin();
+            std::advance(it3, n);
+            auto pRowResult = it3->second;
+            makeIter(iter, &*pParentRow, n);
+            rc = true;
+        }
     }
 
-    return false; //There are no children.
+    Debug::Leave("returning " + string((rc) ? "true" : "false"));
+    return rc;
 }
 
 /**
@@ -412,42 +450,60 @@ FolderTreeModel::iter_nth_child_vfunc(const iterator &parent, int /* n */, itera
 bool
 FolderTreeModel::iter_nth_root_child_vfunc(int n, iterator &iter) const
 {
+    bool rc = false;
+    Debug::Enter(TREEMODEL, __func__);
+
     iter = iterator();
 
-    if (n < (int)_pImpl->vRows.size())
+    if (n < (int)_pImpl->mapRows.size())
     {
-        iter.set_stamp(_pImpl->stamp);
-        unsigned row_index = n;
-        iter.gobj()->user_data = createGlueItem(row_index);
-        return true;
+        makeIter(iter,
+                 nullptr,         // parent
+                 n);
+        rc = true;
     }
 
-    return false; //There are no children.
+    Debug::Leave();
+    return rc;
 }
 
 /**
  *  TreeModel vfunc implementation. Sets iter to be the parent of child. If child is at the toplevel,
- *  and doesn't have a parent, then iter is set to an invalid iterator and false is returned. TODO
+ *  and doesn't have a parent, then iter is set to an invalid iterator and false is returned.
  */
 bool
 FolderTreeModel::iter_parent_vfunc(const iterator &child, iterator &iter) const
 {
-    if (!check_treeiter_validity(child))
+    bool rc = true;
+    Debug::Enter(TREEMODEL, __func__);
+    iter = iterator();
+
+    auto pRow = findRow(child);
+    if (pRow)
     {
-        iter = iterator(); //Set is as invalid, as the TreeModel documentation says that it should be.
-        return false;
+        if (pRow->pParent)
+        {
+            auto pRowResult = pRow->pParent;
+            FolderTreeModelRow *pGrandParent = (pRowResult->pParent) ? &(*pRowResult->pParent) : nullptr;
+            makeIter(iter, pGrandParent, pRowResult->getIndex());
+            rc = true;
+        }
     }
 
-    iter = iterator(); //Set is as invalid, as the TreeModel documentation says that it should be.
-    return false; //There are no children, so no parents.
+    Debug::Leave("returning " + string((rc) ? "true" : "false"));
+    return rc;
 }
 
 /**
- *  TreeModel vfunc implementation. Returns a Path referenced by iter. TODO
+ *  TreeModel vfunc implementation. Returns a Path referenced by iter.
  */
 Gtk::TreeModel::Path
-FolderTreeModel::get_path_vfunc(const iterator &/* iter */) const
+FolderTreeModel::get_path_vfunc(const iterator &iter) const
 {
+    auto pRow = findRow(iter);
+    if (pRow)
+        return getPath(pRow);
+
     return Path();
 }
 
@@ -457,80 +513,57 @@ FolderTreeModel::get_path_vfunc(const iterator &/* iter */) const
 bool
 FolderTreeModel::get_iter_vfunc(const Path &path, iterator &iter) const
 {
+    Debug::Enter(TREEMODEL, __func__);
+    bool rc = false;
+
     iter = iterator();
 
-    unsigned sz = path.size();
-    if (!sz)
-        return false;
+    PFolderTreeModelRow pRow;
+    gint iDepth;
+    gint *pai = gtk_tree_path_get_indices_with_depth((GtkTreePath*)path.gobj(),
+                                                     &iDepth);
+    if (pai)
+    {
+        for (int u = 0; u < iDepth; ++u)
+        {
+            RowsMap &m = (pRow) ? pRow->mapChildren : _pImpl->mapRows;
+            if (u < (int)m.size())
+            {
+                auto it = m.begin();
+                std::advance(it, u);
+                pRow = it->second;
+            }
+            else
+            {
+                pRow = nullptr;
+                break;
+            }
+        }
+    }
 
-    if (sz > 1) //There are no children.
-        return false;
+    if (pRow)
+    {
+        FolderTreeModelRow *pParent = (pRow->pParent) ? &(*pRow->pParent) : nullptr;
+        makeIter(iter, pParent, pRow->getIndex());
+        rc = true;
+    }
 
-    //This is a new GtkTreeIter, so it needs the current stamp value.
-    //See the comment in the constructor.
-    iter = iterator(); //clear the input parameter.
-    iter.set_stamp(_pImpl->stamp);
-
-    //Store the row_index in the GtkTreeIter:
-    //See also iter_next_vfunc()
-    //TODO: Store a pointer to some more complex data type such as a RowsVector::iterator.
-
-    unsigned row_index = path[0];
-
-    //Store the GlueItem in the GtkTreeIter.
-    //This will be deleted in the GlueList destructor,
-    //which will be called when the old GtkTreeIters are marked as invalid,
-    //when the stamp value changes.
-    iter.gobj()->user_data = createGlueItem(row_index);
-
-    return true;
-}
-
-// Gtk::TreeModelColumn<Glib::ustring>&
-// FolderTreeModel::get_model_column(int column)
-// {
-//     return _pImpl->vModelColumns[column];
-// }
-
-RowsVector::iterator
-FolderTreeModel::get_data_row_iter_from_tree_row_iter(const iterator &iter)
-{
-    //Don't call this on an invalid iter.
-    const auto pItem = (const GlueItem*)iter.gobj()->user_data;
-
-    RowsVector::size_type row_index = pItem->get_row_number();
-    if (row_index > _pImpl->vRows.size())
-        return _pImpl->vRows.end();
-    else
-        return _pImpl->vRows.begin() + row_index;
-}
-
-RowsVector::const_iterator
-FolderTreeModel::get_data_row_iter_from_tree_row_iter(const iterator &iter) const
-{
-    //Don't call this on an invalid iter.
-    const auto pItem = (const GlueItem*)iter.gobj()->user_data;
-
-    RowsVector::size_type row_index = pItem->get_row_number();
-    if (row_index > _pImpl->vRows.size())
-        return _pImpl->vRows.end();
-    else
-        return _pImpl->vRows.begin() + row_index;
+    Debug::Leave("returning " + string((rc) ? "true" : "false"));
+    return rc;
 }
 
 bool
-FolderTreeModel::check_treeiter_validity(const iterator &iter) const
+FolderTreeModel::isTreeIterValid(const iterator &iter) const
 {
-    // Anything that modifies the model's structure should change the model's stamp,
-    // so that old iters are ignored.
     return _pImpl->stamp == iter.get_stamp();
 }
 
-void*
-FolderTreeModel::createGlueItem(int rowIndex) const
+void
+FolderTreeModel::makeIter(iterator &iter,
+                          FolderTreeModelRow *pParent,
+                          int rowIndex) const
 {
-    auto pItemNew = std::make_shared<GlueItem>(rowIndex);
-    _pImpl->vGlueItems.push_back(pItemNew);
-    GlueItem *pv = &(*pItemNew);
-    return pv;
+    iter.set_stamp(_pImpl->stamp);
+    iter.gobj()->user_data = (void*)pParent;
+    iter.gobj()->user_data2 = (void*)(size_t)rowIndex;
 }
