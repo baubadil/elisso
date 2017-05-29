@@ -789,7 +789,7 @@ ElissoApplicationWindow::setStatusbarFree(const Glib::ustring &str)
 void
 ElissoApplicationWindow::selectInFolderTree(PFSModelBase pDir)
 {
-    this->_treeViewLeft.select(pDir);
+    this->_treeViewLeft.selectNode(pDir);
 }
 
 void

@@ -1024,7 +1024,7 @@ FSContainer::getContents(FSVector &vFiles,
                          FSVector *pvFilesRemoved,        //!< out: list of file-system object that have been removed, or nullptr (optional)
                          StopFlag *pStopFlag)
 {
-    Debug::Enter(FOLDER_POPULATE_HIGH, "FSContainer::getContents(\"" + _refBase.getPath() + "\")");
+    Debug::Enter(FILE_HIGH, "FSContainer::getContents(\"" + _refBase.getPath() + "\")");
 
     size_t c = 0;
 

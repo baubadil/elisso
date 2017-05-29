@@ -513,8 +513,8 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
                 if (itSelect)
                 {
                     Gtk::TreeModel::Path path(itSelect);
-                    _iconView.select_path(path);
                     _iconView.scroll_to_path(path, true, 0.5, 0.5);
+                    _iconView.select_path(path);
                 }
                 // Grab focus (this is useful for "back" and "forward").
                 if (!pResult->fClickFromTree)
@@ -525,8 +525,8 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
                 if (itSelect)
                 {
                     Gtk::TreeModel::Path path(itSelect);
-                    _treeView.get_selection()->select(path);
                     _treeView.scroll_to_row(path, 0.5);
+                    _treeView.get_selection()->select(path);
                 }
                 // Grab focus (this is useful for "back" and "forward").
                 if (!pResult->fClickFromTree)

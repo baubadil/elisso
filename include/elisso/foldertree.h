@@ -52,30 +52,24 @@ public:
     void addTreeRoot(const Glib::ustring &strName,
                      PFSDirectory pDir);
 
-    void select(PFSModelBase pDir);
+    void selectNode(PFSModelBase pDir);
 
 private:
     friend class FolderTreeMonitor;
-
-    bool spawnPopulate(PFolderTreeModelRow pRow);
-    void onPopulateDone();
-
-//     Gtk::TreeModel::iterator insertNode(const Glib::ustring &strName,
-//                                         PFSModelBase pFS,
-//                                         const Gtk::TreeNodeChildren &children);
-    void addMonitor(PFolderTreeModelRow pRow);
-
-    void spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst);
-    void onAddAnotherFirst();
 
     void onNodeSelected();
     void onNodeExpanded(const Gtk::TreeModel::iterator &it,
                         const Gtk::TreeModel::Path &path);
 
-    void updateCursor();
+    bool spawnPopulate(PFolderTreeModelRow pRow);
+    void onPopulateDone();
 
-    Gtk::TreeModel::iterator getIterator(const PRowReference &pRowRef);
-//     PRowReference getRowReference(const Gtk::TreeModel::iterator &it);
+    void addMonitor(PFolderTreeModelRow pRow);
+
+    void spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst);
+    void onAddAnotherFirst();
+
+    void updateCursor();
 
     ElissoApplicationWindow     &_mainWindow;
     TreeViewPlus                _treeView;

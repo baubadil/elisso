@@ -265,7 +265,7 @@ void
 ElissoApplication::on_open(const type_vec_files &files,
                            const Glib::ustring &hint) /* override */
 {
-//     Debug::Enter(DEBUG_ALWAYS, __func__);
+    Debug::Enter(CMD_TOP, __func__);
 
     ElissoApplicationWindow *pWindow = new ElissoApplicationWindow(*this);
     pWindow->present();
@@ -303,7 +303,7 @@ main(int argc, char *argv[])
 {
     g_flDebugSet =  0
                   | CMD_TOP
-//                   | FOLDER_POPULATE_HIGH
+                  | FOLDER_POPULATE_HIGH
                   | FSEXCEPTION
 //                   | FILE_LOW
 //                   | FILE_MID
@@ -315,7 +315,7 @@ main(int argc, char *argv[])
 //                   | FOLDER_STACK
 //                   | CLIPBOARD
 //                   | PROGRESSDIALOG
-                  | TREEMODEL
+//                   | TREEMODEL
                   ;
 
     auto app = ElissoApplication::create(argc,
