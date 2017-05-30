@@ -226,8 +226,14 @@ FSModelBase::FindPath(const string &strPath0)
 
     string strPathSplit;
     bool fAbsolute;
+    PFSModelBase pCurrent;
     if ((fAbsolute = (strPath[0] == '/')))
+    {
         strPathSplit = strPath.substr(1);
+        if (strPathSplit.empty())       // path == "/" case
+            pCurrent = RootDirectory::Get(strScheme);       // And this will be returned, as aParticles will be empty.
+
+    }
     else
         strPathSplit = strPath;
 
@@ -238,7 +244,6 @@ FSModelBase::FindPath(const string &strPath0)
     // and call into FSContainer::find(), which has proper locking.
 
     uint c = 0;
-    PFSModelBase pCurrent;
     for (auto const &strParticle : aParticles)
     {
         Debug::Log(FILE_LOW, "Particle: " + quote(strParticle));
@@ -286,7 +291,7 @@ FSModelBase::FindPath(const string &strPath0)
                     // Go back to the parent and skip over the rest of this step.
                     pCurrent = pCurrent->_pParent;
 
-                    Debug::Log(FILE_LOW, "Loop " + to_string(c) + ": collapsed \"" + pPrev->getPath() + "/" + strParticle + "\" to " + quote(pCurrent->getPath()));
+                    Debug::Log(FILE_LOW, "Loop " + to_string(c) + ": collapsed " + quote(pPrev->getPath() + "/" + strParticle) + " to " + quote(pCurrent->getPath()));
                 }
                 else if (!(pDir = pCurrent->getContainer()))
                     // Particle is a broken symlink.
@@ -307,7 +312,7 @@ FSModelBase::FindPath(const string &strPath0)
         }
     }
 
-    Debug::Leave("Result: " + (pCurrent ? pCurrent->describe() : "NULL"));
+    Debug::Leave("Result: " + (pCurrent ? pCurrent->describe(true) : "NULL"));
 
     return pCurrent;
 }
@@ -370,7 +375,7 @@ FSModelBase::MakeAwake(Glib::RefPtr<Gio::File> pGioFile)
             break;      // return nullptr
         }
     }
-    catch(Gio::Error &e)
+    catch (Gio::Error &e)
     {
         Debug::Log(FILE_HIGH, "FSModelBase::MakeAwake(): got Gio::Error: " + e.what());
         throw FSException(e.what());
@@ -388,7 +393,7 @@ FSModelBase::FindDirectory(const string &strPath)
 {
     if (auto pFS = FindPath(strPath))
     {
-        Debug::Log(FILE_MID, "result for \"" + strPath + "\": " + pFS->describe());
+        Debug::Log(FILE_MID, string(__func__) + "(" + quote(strPath) + ") => " + pFS->describe(true));
         if (pFS->getType() == FSType::DIRECTORY)
             return static_pointer_cast<FSDirectory>(pFS);
     }
@@ -453,24 +458,31 @@ FSModelBase::isHidden()
 string
 FSModelBase::getPath() const
 {
+    if (_fl.test(FSFlag::IS_ROOT_DIRECTORY))
+        return _strBasename + "/";
+
+    return getPathImpl();
+}
+
+/**
+ *  Implementation for getPath(), which only gets called if *this is not a root directory. This
+ *  is necessary to correctly return file:/// for the root but file:///dir for anything else
+ *  without double slashes.
+ */
+string
+FSModelBase::getPathImpl() const
+{
     string strFullpath;
 
-    if (!_pParent)
-    {
-//         if (_fl.test(FSFlag::IS_ROOT_DIRECTORY))
-//             strFullpath = (static_cast<const RootDirectory*>(this))->getURIScheme() + "://";
-    }
-    else
+    if (_pParent)
     {
         // If we have a parent, recurse FIRST.
-        strFullpath = _pParent->getPath();
+        strFullpath = _pParent->getPathImpl();
         if (strFullpath != "/")
             strFullpath += '/';
     }
 
-    strFullpath += getBasename();
-
-    return strFullpath;
+    return strFullpath + getBasename();
 }
 
 Glib::ustring
@@ -612,7 +624,7 @@ FSModelBase::rename(const string &strNewName)
             _strBasename = strNewName;
             pCnr->addChild(cLock, shared_from_this());
         }
-        catch(Gio::Error &e)
+        catch (Gio::Error &e)
         {
             throw FSException(e.what());
         }
@@ -651,7 +663,7 @@ FSModelBase::sendToTrash()
 
         pGioFile->trash();
     }
-    catch(Gio::Error &e)
+    catch (Gio::Error &e)
     {
         throw FSException(e.what());
     }
@@ -698,7 +710,7 @@ FSModelBase::moveTo(PFSModelBase pTarget)
             pParentCnr->addChild(cLock, shared_from_this());
         }
     }
-    catch(Gio::Error &e)
+    catch (Gio::Error &e)
     {
         Debug::Leave("Caught Gio::Error: " + e.what());
         throw FSException(e.what());
@@ -916,7 +928,7 @@ FSContainer::find(const string &strParticle)
         Debug::Log(FILE_MID, "Directory::find(" + quote(strParticle) + ") => already awake " + pReturn->describe());
     else
     {
-        string strPath(_refBase.getPath() + "/" + strParticle);
+        string strPath(_refBase.getPathImpl() + "/" + strParticle);
         Debug::Enter(FILE_MID, "Directory::find(" + quote(strParticle) + "): looking up " + quote(strPath));
 
         PGioFile pGioFile;
@@ -1027,6 +1039,8 @@ FSContainer::getContents(FSVector &vFiles,
     Debug::Enter(FILE_HIGH, "FSContainer::getContents(\"" + _refBase.getPath() + "\")");
 
     size_t c = 0;
+
+    string strException;
 
     try
     {
@@ -1251,15 +1265,18 @@ FSContainer::getContents(FSVector &vFiles,
             }
         } // if (!fStopped)
     }
-    catch(Gio::Error &e)
+    catch (Gio::Error &e)
     {
-        throw FSException(e.what());
+        strException = e.what();
     }
 
     _refBase._fl.clear(FSFlag::POPULATING);
     g_condFolderPopulated.notify_all();
 
     Debug::Leave();
+
+    if (!strException.empty())
+        throw FSException(strException);
 
     return c;
 }
@@ -1285,7 +1302,7 @@ FSContainer::createSubdirectory(const string &strName)
     {
         // To create a new subdirectory via Gio::File, create an empty Gio::File first
         // and then invoke make_directory on it.
-        string strPath = pDirParent->getPath() + "/" + strName;
+        string strPath = pDirParent->getPathImpl() + "/" + strName;
         Debug::Log(FILE_HIGH, string(__func__) + ": creating directory \"" + strPath + "\"");
 
         // The follwing cannot fail.
@@ -1300,7 +1317,7 @@ FSContainer::createSubdirectory(const string &strName)
             this->addChild(cLock, pDirReturn);
         }
     }
-    catch(Gio::Error &e)
+    catch (Gio::Error &e)
     {
         throw FSException(e.what());
     }
@@ -1329,7 +1346,7 @@ FSContainer::createEmptyDocument(const string &strName)
     {
         // To create a new subdirectory via Gio::File, create an empty Gio::File first
         // and then invoke make_directory on it.
-        string strPath = pDirParent->getPath() + "/" + strName;
+        string strPath = pDirParent->getPathImpl() + "/" + strName;
         Debug::Log(FILE_HIGH, string(__func__) + ": creating directory \"" + strPath + "\"");
 
         // The follwing cannot fail.
@@ -1345,7 +1362,7 @@ FSContainer::createEmptyDocument(const string &strName)
             this->addChild(cLock, pFileReturn);
         }
     }
-    catch(Gio::Error &e)
+    catch (Gio::Error &e)
     {
         throw FSException(e.what());
     }
@@ -1458,8 +1475,8 @@ RootDirectory::Get(const string &strScheme)        //<! in: URI scheme (e.g. "fi
 {
     PRootDirectory pReturn;
 
-    static Mutex                                    s_mutexRootDirectories;
-    static map<string, PRootDirectory>    s_mapRootDirectories;
+    static Mutex                        s_mutexRootDirectories;
+    static map<string, PRootDirectory>  s_mapRootDirectories;
     Lock rLock(s_mutexRootDirectories);
 
     auto it = s_mapRootDirectories.find(strScheme);
@@ -1496,19 +1513,6 @@ RootDirectory::Get(const string &strScheme)        //<! in: URI scheme (e.g. "fi
     }
 
     return pReturn;
-
-
-//     if (!s_theRoot)
-//     {
-//         // Class has a private constructor, so make_shared doesn't work without this hackery which derives a class from it.
-//         class Derived : public RootDirectory { };
-//         s_theRoot = make_shared<Derived>();
-//         Debug::Log(FILE_MID, "RootDirectory::Get(): instantiated the root");
-//     }
-//     else
-//         Debug::Log(FILE_MID, "RootDirectory::Get(): subsequent call, returning theRoot");
-//
-//     return s_theRoot;
 }
 
 CurrentDirectory::CurrentDirectory()
@@ -1567,6 +1571,9 @@ FSSymlink::getResolvedType() /* override */
 
         case State::TO_DIRECTORY:
             return FSTypeResolved::SYMLINK_TO_DIRECTORY;
+
+        case State::TO_OTHER:
+            return FSTypeResolved::SYMLINK_TO_OTHER;
 
         case State::NOT_FOLLOWED_YET:
         case State::RESOLVING:
@@ -1639,7 +1646,7 @@ FSSymlink::follow()
         _state = State::RESOLVING;
         lock.unlock();
 
-        string strParentDir = _pParent->getPath();
+        string strParentDir = _pParent->getPathImpl();
         Debug::Log(FILE_LOW, "parent = \"" + strParentDir + "\"");
 
         auto pGioFile = getGioFile();
@@ -1672,14 +1679,29 @@ FSSymlink::follow()
                 {
                     lock.lock();
                     _pTarget = pTarget;
-                    if (_pTarget->getType() == FSType::DIRECTORY)
-                        _state = State::TO_DIRECTORY;
-                    else
-                        _state = State::TO_FILE;
+
+                    switch (_pTarget->getType())
+                    {
+                        case FSType::DIRECTORY:
+                            _state = State::TO_DIRECTORY;
+                        break;
+
+                        case FSType::FILE:
+                            _state = State::TO_FILE;
+                        break;
+
+                        case FSType::UNINITIALIZED:
+                        case FSType::SYMLINK:
+                        case FSType::SPECIAL:
+                        case FSType::MOUNTABLE:
+                            _state = State::TO_OTHER;
+                        break;
+                    }
+
                     Debug::Log(FILE_MID, "Woke up symlink target \"" + strTarget + "\", state: " + to_string((int)_state));
                 }
             }
-            catch(...)
+            catch (...)
             {
                 Debug::Log(FILE_HIGH, "Could not find symlink target " + strTarget + " (from \"" + strContents + "\") --> BROKEN");
                 lock.lock();

@@ -38,6 +38,7 @@ enum class FSTypeResolved
     DIRECTORY,
     SYMLINK_TO_FILE,
     SYMLINK_TO_DIRECTORY,
+    SYMLINK_TO_OTHER,
     BROKEN_SYMLINK,
     SPECIAL,
     MOUNTABLE
@@ -256,6 +257,7 @@ protected:
      */
 
     friend class FSContainer;
+    friend class FSSymlink;
 
     static PFSModelBase MakeAwake(PGioFile pGioFile);
     FSModelBase(FSType type,
@@ -267,6 +269,8 @@ protected:
     {
         return shared_from_this();
     }
+
+    std::string getPathImpl() const;
 
     uint64_t                    _uID = 0;
     FSType                      _type = FSType::UNINITIALIZED;
@@ -515,7 +519,8 @@ protected:
         RESOLVING = 1,
         BROKEN = 2,
         TO_FILE = 3,
-        TO_DIRECTORY = 4
+        TO_DIRECTORY = 4,
+        TO_OTHER = 5
     };
     State           _state;
     PFSModelBase    _pTarget;
