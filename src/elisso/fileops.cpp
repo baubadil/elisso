@@ -197,7 +197,7 @@ FileOperation::threadFunc()
             ++cCurrent;
         }
     }
-    catch(exception &e)
+    catch (exception &e)
     {
         _strError = e.what();
     }

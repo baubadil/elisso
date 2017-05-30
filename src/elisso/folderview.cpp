@@ -634,6 +634,7 @@ ElissoFolderView::insertFile(PFSModelBase pFS)
 
             case FSTypeResolved::DIRECTORY: pstrType = &TYPE_FOLDER; break;
             case FSTypeResolved::SYMLINK_TO_DIRECTORY: pstrType = &TYPE_LINK_TO_FOLDER; break;
+            case FSTypeResolved::SYMLINK_TO_OTHER: pstrType = &TYPE_LINK_TO_OTHER; break;
             case FSTypeResolved::BROKEN_SYMLINK: pstrType = &TYPE_BROKEN_LINK; break;
 
             case FSTypeResolved::SPECIAL: pstrType = &TYPE_SPECIAL; break;
@@ -952,9 +953,14 @@ ElissoFolderView::setViewMode(FolderViewMode m)
                 _infoBarLabel.set_markup("<span size=\"x-large\">" + Glib::Markup::escape_text(_strError) + "</span>");
                 _infoBarLabel.show();
                 _infoBarError.set_message_type(Gtk::MESSAGE_ERROR);
-                auto pInfoBarContainer = dynamic_cast<Gtk::Container*>(_infoBarError.get_content_area());
-                if (pInfoBarContainer)
-                    pInfoBarContainer->add(_infoBarLabel);
+                static bool fAdded = false;
+                if (!fAdded)
+                {
+                    auto pInfoBarContainer = dynamic_cast<Gtk::Container*>(_infoBarError.get_content_area());
+                    if (pInfoBarContainer)
+                        pInfoBarContainer->add(_infoBarLabel);
+                    fAdded = true;
+                }
                 _scrolledWindow.add(_infoBarError);
                 _infoBarError.show();
             }
@@ -975,7 +981,7 @@ ElissoFolderView::setViewMode(FolderViewMode m)
 void
 ElissoFolderView::setError(Glib::ustring strError)
 {
-    Debug::Log(DEBUG_ALWAYS, std::string(__FUNCTION__) + "(): " + strError);
+//     Debug::Log(DEBUG_ALWAYS, std::string(__FUNCTION__) + "(): " + strError);
     _strError = strError;
     setState(ViewState::ERROR);
     setViewMode(FolderViewMode::ERROR);
@@ -1317,7 +1323,7 @@ ElissoFolderView::handleAction(FolderAction action)
             break;
         }
     }
-    catch(FSException &e)
+    catch (FSException &e)
     {
         _mainWindow.errorBox(e.what());
     }
@@ -1524,6 +1530,7 @@ ElissoFolderView::openFile(PFSModelBase pFS,        //!< in: file or folder to o
 
         case FSTypeResolved::BROKEN_SYMLINK:
         case FSTypeResolved::SPECIAL:
+        case FSTypeResolved::SYMLINK_TO_OTHER:
         break;
     }
 }

@@ -88,7 +88,7 @@ PopulateThread::threadFunc(uint idPopulateThread,
                               &pResult->vRemoved,
                               &_stopFlag);
     }
-    catch(exception &e)
+    catch (exception &e)
     {
         pResult->strError = e.what();
     }

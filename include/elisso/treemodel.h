@@ -46,11 +46,9 @@ class FolderTreeModelColumns : public Gtk::TreeModelColumnRecord
 public:
     FolderTreeModelColumns()
     {
-        add(_colMajorSort);
         add(_colIconAndName);
     }
 
-    Gtk::TreeModelColumn<uint8_t>                   _colMajorSort;         // To keep "home" sorted before "file system" etc.
     Gtk::TreeModelColumn<Glib::ustring>             _colIconAndName;
 
     static FolderTreeModelColumns& Get()
@@ -87,13 +85,15 @@ typedef std::map<Glib::ustring, PFolderTreeModelRow> RowsMap;
  */
 struct FolderTreeModelRow
 {
-    unsigned                  sort;         // To keep "home" sorted before "file system" etc.
     Glib::ustring             name;
-    TreeNodeState             state;
 
     // Additional private data, not retrievable by GTK.
+    unsigned                  overrideSort;         // To keep "home" sorted before "file system" etc.
+    Glib::ustring             nameUpper;
+    TreeNodeState             state;
     PFolderTreeModelRow       pParent;
-    int                       uRowIndex;
+    int                       uRowIndex2;
+    int                       uRowIndexCopy;        // For when sorting.
     PFSModelBase              pDir;
     PFolderTreeMonitor        pMonitor;
 
@@ -105,12 +105,13 @@ struct FolderTreeModelRow
 
     FolderTreeModelRow(PFolderTreeModelRow pParent_,
                        int uRowIndex_,
-                       unsigned sort_,
-                       PFSModelBase pDir_);
+                       unsigned overrideSort_,
+                       PFSModelBase pDir_,
+                       const Glib::ustring &strName);
 
     int getIndex() const
     {
-        return uRowIndex;
+        return uRowIndex2;
     }
 
 };
@@ -125,8 +126,13 @@ struct FolderTreeModelRow
 /**
  *  Custom tree model that is used in the folders tree on the left of the elisso
  *  window. Originally we used Gtk::TreeStore but that turned out to be a bit slow.
- *  The main advantage of this model is that it supports looking up nodes by
- *  file name quickly in addition to being sorted.
+ *  The main advantage of this model is that it provides methods for looking up
+ *  nodes by file name quickly to find out whether a node is already in the tree.
+ *  This is much faster than using the official TreeModel iterators.
+ *
+ *  Sorting works a bit differently from Gtk::TreeStore. Instead of setting a sort
+ *  function on a column, there is a sort() method which sorts the children of one
+ *  row once.
  */
 class FolderTreeModel : public Gtk::TreeModel,
                         public Glib::Object
@@ -136,7 +142,13 @@ public:
 
     Gtk::TreeModelColumn<Glib::ustring>& get_model_column(int column);
 
-    PFolderTreeModelRow append(PFolderTreeModelRow pParent, unsigned sort, PFSModelBase pDir);
+    PFolderTreeModelRow append(PFolderTreeModelRow pParent,
+                               unsigned overrideSort,
+                               PFSModelBase pDir,
+                               const Glib::ustring &strName);
+    void rename(PFolderTreeModelRow pRow, const Glib::ustring &strNewName);
+    void remove(PFolderTreeModelRow pParent, PFolderTreeModelRow pRemoveRow);
+    void sort(PFolderTreeModelRow pParent);
 
     PFolderTreeModelRow findRow(PFolderTreeModelRow pParent, const Glib::ustring &strName);
     PFolderTreeModelRow findRow(const iterator &iter) const;
@@ -160,7 +172,7 @@ protected:
     virtual int iter_n_root_children_vfunc() const override;
 
     virtual void get_value_vfunc(const TreeModel::iterator &iter, int column, Glib::ValueBase &value) const override;
-    virtual void set_value_impl(const iterator &row, int column, const Glib::ValueBase &value) override;
+    virtual void set_value_impl(const iterator &iter, int column, const Glib::ValueBase &value) override;
 
     virtual Path get_path_vfunc(const iterator &iter) const override;
 
@@ -171,6 +183,7 @@ protected:
 private:
     bool isTreeIterValid(const iterator &iter) const;
     void makeIter(iterator &iter, FolderTreeModelRow *pParent, int rowIndex) const;
+    GtkTreePath* makeCTreePath(PFolderTreeModelRow pRow, iterator &iter) const;
 
     struct Impl;
     Impl *_pImpl;

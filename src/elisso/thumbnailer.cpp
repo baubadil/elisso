@@ -397,7 +397,7 @@ void Thumbnailer::pixbufLoaderThread(uint threadno)
                 pLoader->close();
             }
         }
-        catch(...)
+        catch (...)
         {
             // No error handling. If we can't read the file, no thumbnail. Period.
         }

@@ -280,7 +280,7 @@ ElissoApplication::on_open(const type_vec_files &files,
             PFSModelBase pFSBase = FSModelBase::FindPath(strPath);
             pWindow->addFolderTab(pFSBase);
         }
-        catch(std::exception &e)
+        catch (std::exception &e)
         {
             Debug::Log(CMD_TOP, std::string(__FUNCTION__) + ": error " + e.what());
             std::string strError = e.what();
@@ -302,9 +302,9 @@ int
 main(int argc, char *argv[])
 {
     g_flDebugSet =  0
-                  | CMD_TOP
-                  | FOLDER_POPULATE_HIGH
-                  | FSEXCEPTION
+//                   | CMD_TOP
+//                   | FOLDER_POPULATE_HIGH
+//                   | FSEXCEPTION
 //                   | FILE_LOW
 //                   | FILE_MID
 //                   | FILE_HIGH

@@ -100,7 +100,7 @@ public:
                       PFolderTreeModelRow &pRow)
         : FSMonitorBase(),
           _tree(tree),
-          _pRow(pRow)
+          _pRowWatching(pRow)
     { };
 
     virtual void onItemAdded(PFSModelBase &pFS) override;
@@ -108,10 +108,10 @@ public:
     virtual void onItemRenamed(PFSModelBase &pFS, const std::string &strOldName, const std::string &strNewName) override;
 
 private:
-    Gtk::TreeModel::iterator findIterator(PFSModelBase &pFS);
+//     Gtk::TreeModel::iterator findIterator(PFSModelBase &pFS);
 
     ElissoFolderTree &_tree;
-    PFolderTreeModelRow _pRow;
+    PFolderTreeModelRow _pRowWatching;
 };
 typedef shared_ptr<FolderTreeMonitor> PFolderTreeMonitor;
 
