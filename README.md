@@ -12,7 +12,7 @@ and should eventually have all the functionality of it. The reason for the rewri
 
 3) It should not crash.
 
-[[https://github.com/baubadil/elisso/blob/master/img/elisso-01.png|alt=Elisso screenshot]]
+![Elisso screenshot](/baubadil/elisso/blob/master/img/elisso-01.png "Elisso screenshot")
 
 It also serves as an exercise and testcase how to write a pretty application in modern C++11 using gtkmm 3, particularly the threading and concurrency with gtkmm and std::mutex and std::condition_variable.
 
