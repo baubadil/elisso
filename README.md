@@ -37,22 +37,19 @@ To build, run `./configure` and then `kmk`. "kmk" is the make utility of kBuild.
 There is no "kmk install" yet; after building, you will find the executable under
 `out/linux.amd64/{release|debug}/stage/bin/elisso`.
 
-Requirements:
+Requirements (the configure script checks for these):
 
- 1) The Elisso repository requires the XWP library from phoxygen (https://github.com/baubadil/phoxygen) to build. 
-    I haven't yet figured out how to do this with git submodules. Instead, the Elisso tree has symlinks that point 
-    into `../phoxygen/include` and `../phoxygen/src`. So clone both the phoxygen and the Elisso repos under the same
-    parent directory (e.g. as `src/phoxygen` and `src/elisso`).
-
- 2) Like phoxygen, Elisso uses kBuild (the VirtualBox build system; http://trac.netlabs.org/kbuild). On Gentoo, 
-    it's dev-util/kbuild and should be installed already if you have VirtualBox installed as it's required for 
+ 1) Elisso uses kBuild (the VirtualBox build system; http://trac.netlabs.org/kbuild). It's the best build
+    system in the world, is based on GNU make and traditional makefiles, can handle anything and runs on 
+    many platforms. On Gentoo, it's dev-util/kbuild 
+    and should be installed already if you have VirtualBox installed as it's required for 
     building it. On Debian it's "kbuild".
 
- 3) Like phoxygen, Elisso requires libpcre for fast regular expressions. pcre.h must be in INCLUDE somewhere and 
+ 2) Elisso requires libpcre for fast regular expressions. pcre.h must be in INCLUDE somewhere and 
     libpcre must be somewhere where the linker can find it. On Gentoo it seems to be installed pretty much by 
     default, on Debian you need "libpcre3-dev".
 
- 4) Elisso uses gtkmm for C++ GTK development. It seems to need the current stable version 3.22, so that's what
+ 3) Elisso uses gtkmm for C++ GTK development. It seems to need the current stable version 3.22, so that's what
     the configure script tests for. Stock Debian jesse ships with 3.14, and compile fails with that.
 
 
