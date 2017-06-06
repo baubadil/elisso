@@ -1,6 +1,6 @@
-# elisso
+# Elisso
 
-Yet another file manager for Gtk+ 3 (Linux(. This imitates the look for Nemo (or pre-fork Nautilus for that matter),
+Yet another file manager for Gtk+ 3 (Linux). This imitates the look for Nemo (or pre-fork Nautilus for that matter),
 and should eventually have all the functionality of it. The reason for the rewrite is:
 
 1) It should have proper multithreading and be as fast as possible, especially with folders with lots
@@ -11,6 +11,8 @@ and should eventually have all the functionality of it. The reason for the rewri
    Workplace Shell has been able to do  that.
 
 3) It should not crash.
+
+[[https://github.com/baubadil/elisso/blob/master/img/elisso-01.png|alt=Elisso screenshot]]
 
 It also serves as an exercise and testcase how to write a pretty application in modern C++11 using gtkmm 3, particularly the threading and concurrency with gtkmm and std::mutex and std::condition_variable.
 
@@ -37,20 +39,20 @@ There is no "kmk install" yet; after building, you will find the executable unde
 
 Requirements:
 
- 1) The elisso repository requires the XWP library from phoxygen (https://github.com/baubadil/phoxygen) to build. 
-    I haven't yet figured out how to do this with git submodules. Instead, the elisso tree has symlinks that point 
-    into `../phoxygen/include` and `../phoxygen/src`. So clone both the phoxygen and the elisso repos under the same
+ 1) The Elisso repository requires the XWP library from phoxygen (https://github.com/baubadil/phoxygen) to build. 
+    I haven't yet figured out how to do this with git submodules. Instead, the Elisso tree has symlinks that point 
+    into `../phoxygen/include` and `../phoxygen/src`. So clone both the phoxygen and the Elisso repos under the same
     parent directory (e.g. as `src/phoxygen` and `src/elisso`).
 
- 2) Like phoxygen, elisso uses kBuild (the VirtualBox build system; http://trac.netlabs.org/kbuild). On Gentoo, 
+ 2) Like phoxygen, Elisso uses kBuild (the VirtualBox build system; http://trac.netlabs.org/kbuild). On Gentoo, 
     it's dev-util/kbuild and should be installed already if you have VirtualBox installed as it's required for 
     building it. On Debian it's "kbuild".
 
- 3) Like phoxygen, elisso requires libpcre for fast regular expressions. pcre.h must be in INCLUDE somewhere and 
+ 3) Like phoxygen, Elisso requires libpcre for fast regular expressions. pcre.h must be in INCLUDE somewhere and 
     libpcre must be somewhere where the linker can find it. On Gentoo it seems to be installed pretty much by 
     default, on Debian you need "libpcre3-dev".
 
- 4) elisso uses gtkmm for C++ GTK development. It seems to need the current stable version 3.22, so that's what
+ 4) Elisso uses gtkmm for C++ GTK development. It seems to need the current stable version 3.22, so that's what
     the configure script tests for. Stock Debian jesse ships with 3.14, and compile fails with that.
 
 
@@ -61,7 +63,7 @@ Note that currently {include|src}/x-gtk contain a heavily edited copy of the Gtk
 to try and fix the performance bottlenecks therein with folders that have more than a few hundred files. 
 The replacement control has the same API but is called XGtkIconView to avoid conflicts.
 
-If you run `./configure --enable-xiconview`, elisso build and use the replacement IconView, which is both
+If you run `./configure --enable-xiconview`, Elisso will build and use the replacement IconView, which is both
 faster and buggier. Otherwise the stock GTK icon view is used.
 
 Eventually I will port the changes that actually made a speed difference back to GTK+ 3.22 and supply a patch.
