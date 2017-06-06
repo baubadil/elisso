@@ -1,5 +1,5 @@
 /*
- * elisso (C) 2016--2017 Baubadil GmbH.
+ * elisso -- fast and friendly gtkmm file manager. (C) 2016--2017 Baubadil GmbH.
  *
  * elisso is free software; you can redistribute it and/or modify it under the terms of the GNU
  * General Public License as published by the Free Software Foundation, in version 2 as it comes
@@ -78,10 +78,10 @@ typedef std::map<Glib::ustring, PFolderTreeModelRow> RowsMap;
  *  One row in the FolderTreeModel. This is a public structure so we can access
  *  the model with functions other than the GTK TreeModel interface, for speed.
  *
- *  Every row has three fields, which correspond to the three columns officially
- *  exported by the model (sort, name, state). These are needed accessed by the
- *  TreeView control when it paints itself. Additionally, for speed the lists and
- *  maps of children and monitors etc. can be accessed directly.
+ *  Every row has one field, which corresponds to the one column officially
+ *  exported by the model ("name"). This is accessed by the TreeView control
+ *  when it paints itself. In addition however, for speed, the lists and maps of
+ *  children and monitors etc. can be accessed directly by Elisso.
  */
 struct FolderTreeModelRow
 {

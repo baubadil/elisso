@@ -1,6 +1,5 @@
-
 /*
- * elisso (C) 2016--2017 Baubadil GmbH.
+ * elisso -- fast and friendly gtkmm file manager. (C) 2016--2017 Baubadil GmbH.
  *
  * elisso is free software; you can redistribute it and/or modify it under the terms of the GNU
  * General Public License as published by the Free Software Foundation, in version 2 as it comes
