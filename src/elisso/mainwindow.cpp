@@ -430,7 +430,11 @@ ElissoApplicationWindow::initActionHandlers()
         w.set_version(ELISSO_VERSION);
         w.set_copyright("(C) 2017 Baubadil GmbH");
         w.set_website("http://www.baubadil.de");
-        w.set_comments("Soon to be the best file manager for Linux.");
+        Glib::ustring strComments("Soon to be the best file manager for Linux.");
+#ifdef USE_XICONVIEW
+        strComments += "\nCompiled with XIconView.";
+#endif
+        w.set_comments(strComments);
         w.set_license_type(Gtk::License::LICENSE_CUSTOM);
         w.set_license("All rights reserved");
         w.set_logo(_app.getIcon());
