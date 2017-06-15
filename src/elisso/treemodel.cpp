@@ -119,6 +119,13 @@ void dumpModel(RowsVector &v,
  *  Public method to append a new row to the model, either at the root level
  *  (if pParent is nullptr) or as a child of pParent.
  *
+ *  Since this is designed for a filesystem tree, where file names are unique
+ *  identifiers, this checks if a node with the given name already exists at
+ *  the root or under the given parent; a new node is only inserted if none
+ *  exists yet.
+ *
+ *  This returns either the new or the existing node.
+ *
  *  The new node will be appended to the end of the list without sorting.
  *  To have all the children of a parent node sorted, call sort() after
  *  you're done inserting nodes under the same parent; this is much more
