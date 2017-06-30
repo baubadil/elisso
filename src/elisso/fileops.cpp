@@ -154,6 +154,24 @@ void FileOperation::cancel()
  *  Thread function. The std::thread gets spawned in Create() and simply calls this method.
  *  This operated on the files in _llFiles (given to Create()) depending on the operation
  *  type.
+ *
+ *  The semantics of the variables are:
+ *
+ *   -- Type::TEST: does nothing really. FSModelBase::testFileOps() only waits a little
+ *      while for testing the progress dialog.
+ *
+ *   -- Type::TRASH: sends all files on the list to the desktop's trash can. This removes
+ *      the files from all views they were inserted into; a target folder is not needed.
+ *
+ *   -- Type::MOVES: moves all files to the target folder given to the constructor.
+ *      This removes the files from all views where they were inserted and inserts them
+ *      into views of the target folder, if they are currently being monitored.
+ *
+ *   -- Type::COPY: copies all files to the target folder given to the constructor.
+ *      This inserts the copies into views of the target folder.
+ *
+ *  This passes the source file pointer to postResultToGUI() except in the case of COPY,
+ *  when this passes the copy.
  */
 void
 FileOperation::threadFunc()
@@ -171,6 +189,9 @@ FileOperation::threadFunc()
                 _pImpl->dProgress = (double)cCurrent / (double)cFiles;
             }
 
+            // This is what gets posted to the GUI callback. This is
+            PFSModelBase pFSForGUI(pFS);
+
             switch (_t)
             {
                 case Type::TEST:
@@ -181,18 +202,19 @@ FileOperation::threadFunc()
                     pFS->sendToTrash();
                 break;
 
-                case Type::COPY:
-                break;
-
                 case Type::MOVE:
                     pFS->moveTo(_pTarget);
+                break;
+
+                case Type::COPY:
+                    pFSForGUI = pFS->copyTo(_pTarget);
                 break;
             }
 
             if (_stopFlag)
                 throw FSCancelledException();
 
-            postResultToGUI(pFS);     // Temporarily requests the lock.
+            postResultToGUI(pFSForGUI);     // Temporarily requests the lock.
 
             ++cCurrent;
         }
@@ -225,6 +247,9 @@ FileOperation::onProgress()
 /**
  *  GUI callback invoked by the dispatcher for every item that is about to be processed
  *  (when the thread calls postResultToGUI()). This should update the folder contents model.
+ *
+ *  pFS is the source file EXCEPT in the case of "copy", where it is the new copy of
+ *  the file, since that's what's needed in the GUI.
  */
 void
 FileOperation::onProcessingNextItem(PFSModelBase pFS)
@@ -244,6 +269,11 @@ FileOperation::onProcessingNextItem(PFSModelBase pFS)
 
             case Type::MOVE:
                 _pImpl->pSourceContainer->notifyFileRemoved(pFS);
+                _pImpl->pTargetContainer->notifyFileAdded(pFS);
+            break;
+
+            case Type::COPY:
+                // pFS has the newly copied file, not the source file.
                 _pImpl->pTargetContainer->notifyFileAdded(pFS);
             break;
         }

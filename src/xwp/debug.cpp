@@ -50,9 +50,9 @@ uint g_iIndent2 = 0;
 bool g_fNeedsNewline2 = false;
 
 /* static */
-void Debug::Enter(DebugFlag fl,
-                  const string &strFuncName,
-                  const string &strExtra /* = "" */ )
+void Debug::Enter2(DebugFlag fl,
+                   const string &strFuncName,
+                   const string &strExtra /* = "" */ )
 {
     DebugLock lock;
     if ( (fl == DEBUG_ALWAYS) || (g_flDebugSet & (uint)fl) )
@@ -67,7 +67,7 @@ void Debug::Enter(DebugFlag fl,
 }
 
 /* static */
-void Debug::Leave(const string &strExtra /* = "" */)
+void Debug::Leave2(const string &strExtra /* = "" */)
 {
     DebugLock lock;
     if (!g_llFuncs2.empty())
@@ -206,7 +206,7 @@ void DebugEnter(const char *pcszFormat, ...)
         }
     }
 
-    Debug::Enter(DEBUG_C, str);
+    Debug::Enter2(DEBUG_C, str);
 }
 
 void DebugLeave(const char *pcszFormat, ...)
@@ -224,7 +224,7 @@ void DebugLeave(const char *pcszFormat, ...)
         }
     }
 
-    Debug::Leave(str);
+    Debug::Leave2(str);
 }
 
 void DebugLog(const char *pcszFormat, ...)

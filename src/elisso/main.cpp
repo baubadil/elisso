@@ -164,7 +164,7 @@ ElissoApplication::ElissoApplication(int argc,
 void
 ElissoApplication::on_startup() /* override */
 {
-    Debug::Enter(CMD_TOP, __func__);
+    Debug d(CMD_TOP, __func__);
 
     Gtk::Application::on_startup();
 
@@ -232,8 +232,6 @@ ElissoApplication::on_startup() /* override */
     addMenuItem(pSubmenu, "About", ACTION_ABOUT);
 
     this->set_menubar(pMenuBar);
-
-    Debug::Leave();
 }
 
 /**
@@ -247,12 +245,11 @@ ElissoApplication::on_startup() /* override */
 void
 ElissoApplication::on_activate() /* override */
 {
-    Debug::Enter(CMD_TOP, __func__);
+    Debug d(CMD_TOP, __func__);
     auto p = new ElissoApplicationWindow(*this);
     p->addFolderTab(FSDirectory::GetHome());
     this->add_window(*p);
     p->show();
-    Debug::Leave();
 }
 
 /**
@@ -265,7 +262,7 @@ void
 ElissoApplication::on_open(const type_vec_files &files,
                            const Glib::ustring &hint) /* override */
 {
-    Debug::Enter(CMD_TOP, __func__);
+    Debug d(CMD_TOP, __func__);
 
     ElissoApplicationWindow *pWindow = new ElissoApplicationWindow(*this);
     pWindow->present();
@@ -287,8 +284,6 @@ ElissoApplication::on_open(const type_vec_files &files,
             pWindow->addFolderTab(strError);
         }
     }
-
-    Debug::Leave();
 }
 
 
@@ -302,12 +297,12 @@ int
 main(int argc, char *argv[])
 {
     g_flDebugSet =  0
-//                   | CMD_TOP
+                  | CMD_TOP
 //                   | FOLDER_POPULATE_HIGH
 //                   | FSEXCEPTION
 //                   | FILE_LOW
 //                   | FILE_MID
-//                   | FILE_HIGH
+                  | FILE_HIGH
 //                   | THUMBNAILER
 //                   | XICONVIEW
 //                   | WINDOWHIERARCHY

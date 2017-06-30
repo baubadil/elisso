@@ -164,7 +164,7 @@ ElissoApplicationWindow::addFolderTab(PFSModelBase pDirOrSymlink)       //!< in:
     // Add the first page in an idle loop so we have no delay in showing the window.
     Glib::signal_idle().connect([this, pDirOrSymlink]() -> bool
     {
-        Debug::Enter(CMD_TOP, "addFolderTab lambda");
+        Debug d(CMD_TOP, "addFolderTab lambda");
         // Create a new view and add it to the notebook, which then owns it.
         int iPageInserted;
         auto pView = new ElissoFolderView(*this, iPageInserted);
@@ -180,7 +180,6 @@ ElissoApplicationWindow::addFolderTab(PFSModelBase pDirOrSymlink)       //!< in:
         pView->setDirectory(p2,
                             SetDirectoryFlag::PUSH_TO_HISTORY);
 
-        Debug::Leave();
         return false;       // disconnect, do not call again
     }, Glib::PRIORITY_LOW);
 }
@@ -188,14 +187,13 @@ ElissoApplicationWindow::addFolderTab(PFSModelBase pDirOrSymlink)       //!< in:
 void
 ElissoApplicationWindow::addFolderTab(const std::string &strError)
 {
-    Debug::Enter(CMD_TOP, "addFolderTab with error: " + strError);
+    Debug d(CMD_TOP, "addFolderTab with error: " + strError);
     int iPageInserted;
     auto pView = new ElissoFolderView(*this, iPageInserted);
     pView->show();
     _notebook.set_current_page(iPageInserted);
     _notebook.set_tab_reorderable(*pView, true);
     pView->setError(strError);
-    Debug::Leave();
 }
 
 void

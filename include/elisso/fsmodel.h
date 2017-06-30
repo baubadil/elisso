@@ -249,6 +249,8 @@ public:
 
     void moveTo(PFSModelBase pTarget);
 
+    PFSModelBase copyTo(PFSModelBase pTarget);
+
     void testFileOps();
 
 protected:
@@ -269,6 +271,8 @@ protected:
     {
         return shared_from_this();
     }
+
+    PFSModelBase copyOrMoveImpl(PFSModelBase pTarget, bool fIsCopy);
 
     std::string getPathImpl() const;
 

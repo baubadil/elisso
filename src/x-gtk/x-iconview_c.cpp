@@ -1337,7 +1337,7 @@ static void xiconview_get_preferred_item_size(XGtkIconView *icon_view,
 
     g_assert(!xiconview_is_empty(icon_view));
 
-    Debug::Enter(XICONVIEW, string(__func__) + "(orientation: " + to_string(orientation) + ", for_size: " + to_string(for_size) + ")");
+    Debug(XICONVIEW, string(__func__) + "(orientation: " + to_string(orientation) + ", for_size: " + to_string(for_size) + ")");
 
     context = gtk_cell_area_create_context(priv->cell_area);
 
@@ -1427,7 +1427,7 @@ static void xiconview_get_preferred_item_size(XGtkIconView *icon_view,
 
     g_object_unref(context);
 
-    Debug::Leave("Minimum: " + to_string(minimum) + ", natural: " + to_string(natural));
+    Debug::Log(XICONVIEW, "Minimum: " + to_string(minimum) + ", natural: " + to_string(natural));
 }
 
 static void xiconview_compute_n_items_for_size(XGtkIconView *icon_view,
@@ -1445,7 +1445,7 @@ static void xiconview_compute_n_items_for_size(XGtkIconView *icon_view,
     g_return_if_fail(max_item_size == NULL || max_items != NULL);
     g_return_if_fail(!xiconview_is_empty(icon_view));
 
-    Debug::Enter(XICONVIEW, __func__);
+    Debug d(XICONVIEW, __func__);
 
     // the following loops through all records several times, only to come up with two numbers like "170" and "170"
     xiconview_get_preferred_item_size(icon_view, orientation, -1, &minimum, &natural);
@@ -1513,8 +1513,6 @@ static void xiconview_compute_n_items_for_size(XGtkIconView *icon_view,
         *max_item_size -= spacing;
         *max_item_size -= 2 * priv->item_padding;
     }
-
-    Debug::Leave();
 }
 
 static GtkSizeRequestMode xiconview_get_request_mode(GtkWidget *widget) { return GTK_SIZE_REQUEST_HEIGHT_FOR_WIDTH; }
@@ -1531,7 +1529,7 @@ static void xiconview_get_preferred_width(GtkWidget *widget, gint *minimum, gint
         return;
     }
 
-    Debug::Enter(XICONVIEW, __func__);
+    Debug d(XICONVIEW, __func__);
 
     xiconview_get_preferred_item_size(icon_view, GTK_ORIENTATION_HORIZONTAL, -1, &item_min, &item_nat);
 
@@ -1550,7 +1548,6 @@ static void xiconview_get_preferred_width(GtkWidget *widget, gint *minimum, gint
 
     *minimum += 2 * priv->margin;
     *natural += 2 * priv->margin;
-    Debug::Leave();
 }
 
 static void xiconview_get_preferred_width_for_height(GtkWidget *widget, gint height, gint *minimum, gint *natural)
@@ -1565,7 +1562,7 @@ static void xiconview_get_preferred_width_for_height(GtkWidget *widget, gint hei
         return;
     }
 
-    Debug::Enter(XICONVIEW, __func__);
+    Debug d(XICONVIEW, __func__);
 
     xiconview_compute_n_items_for_size(icon_view, GTK_ORIENTATION_VERTICAL, height, &rows, &row_height, NULL, NULL);
     n_items = xiconview_get_n_items(icon_view);
@@ -1576,8 +1573,6 @@ static void xiconview_get_preferred_width_for_height(GtkWidget *widget, gint hei
 
     *minimum += 2 * priv->margin;
     *natural += 2 * priv->margin;
-
-    Debug::Leave();
 }
 
 static void xiconview_get_preferred_height(GtkWidget *widget, gint *minimum, gint *natural)
@@ -1592,7 +1587,7 @@ static void xiconview_get_preferred_height(GtkWidget *widget, gint *minimum, gin
         return;
     }
 
-    Debug::Enter(XICONVIEW, __func__);
+    Debug d(XICONVIEW, __func__);
 
     xiconview_get_preferred_item_size(icon_view, GTK_ORIENTATION_VERTICAL, -1, &item_min, &item_nat);
     n_items = xiconview_get_n_items(icon_view);
@@ -1612,8 +1607,6 @@ static void xiconview_get_preferred_height(GtkWidget *widget, gint *minimum, gin
 
     *minimum += 2 * priv->margin;
     *natural += 2 * priv->margin;
-
-    Debug::Leave();
 }
 
 static void xiconview_get_preferred_height_for_width(GtkWidget *widget, gint width, gint *minimum, gint *natural)
@@ -1628,7 +1621,7 @@ static void xiconview_get_preferred_height_for_width(GtkWidget *widget, gint wid
         return;
     }
 
-    Debug::Enter(XICONVIEW, __func__);
+    Debug d(XICONVIEW, __func__);
 
     xiconview_compute_n_items_for_size(
         icon_view, GTK_ORIENTATION_HORIZONTAL, width, NULL, NULL, &columns, &column_width);
@@ -1640,8 +1633,6 @@ static void xiconview_get_preferred_height_for_width(GtkWidget *widget, gint wid
 
     *minimum += 2 * priv->margin;
     *natural += 2 * priv->margin;
-
-    Debug::Leave();
 }
 
 static void xiconview_allocate_children(XGtkIconView *icon_view)
@@ -1663,7 +1654,7 @@ static void xiconview_allocate_children(XGtkIconView *icon_view)
  */
 static void xiconview_size_allocate(GtkWidget *widget, GtkAllocation *allocation)
 {
-    Debug::Enter(XICONVIEW, __func__);
+    Debug d(XICONVIEW, __func__);
 
     XGtkIconView *icon_view = XICONVIEW(widget);
 
@@ -1707,8 +1698,6 @@ static void xiconview_size_allocate(GtkWidget *widget, GtkAllocation *allocation
     /* Emit any pending signals now */
     g_object_thaw_notify(G_OBJECT(icon_view->priv->hadjustment));
     g_object_thaw_notify(G_OBJECT(icon_view->priv->vadjustment));
-
-    Debug::Leave();
 }
 
 static gboolean xiconview_draw(GtkWidget *widget, cairo_t *cr)
@@ -2746,6 +2735,8 @@ static void xiconview_layout(XGtkIconView *icon_view)
 
     _xiconview_build_iters(icon_view);
 
+    string strDebug2;
+
     // if (xiconview_is_empty(icon_view))
     switch (priv->layoutState)
     {
@@ -2756,12 +2747,12 @@ static void xiconview_layout(XGtkIconView *icon_view)
 
         case LayoutState::TOTALLY_DIRTY:
             // Keep going.
-            Debug::Enter(XICONVIEW, __func__, "LayoutState::TOTALLY_DIRTY, cItemsPrivate: " + to_string(cItemsPrivate));
+            strDebug2 = "LayoutState::TOTALLY_DIRTY, cItemsPrivate: " + to_string(cItemsPrivate);
         break;
 
         case LayoutState::SOMEWHAT_DIRTY:
             // Should never happen, really.
-            Debug::Enter(XICONVIEW, __func__, "LayoutState::SOMEWHAT_DIRTY, cItemsPrivate: " + to_string(cItemsPrivate));
+            strDebug2 = "LayoutState::SOMEWHAT_DIRTY, cItemsPrivate: " + to_string(cItemsPrivate);
         break;
 
         case LayoutState::CLEAN:
@@ -2769,6 +2760,8 @@ static void xiconview_layout(XGtkIconView *icon_view)
             // Nothing to do, easy.
             return;
     }
+
+    Debug d(XICONVIEW, __func__, strDebug2);
 
     GtkWidget *widget = GTK_WIDGET(icon_view);
     gint item_width; /* this doesn't include item_padding */
@@ -2893,8 +2886,6 @@ static void xiconview_layout(XGtkIconView *icon_view)
         priv->layoutState = LayoutState::CLEAN;
     else
         priv->layoutState = LayoutState::EMPTY;
-
-    Debug::Leave();
 }
 
 /**
@@ -2905,7 +2896,7 @@ static void xiconview_layout(XGtkIconView *icon_view)
  */
 static void xiconview_invalidate_sizes(XGtkIconView *icon_view)
 {
-    Debug::Enter(XICONVIEW, __func__);
+    Debug d(XICONVIEW, __func__);
 
     switch (icon_view->priv->layoutState)
     {
@@ -2932,8 +2923,6 @@ static void xiconview_invalidate_sizes(XGtkIconView *icon_view)
             gtk_widget_queue_resize(GTK_WIDGET(icon_view));
         break;
     }
-
-    Debug::Leave();
 }
 
 static void xiconview_item_invalidate_size(PXGtkIconViewItem &pItem)
@@ -3262,7 +3251,7 @@ static void xiconview_row_changed(GtkTreeModel *model,
                                   gpointer data)
 {
     gchar *pszPath = gtk_tree_path_to_string(path);
-    Debug::Enter(XICONVIEW, __func__ + string(": path=") + pszPath);
+    Debug d(XICONVIEW, __func__ + string(": path=") + pszPath);
     g_free(pszPath);
 
     XGtkIconView *icon_view = XICONVIEW(data);
@@ -3324,8 +3313,6 @@ static void xiconview_row_changed(GtkTreeModel *model,
         xiconview_invalidate_sizes(icon_view);
 
     // verify_items(icon_view);
-
-    Debug::Leave();
 }
 
 static void xiconview_row_inserted(GtkTreeModel *model,
@@ -3333,7 +3320,7 @@ static void xiconview_row_inserted(GtkTreeModel *model,
                                    GtkTreeIter *iter,
                                    gpointer data)
 {
-    Debug::Enter(XICONVIEW, __func__);
+    Debug d(XICONVIEW, __func__);
 
     XGtkIconView *icon_view = XICONVIEW(data);
     gint index;
@@ -3385,13 +3372,11 @@ static void xiconview_row_inserted(GtkTreeModel *model,
     Debug::Log(XICONVIEW, "calling gtk_widget_queue_resize()");
     icon_view->priv->layoutState = LayoutState::SOMEWHAT_DIRTY;
     gtk_widget_queue_resize(GTK_WIDGET(icon_view));
-
-    Debug::Leave();
 }
 
 static void xiconview_row_deleted(GtkTreeModel *model, GtkTreePath *path, gpointer data)
 {
-    Debug::Enter(XICONVIEW, __func__);
+    Debug d(XICONVIEW, __func__);
 
     XGtkIconView *icon_view = XICONVIEW(data);
     PXGtkIconViewItem pItem;
@@ -3449,8 +3434,6 @@ static void xiconview_row_deleted(GtkTreeModel *model, GtkTreePath *path, gpoint
         if (emit)
             g_signal_emit(icon_view, icon_view_signals[SELECTION_CHANGED], 0);
     }
-
-    Debug::Leave();
 }
 
 // static void
@@ -3506,7 +3489,7 @@ static void xiconview_row_deleted(GtkTreeModel *model, GtkTreePath *path, gpoint
  */
 static void xiconview_build_items(XGtkIconView *icon_view)
 {
-    Debug::Enter(XICONVIEW, __func__);
+    Debug d(XICONVIEW, __func__);
 
     GtkTreeIter iter;
     int i;
@@ -3530,8 +3513,6 @@ static void xiconview_build_items(XGtkIconView *icon_view)
 
     if (i > 0)
         icon_view->priv->layoutState = LayoutState::TOTALLY_DIRTY;
-
-    Debug::Leave();
 }
 
 static void
@@ -3635,7 +3616,7 @@ static PXGtkIconViewItem find_item(XGtkIconView *icon_view,
                                    gint row_ofs,
                                    gint col_ofs)
 {
-    Debug::Enter(XICONVIEW, __func__);
+    Debug d(XICONVIEW, __func__);
 
     gint row, col;
 //     GList *items;
@@ -3665,8 +3646,6 @@ static PXGtkIconViewItem find_item(XGtkIconView *icon_view,
 //         if (item->row == row && item->col == col)
 //             return item;
 //     }
-
-    Debug::Leave();
 
     return pFound;
 }
@@ -4821,7 +4800,7 @@ void xiconview_set_model(XGtkIconView *icon_view, GtkTreeModel *model)
     if (icon_view->priv->model == model)
         return;
 
-    Debug::Enter(XICONVIEW, __func__);
+    Debug d(XICONVIEW, __func__);
 
     if (icon_view->priv->scroll_to_path)
     {
@@ -4905,8 +4884,6 @@ void xiconview_set_model(XGtkIconView *icon_view, GtkTreeModel *model)
         Debug::Log(XICONVIEW, "calling gtk_widget_queue_resize()");
         gtk_widget_queue_resize(GTK_WIDGET(icon_view));
     }
-
-    Debug::Leave();
 }
 
 /**

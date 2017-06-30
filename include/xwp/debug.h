@@ -63,11 +63,29 @@ const uint8_t CONTINUE_FROM_PREVIOUS    = 0x02;
 
 class Debug
 {
+    string _strExit;
 public:
-    static void Enter(DebugFlag fl,
+    Debug(DebugFlag fl,
+          const string &strFuncName,
+          const string &strExtra = "")
+    {
+        Enter2(fl, strFuncName, strExtra);
+    }
+
+    ~Debug()
+    {
+        Leave2(_strExit);
+    }
+
+    void setExit(const string &str)
+    {
+        _strExit = str;
+    }
+
+    static void Enter2(DebugFlag fl,
                       const string &strFuncName,
                       const string &strExtra = "");
-    static void Leave(const string &strExtra = "");
+    static void Leave2(const string &strExtra = "");
     static void Log(DebugFlag fl,
                     const string &str,
                     uint8_t flMessage = 0);

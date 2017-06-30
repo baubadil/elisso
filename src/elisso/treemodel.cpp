@@ -105,13 +105,12 @@ void dumpModel(RowsVector &v,
 {
     if (v.size())
     {
-        Debug::Enter(TREEMODEL, "Dumping model level " + to_string(iLevel));
+        Debug d(TREEMODEL, "Dumping model level " + to_string(iLevel));
         for (auto &pRow : v)
         {
             Debug::Log(TREEMODEL, pRow->pDir->getBasename());
             dumpModel(pRow->vChildren, iLevel + 1);
         }
-        Debug::Leave();
     }
 }
 
@@ -492,7 +491,7 @@ FolderTreeModel::get_value_vfunc(const TreeModel::iterator &iter,
                                  int column,
                                  Glib::ValueBase &value) const /* override */
 {
-    Debug::Enter(TREEMODEL, __func__);
+    Debug d(TREEMODEL, __func__);
 
     Glib::ustring strName = "INVALID";
     Glib::ustring strResult = "FALSE";
@@ -519,7 +518,7 @@ FolderTreeModel::get_value_vfunc(const TreeModel::iterator &iter,
         }
     }
 
-    Debug::Leave(strName + " => " + strResult);
+    d.setExit(strName + " => " + strResult);
 }
 
 /**
@@ -534,7 +533,7 @@ FolderTreeModel::set_value_impl(const iterator &iter,
                                 int column,
                                 const Glib::ValueBase &value) /* override */
 {
-    Debug::Enter(TREEMODEL, __func__);
+    Debug d(TREEMODEL, __func__);
 
     Glib::ustring strName = "INVALID";
     Glib::ustring strResult = "FALSE";
@@ -552,7 +551,7 @@ FolderTreeModel::set_value_impl(const iterator &iter,
         }
     }
 
-    Debug::Leave(strName + " => " + strResult);
+    d.setExit(strName + " => " + strResult);
 }
 
 /**
@@ -623,7 +622,7 @@ int
 FolderTreeModel::iter_n_children_vfunc(const iterator &iter) const /* override */
 {
     int z = 0;
-    Debug::Enter(TREEMODEL, __func__);
+    Debug d(TREEMODEL, __func__);
 
     PFolderTreeModelRow pRow = findRow(iter);
     if (pRow)
@@ -632,7 +631,7 @@ FolderTreeModel::iter_n_children_vfunc(const iterator &iter) const /* override *
         z = pRow->vChildren.size();
     }
 
-    Debug::Leave("returning " + to_string(z));
+    d.setExit("returning " + to_string(z));
     return z;
 }
 
@@ -658,7 +657,7 @@ FolderTreeModel::iter_nth_child_vfunc(const iterator &parent,
                                       iterator &iter) const /* override */
 {
     bool rc = false;
-    Debug::Enter(TREEMODEL, __func__);
+    Debug d(TREEMODEL, __func__);
 
     iter = iterator();
 
@@ -682,7 +681,7 @@ FolderTreeModel::iter_nth_child_vfunc(const iterator &parent,
         }
     }
 
-    Debug::Leave(strName + " => " + strResult);
+    d.setExit(strName + " => " + strResult);
     return rc;
 }
 
@@ -696,7 +695,7 @@ bool
 FolderTreeModel::iter_nth_root_child_vfunc(int n, iterator &iter) const /* override */
 {
     bool rc = false;
-    Debug::Enter(TREEMODEL, __func__);
+    Debug d(TREEMODEL, __func__);
 
     iter = iterator();
 
@@ -708,7 +707,6 @@ FolderTreeModel::iter_nth_root_child_vfunc(int n, iterator &iter) const /* overr
         rc = true;
     }
 
-    Debug::Leave();
     return rc;
 }
 
@@ -721,7 +719,7 @@ bool
 FolderTreeModel::iter_parent_vfunc(const iterator &child, iterator &iter) const /* override */
 {
     bool rc = true;
-    Debug::Enter(TREEMODEL, __func__);
+    Debug d(TREEMODEL, __func__);
     iter = iterator();
 
     Glib::ustring strName("INVALID");
@@ -744,7 +742,7 @@ FolderTreeModel::iter_parent_vfunc(const iterator &child, iterator &iter) const 
         }
     }
 
-    Debug::Leave(strName + " => " + strResult);
+    d.setExit(strName + " => " + strResult);
 
     return rc;
 }
@@ -756,15 +754,13 @@ FolderTreeModel::iter_parent_vfunc(const iterator &child, iterator &iter) const 
 Gtk::TreeModel::Path
 FolderTreeModel::get_path_vfunc(const iterator &iter) const /* override */
 {
-    Debug::Enter(TREEMODEL, __func__);
+    Debug d(TREEMODEL, __func__);
 
     Path p;
 
     auto pRow = findRow(iter);
     if (pRow)
         p = getPath(pRow);
-
-    Debug::Leave();
 
     return p;
 
@@ -777,7 +773,7 @@ FolderTreeModel::get_path_vfunc(const iterator &iter) const /* override */
 bool
 FolderTreeModel::get_iter_vfunc(const Path &path, iterator &iter) const /* override */
 {
-    Debug::Enter(TREEMODEL, __func__);
+    Debug d(TREEMODEL, __func__);
     bool rc = false;
 
     iter = iterator();
@@ -817,7 +813,7 @@ FolderTreeModel::get_iter_vfunc(const Path &path, iterator &iter) const /* overr
         rc = true;
     }
 
-    Debug::Leave("returning " + string((rc) ? "true" : "false"));
+    d.setExit("returning " + string((rc) ? "true" : "false"));
     return rc;
 }
 

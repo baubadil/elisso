@@ -136,16 +136,14 @@ ElissoFolderTree::ElissoFolderTree(ElissoApplicationWindow &mainWindow)
     // Connect the GUI thread dispatcher for when a folder populate is done.
     _pImpl->workerSubtreePopulated.connect([this]()
     {
-        Debug::Enter(FOLDER_POPULATE_LOW, "workerSubtreePopulated.dispatcher");
+        Debug d(FOLDER_POPULATE_LOW, "workerSubtreePopulated.dispatcher");
         this->onPopulateDone();
-        Debug::Leave();
     });
     // Connect the GUI thread dispatcher for when a folder populate is done.
     _pImpl->workerAddOneFirst.connect([this]()
     {
-        Debug::Enter(FOLDER_POPULATE_LOW, "workerAddOneFirst.dispatcher");
+        Debug d(FOLDER_POPULATE_LOW, "workerAddOneFirst.dispatcher");
         this->onAddAnotherFirst();
-        Debug::Leave();
     });
 
     auto pTreeSelection = _treeView.get_selection();
@@ -197,7 +195,7 @@ ElissoFolderTree::addTreeRoot(const Glib::ustring &strName,
      // Add the first page in an idle loop so we have no delay in showing the window.
     Glib::signal_idle().connect([this, strName, pDir]() -> bool
     {
-        Debug::Enter(FOLDER_POPULATE_HIGH, "addTreeRoot lambda for " + quote(pDir->getPath()));
+        Debug d(FOLDER_POPULATE_HIGH, "addTreeRoot lambda for " + quote(pDir->getPath()));
 
         auto pRowRoot = _pImpl->pModel->append(nullptr,
                                                g_cTreeRootItems++,
@@ -208,8 +206,6 @@ ElissoFolderTree::addTreeRoot(const Glib::ustring &strName,
 
         // Do not populate just yet, we'll populate the root node in selectNode().
 //         spawnPopulate(pRowRoot);
-
-        Debug::Leave();
 
         return false;
     });
@@ -237,7 +233,7 @@ ElissoFolderTree::selectNode(PFSModelBase pDir)
     if (!pDir)
         return;
 
-    Debug::Enter(FOLDER_POPULATE_HIGH, string(__func__) + "(" + quote(pDir->getPath()) + ")");
+    Debug d(FOLDER_POPULATE_HIGH, string(__func__) + "(" + quote(pDir->getPath()) + ")");
     PFSModelBase pSelectRoot;
     PFolderTreeModelRow pRootRow;
 
@@ -357,8 +353,6 @@ ElissoFolderTree::selectNode(PFSModelBase pDir)
             _pImpl->fInExplicitSelect = false;
         }
     }
-
-    Debug::Leave();
 }
 
 /**

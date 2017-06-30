@@ -71,8 +71,8 @@ public:
     {
         TEST,
         TRASH,
-        COPY,
-        MOVE
+        MOVE,
+        COPY
     };
 
     static PFileOperation Create(Type t,

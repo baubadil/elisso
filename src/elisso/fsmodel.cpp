@@ -205,7 +205,7 @@ FSMonitorBase::stopWatching(FSContainer &cnr)
 PFSModelBase
 FSModelBase::FindPath(const string &strPath0)
 {
-    Debug::Enter(FILE_LOW, __func__ + string("(" + strPath0 + ")"));
+    Debug d(FILE_LOW, __func__ + string("(" + strPath0 + ")"));
 
     string strPath;
     static Regex s_reScheme(R"i____(^([-+a-z]+)://(.*))i____");
@@ -312,7 +312,7 @@ FSModelBase::FindPath(const string &strPath0)
         }
     }
 
-    Debug::Leave("Result: " + (pCurrent ? pCurrent->describe(true) : "NULL"));
+    d.setExit("Result: " + (pCurrent ? pCurrent->describe(true) : "NULL"));
 
     return pCurrent;
 }
@@ -676,12 +676,28 @@ FSModelBase::sendToTrash()
  *  This does not notify file monitors since we can't be sure which thread we're running on. Call
  *  FSContainer::notifyFileRemoved() and FSContainer::notifyFileAdded() either afterwards if you
  *  call this on thread one, or have a GUI dispatcher which calls it instead.
-
  */
 void
 FSModelBase::moveTo(PFSModelBase pTarget)
 {
-    Debug::Enter(FILE_HIGH, __func__);
+    copyOrMoveImpl(pTarget,
+                   false);      // fIsCopy
+}
+
+PFSModelBase
+FSModelBase::copyTo(PFSModelBase pTarget)
+{
+    return copyOrMoveImpl(pTarget,
+                          true);      // fIsCopy
+}
+
+PFSModelBase
+FSModelBase::copyOrMoveImpl(PFSModelBase pTarget,
+                            bool fIsCopy)
+{
+    PFSModelBase pReturn;
+
+    Debug d(FILE_HIGH, __func__, "(" + quote(getBasename()) + "), target=" + quote(pTarget->getBasename()));
     try
     {
         auto pParent = getParent();
@@ -696,26 +712,51 @@ FSModelBase::moveTo(PFSModelBase pTarget)
         if (!pTargetCnr)
             throw FSException("cannot get target container for moving");
 
-        {
-            ContentsLock cLock(*pParentCnr);
-            pParentCnr->removeChild(cLock, shared_from_this());
-        }
-
         auto pGioFile = getGioFile();
-        pGioFile->move(pTarget->getGioFile(),
-                       Gio::FileCopyFlags::FILE_COPY_NOFOLLOW_SYMLINKS /*| Gio::FileCopyFlags::FILE_COPY_NO_FALLBACK_FOR_MOVE */);
+        string strTargetPath = pTarget->getPath();
+        strTargetPath += "/" + this->getBasename();
+        auto pTargetGioFile = Gio::File::create_for_uri(strTargetPath);
 
+        if (fIsCopy)
         {
-            ContentsLock cLock(*pTargetCnr);
-            pParentCnr->addChild(cLock, shared_from_this());
+            // This is a copy:
+
+            Debug::Log(FILE_HIGH, "pGioFile->copy(" + quote(pGioFile->get_path()) + " to " + quote(pTargetGioFile->get_path()) + ")");
+
+            pGioFile->copy(pTargetGioFile,
+                           Gio::FileCopyFlags::FILE_COPY_NOFOLLOW_SYMLINKS      // copy symlinks as symlinks
+                /*| Gio::FileCopyFlags::FILE_COPY_NO_FALLBACK_FOR_MOVE */);
+
+            if (!(pReturn = pTargetCnr->find(this->getBasename())))
+                throw FSException("Cannot find copied file in destination after copying");
         }
+        else
+        {
+            // This is a move:
+            {
+                ContentsLock cLock(*pParentCnr);
+                pParentCnr->removeChild(cLock, shared_from_this());
+            }
+
+            Debug::Log(FILE_HIGH, "pGioFile->move(" + quote(pGioFile->get_path()) + " to " + quote(pTargetGioFile->get_path()) + ")");
+            pGioFile->move(pTargetGioFile,
+                           Gio::FileCopyFlags::FILE_COPY_NOFOLLOW_SYMLINKS      // copy symlinks as symlinks
+                            /*| Gio::FileCopyFlags::FILE_COPY_NO_FALLBACK_FOR_MOVE */);
+
+            {
+                ContentsLock cLock(*pTargetCnr);
+                pParentCnr->addChild(cLock, shared_from_this());
+            }
+        }
+
     }
     catch (Gio::Error &e)
     {
-        Debug::Leave("Caught Gio::Error: " + e.what());
+        d.setExit("Caught Gio::Error: " + e.what());
         throw FSException(e.what());
     }
-    Debug::Leave();
+
+    return pReturn;
 }
 
 void
@@ -929,7 +970,7 @@ FSContainer::find(const string &strParticle)
     else
     {
         string strPath(_refBase.getPathImpl() + "/" + strParticle);
-        Debug::Enter(FILE_MID, "Directory::find(" + quote(strParticle) + "): looking up " + quote(strPath));
+        Debug d(FILE_MID, "Directory::find(" + quote(strParticle) + "): looking up " + quote(strPath));
 
         PGioFile pGioFile;
         if (_refBase.hasFlag(FSFlag::IS_LOCAL))
@@ -941,8 +982,6 @@ FSContainer::find(const string &strParticle)
             Debug::Log(FILE_LOW, "  could not make awake");
         else
             this->addChild(cLock, pReturn);
-
-        Debug::Leave();
     }
 
     return pReturn;
@@ -1036,7 +1075,7 @@ FSContainer::getContents(FSVector &vFiles,
                          FSVector *pvFilesRemoved,        //!< out: list of file-system object that have been removed, or nullptr (optional)
                          StopFlag *pStopFlag)
 {
-    Debug::Enter(FILE_HIGH, "FSContainer::getContents(\"" + _refBase.getPath() + "\")");
+    Debug d(FILE_HIGH, "FSContainer::getContents(\"" + _refBase.getPath() + "\")");
 
     size_t c = 0;
 
@@ -1140,26 +1179,27 @@ FSContainer::getContents(FSVector &vFiles,
                             switch (t)
                             {
                                 case FSType::DIRECTORY:
+                                {
                                     // Always wake up directories.
-                                    Debug::Enter(FILE_LOW, "Waking up directory " + strThis);
+                                    Debug d(FILE_LOW, "Waking up directory " + strThis);
                                     pAddToContents = pTemp;
-                                    Debug::Leave();
+                                }
                                 break;
 
                                 case FSType::SYMLINK:
+                                {
                                     // Need to wake up the symlink to figure out if it's a link to a dir.
-                                    Debug::Enter(FILE_LOW, "Waking up symlink " + strThis);
+                                    Debug d(FILE_LOW, "Waking up symlink " + strThis);
                                     pAddToContents = pTemp;
-                                    Debug::Leave();
+                                }
                                 break;
 
                                 default:
                                     // Ordinary file:
                                     if (getContents == Get::ALL)
                                     {
-                                        Debug::Enter(FILE_LOW, "Waking up plain file " + strThis);
+                                        Debug d(FILE_LOW, "Waking up plain file " + strThis);
                                         pAddToContents = pTemp;
-                                        Debug::Leave();
                                     }
                                 break;
                             }
@@ -1273,8 +1313,6 @@ FSContainer::getContents(FSVector &vFiles,
     _refBase._fl.clear(FSFlag::POPULATING);
     g_condFolderPopulated.notify_all();
 
-    Debug::Leave();
-
     if (!strException.empty())
         throw FSException(strException);
 
@@ -1378,10 +1416,9 @@ FSContainer::createEmptyDocument(const string &strName)
 void
 FSContainer::notifyFileAdded(PFSModelBase pFS) const
 {
-    Debug::Enter(FILEMONITORS, string(__func__) + "(" + pFS->getPath() + ")");
+    Debug d(FILEMONITORS, string(__func__) + "(" + pFS->getPath() + ")");
     for (auto &pMonitor : _pImpl->llMonitors)
         pMonitor->onItemAdded(pFS);
-    Debug::Leave();
 }
 
 /**
@@ -1394,19 +1431,17 @@ FSContainer::notifyFileAdded(PFSModelBase pFS) const
 void
 FSContainer::notifyFileRemoved(PFSModelBase pFS) const
 {
-    Debug::Enter(FILEMONITORS, string(__func__) + "(" + pFS->getPath() + ")");
+    Debug d(FILEMONITORS, string(__func__) + "(" + pFS->getPath() + ")");
     for (auto &pMonitor : _pImpl->llMonitors)
         pMonitor->onItemRemoved(pFS);
-    Debug::Leave();
 }
 
 void
 FSContainer::notifyFileRenamed(PFSModelBase pFS, const string &strOldName, const string &strNewName) const
 {
-    Debug::Enter(FILEMONITORS, string(__func__) + "(" + strOldName + " -> " + strNewName + ")");
+    Debug d(FILEMONITORS, string(__func__) + "(" + strOldName + " -> " + strNewName + ")");
     for (auto &pMonitor : _pImpl->llMonitors)
         pMonitor->onItemRenamed(pFS, strOldName, strNewName);
-    Debug::Leave();
 }
 
 
@@ -1622,7 +1657,7 @@ condition_variable_any g_condSymlinkResolved;
 FSSymlink::State
 FSSymlink::follow()
 {
-    Debug::Enter(FILE_LOW, "FSSymlink::follow(\"" + getPath() + "\"");
+    Debug d(FILE_LOW, "FSSymlink::follow(\"" + getPath() + "\"");
 
     // Make sure that only one thread resolves this link at a time. We
     // set the link's state to State::RESOLVING below while we're following,
@@ -1714,7 +1749,6 @@ FSSymlink::follow()
         g_condSymlinkResolved.notify_all();
     }
 
-    Debug::Leave();
     return _state;
 }
 

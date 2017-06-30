@@ -109,6 +109,10 @@ public:
                     case FileOperation::Type::MOVE:
                         _label.set_markup("Moving <b>" + Glib::Markup::escape_text(pfsCurrent->getBasename()) + "</b>");
                     break;
+
+                    case FileOperation::Type::COPY:
+                        _label.set_markup("Copying <b>" + Glib::Markup::escape_text(pfsCurrent->getBasename()) + "</b>");
+                    break;
                 }
             }
         }
@@ -158,6 +162,9 @@ public:
 
             case FileOperation::Type::MOVE:
                 return "Moving files";
+
+            case FileOperation::Type::COPY:
+                return "Copying files";
         }
 
         return "";

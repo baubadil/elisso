@@ -860,7 +860,7 @@ ElissoFolderView::setState(ViewState s)
 void
 ElissoFolderView::setViewMode(FolderViewMode m)
 {
-    Debug::Enter(WINDOWHIERARCHY, string(__func__) + "(" + to_string((int)m) + ")");
+    Debug d(WINDOWHIERARCHY, string(__func__) + "(" + to_string((int)m) + ")");
 
     if (m != _mode)
     {
@@ -974,8 +974,6 @@ ElissoFolderView::setViewMode(FolderViewMode m)
 
         this->connectModel(_state == ViewState::POPULATED);
     }
-
-    Debug::Leave();
 }
 
 void
@@ -1383,6 +1381,7 @@ ElissoFolderView::clipboardCopyOrCutSelected(bool fCut)
  */
 void ElissoFolderView::clipboardPaste()
 {
+    Debug d(CMD_TOP, __func__);
     Glib::RefPtr<Gtk::Clipboard> pClip = Gtk::Clipboard::get();
     pClip->request_contents(CLIPBOARD_TARGET_GNOME_COPIED_FILES, [this](const Gtk::SelectionData &selectionData)
     {
@@ -2225,26 +2224,23 @@ ElissoFolderView::onSelectionChanged()
 void
 FolderViewMonitor::onItemAdded(PFSModelBase &pFS) /* override */
 {
-    Debug::Enter(FILEMONITORS, string(__func__) + "(" + pFS->getPath() + ")");
+    Debug d(FILEMONITORS, string(__func__) + "(" + pFS->getPath() + ")");
     _view.insertFile(pFS);
-    Debug::Leave();
 }
 
 /* virtual */
 void
 FolderViewMonitor::onItemRemoved(PFSModelBase &pFS) /* override */
 {
-    Debug::Enter(FILEMONITORS, string(__func__) + "(" + pFS->getPath() + ")");
+    Debug d(FILEMONITORS, string(__func__) + "(" + pFS->getPath() + ")");
     _view.removeFile(pFS);
-    Debug::Leave();
 }
 
 /* virtual */
 void
 FolderViewMonitor::onItemRenamed(PFSModelBase &pFS, const std::string &strOldName, const std::string &strNewName) /* override */
 {
-    Debug::Enter(FILEMONITORS, string(__func__) + "(" + pFS->getPath() + ")");
+    Debug d(FILEMONITORS, string(__func__) + "(" + pFS->getPath() + ")");
     _view.renameFile(pFS, strOldName, strNewName);
-    Debug::Leave();
 }
 
