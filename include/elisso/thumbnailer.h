@@ -19,12 +19,11 @@ struct Thumbnail
 {
     PFSFile                 pFile;
     const Gdk::PixbufFormat *pFormat;
-    PRowReference           pRowRef;
     PPixbuf                 ppbIconSmall;
     PPixbuf                 ppbIconBig;
 
-    Thumbnail(PFSFile pFile_, const Gdk::PixbufFormat *pFormat_, PRowReference pRowRef_)
-        : pFile(pFile_), pFormat(pFormat_), pRowRef(pRowRef_)
+    Thumbnail(PFSFile pFile_, const Gdk::PixbufFormat *pFormat_)
+        : pFile(pFile_), pFormat(pFormat_)
     {
     }
 };
@@ -91,7 +90,7 @@ public:
 
     const Gdk::PixbufFormat* isImageFile(PFSModelBase pFile);
 
-    void enqueue(PFSFile pFile, const Gdk::PixbufFormat *pFormat, PRowReference pRowRef);
+    void enqueue(PFSFile pFile, const Gdk::PixbufFormat *pFormat);
 
     PThumbnail fetchResult();
 
@@ -111,7 +110,6 @@ private:
 
     struct Impl;
     Impl    *_pImpl;
-
 };
 
 #endif // ELISSO_THUMBNAILER_H

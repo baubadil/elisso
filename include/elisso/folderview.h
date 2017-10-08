@@ -226,13 +226,10 @@ private:
                      int size,
                      bool *pfThumbnailing);
     void onThumbnailReady();
-    PPixbuf cellDataFuncIcon(const Gtk::TreeModel::iterator& it,
-                             Gtk::TreeModelColumn<PPixbuf> &column,
-                             int iconSize);
 
     bool isSelected(Gtk::TreeModel::Path &path);
     bool getPathAtPos(int x, int y, Gtk::TreeModel::Path &path);
-    int countSelectedRows();
+    int countSelectedItems();
     void selectExactlyOne(Gtk::TreeModel::Path &path);
 
     bool onButtonPressedEvent(GdkEventButton *pEvent);

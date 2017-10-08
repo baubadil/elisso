@@ -1792,9 +1792,7 @@ ElissoFolderView::loadIcon(const Gtk::TreeModel::iterator& it,
                 if (pFormat)
                 {
                     pFile->setFlag(FSFlag::THUMBNAILING);
-                    Gtk::TreePath path(it);
-                    auto pRowRef = std::make_shared<Gtk::TreeRowReference>(_pImpl->pListStore, path);
-                    _pImpl->thumbnailer.enqueue(pFile, pFormat, pRowRef);
+                    _pImpl->thumbnailer.enqueue(pFile, pFormat);
 
                     if (pfThumbnailing)
                         *pfThumbnailing = true;
@@ -1811,11 +1809,24 @@ ElissoFolderView::onThumbnailReady()
     FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
 
     auto pThumbnail = _pImpl->thumbnailer.fetchResult();
-    Gtk::TreePath path = pThumbnail->pRowRef->get_path();
-    auto it = _pImpl->pListStore->get_iter(path);
-    Gtk::TreeModel::Row row = *it;
-    row[cols._colIconSmall] = pThumbnail->ppbIconSmall;
-    row[cols._colIconBig] = pThumbnail->ppbIconBig;
+
+    const auto &strName = pThumbnail->pFile->getBasename();
+    auto itSTL = _pImpl->mapRowReferences.find(strName);
+    if (itSTL != _pImpl->mapRowReferences.end())
+    {
+        auto rowref= itSTL->second;
+        Gtk::TreePath path = rowref.get_path();
+        if (path)
+        {
+            auto it = _pImpl->pListStore->get_iter(path);
+            if (it)
+            {
+                Gtk::TreeModel::Row row = *it;
+                row[cols._colIconSmall] = pThumbnail->ppbIconSmall;
+                row[cols._colIconBig] = pThumbnail->ppbIconBig;
+            }
+        }
+    }
 
     ++_pImpl->cThumbnailed;
 }
@@ -1876,7 +1887,7 @@ ElissoFolderView::isSelected(Gtk::TreeModel::Path &path)
     return false;
 }
 
-int ElissoFolderView::countSelectedRows()
+int ElissoFolderView::countSelectedItems()
 {
     switch (_mode)
     {
@@ -1964,7 +1975,7 @@ ElissoFolderView::onButtonPressedEvent(GdkEventButton *pEvent)
                         {
                             // Click on row that's selected: then show context even if it's whitespace.
 //                             Debug::Log(DEBUG_ALWAYS, "row is selected");
-                            if (this->countSelectedRows() == 1)
+                            if (this->countSelectedItems() == 1)
                                 clickType = MouseButton3ClickType::SINGLE_ROW_SELECTED;
                             else
                                 clickType = MouseButton3ClickType::MULTIPLE_ROWS_SELECTED;

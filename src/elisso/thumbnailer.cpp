@@ -235,11 +235,10 @@ Thumbnailer::isImageFile(PFSModelBase pFile)
  */
 void
 Thumbnailer::enqueue(PFSFile pFile,
-                     const Gdk::PixbufFormat *pFormat,
-                     PRowReference pRowRef)
+                     const Gdk::PixbufFormat *pFormat)
 {
     Debug::Log(THUMBNAILER, string(__func__) + ":  " + pFile->getBasename());
-    _pImpl->qFileReader_.post(make_shared<Thumbnail>(pFile, pFormat, pRowRef));
+    _pImpl->qFileReader_.post(make_shared<Thumbnail>(pFile, pFormat));
 }
 
 /**
