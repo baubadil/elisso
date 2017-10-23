@@ -600,7 +600,9 @@ ElissoApplicationWindow::closeFolderTab(ElissoFolderView &viewClose)
             ElissoFolderView *pViewThis = static_cast<ElissoFolderView *>(pPageWidget);
             if (pViewThis->getID() == viewClose.getID())
             {
+                Debug::Log(DEBUG_ALWAYS, "removing notebook page");
                 _notebook.remove_page(*pPageWidget);
+                delete pViewThis;
                 break;
             }
         }

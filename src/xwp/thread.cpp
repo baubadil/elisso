@@ -10,15 +10,15 @@
 
 #include "xwp/thread.h"
 
-#include <thread>
 #include <atomic>
 #include <cassert>
 
 std::atomic<unsigned int> g_uThreadID(0);
 
 /* static  */
-unsigned int
-Thread::Create(std::function<void ()> &&fn)
+std::thread*
+Thread::Create(std::function<void ()> &&fn,
+               bool fDetach /* = true */ )
 {
     auto pThread = new std::thread([fn]()
     {
@@ -31,8 +31,9 @@ Thread::Create(std::function<void ()> &&fn)
 //             assert(false);
         }
     });
-    pThread->detach();
-    return ++g_uThreadID;;
+    if (fDetach)
+        pThread->detach();
+    return pThread;
 }
 
 /* static */

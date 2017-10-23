@@ -111,6 +111,7 @@ typedef std::shared_ptr<ThumbnailTemp> PThumbnailTemp;
  */
 struct Thumbnailer::Impl : WorkerResultQueue<PThumbnail>
 {
+    std::vector<std::thread*>           aThreads;
     WorkerInputQueue<PThumbnail>        qFileReader_;
 
     unsigned                            cPixbufLoaders;
@@ -156,7 +157,8 @@ struct Thumbnailer::Impl : WorkerResultQueue<PThumbnail>
  **************************************************************************/
 
 /**
- *  Constructor.
+ *  Constructor. Each ElissoFolderView has an instance in the implementation,
+ *  so this gets called once for each folder view that is created.
  */
 Thumbnailer::Thumbnailer()
     : _pImpl(new Impl)
@@ -164,37 +166,55 @@ Thumbnailer::Thumbnailer()
     Debug::Log(THUMBNAILER, "Thumbnailer constructed");
 
      // Create the file reader thread.
-    XWP::Thread::Create([this]()
+    _pImpl->aThreads.push_back(XWP::Thread::Create([this]()
     {
         this->fileReaderThread();
-    });
+    }, false));
 
     // Create the pixmap loader threads.
     for (uint u = 0;
          u < _pImpl->cPixbufLoaders;
          ++u)
     {
-        XWP::Thread::Create([this, u]()
+        _pImpl->aThreads.push_back(XWP::Thread::Create([this, u]()
         {
             this->pixbufLoaderThread(u);
-        });
+        }, false));
     }
 
     // Create the pixbuf scaler thread.
-    XWP::Thread::Create([this]()
+    _pImpl->aThreads.push_back(XWP::Thread::Create([this]()
     {
         this->scalerSmallThread();
-    });
+    }, false));
 
     // Create the pixbuf scaler thread.
-    XWP::Thread::Create([this]()
+    _pImpl->aThreads.push_back(XWP::Thread::Create([this]()
     {
         this->scalerBigThread();
-    });
+    }, false));
 }
 
 Thumbnailer::~Thumbnailer()
 {
+    Debug::Message("~Thumbnailer");
+    this->clearQueues();
+
+    // Stop the threads.
+    _pImpl->qFileReader_.post(nullptr);
+    std::vector<WorkerInputQueue<PThumbnailTemp>*> vQueues;
+    for (uint u = 0;  u < _pImpl->cPixbufLoaders;  ++u)
+        _pImpl->paqPixbufLoaders[u].post(nullptr);
+    _pImpl->qScalerIconSmall.post(nullptr);
+    _pImpl->qScalerIconBig.post(nullptr);
+
+    int i = 0;
+    for (auto pThread : _pImpl->aThreads)
+    {
+        Debug::Log(DEBUG_ALWAYS, "stopping thread " + to_string(i++));
+        pThread->join();
+    }
+
     delete _pImpl;
 }
 
@@ -278,7 +298,7 @@ Thumbnailer::isBusy()
  *  will trigger another queue fill.
  */
 void
-Thumbnailer::stop()
+Thumbnailer::clearQueues()
 {
     // For each of the queues, we need to
     // 1) reset the FSFlag::THUMBNAILING for each of the files still left
@@ -323,7 +343,9 @@ void Thumbnailer::fileReaderThread()
     while(1)
     {
         // Block until someone has queued a file.
-        pThumbnailIn = _pImpl->qFileReader_.fetch();
+        if (!(pThumbnailIn = _pImpl->qFileReader_.fetch()))
+            // NULL means terminate thread.
+            break;
 
         using namespace std::chrono;
         steady_clock::time_point t1 = steady_clock::now();
@@ -380,7 +402,9 @@ void Thumbnailer::pixbufLoaderThread(uint threadno)
     while (1)
     {
         // Block until someone has queued a file.
-        pTemp = _pImpl->paqPixbufLoaders[threadno].fetch();
+        if (!(pTemp = _pImpl->paqPixbufLoaders[threadno].fetch()))
+            // NULL means terminate thread.
+            break;
 
         using namespace std::chrono;
         steady_clock::time_point t1 = steady_clock::now();
@@ -462,7 +486,9 @@ void Thumbnailer::scalerSmallThread()
     while (1)
     {
         // Block until fileReaderThread() has posted something.
-        pTemp = _pImpl->qScalerIconSmall.fetch();
+        if (!(pTemp = _pImpl->qScalerIconSmall.fetch()))
+            // NULL means terminate thread.
+            break;
 
         using namespace std::chrono;
         steady_clock::time_point t1 = steady_clock::now();
@@ -495,7 +521,9 @@ void Thumbnailer::scalerBigThread()
     while (1)
     {
         // Block until fileReaderThread() has posted something.
-        pTemp = _pImpl->qScalerIconBig.fetch();
+        if (!(pTemp = _pImpl->qScalerIconBig.fetch()))
+            // NULL means terminate thread.
+            break;
 
         using namespace std::chrono;
         steady_clock::time_point t1 = steady_clock::now();

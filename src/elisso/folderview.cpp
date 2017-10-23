@@ -170,9 +170,10 @@ ElissoFolderView::ElissoFolderView(ElissoApplicationWindow &mainWindow, int &iPa
       _mainWindow(mainWindow),
       _pImpl(new ElissoFolderView::Impl())
 {
-    iPageInserted = _mainWindow.getNotebook().append_page(*this,
-                                                          _labelNotebookPage,
-                                                          _labelNotebookMenu);
+    auto &ntb = _mainWindow.getNotebook();
+    iPageInserted = ntb.append_page(*this,
+                                    _labelNotebookPage,
+                                    _labelNotebookMenu);
 
     _treeView.setParent(*this);
 
@@ -271,6 +272,7 @@ ElissoFolderView::ElissoFolderView(ElissoApplicationWindow &mainWindow, int &iPa
 /* virtual */
 ElissoFolderView::~ElissoFolderView()
 {
+    Debug::Log(CMD_TOP, "~ElissoFolderView");
     delete _pImpl;
 }
 
@@ -374,7 +376,7 @@ ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
         if (!(fl.test(SetDirectoryFlag::IS_REFRESH)))
             _pImpl->clearModel();
 
-        _pImpl->thumbnailer.stop();
+        _pImpl->thumbnailer.clearQueues();
 
         auto pWatching = _pImpl->pMonitor->isWatching();
         if (pWatching)

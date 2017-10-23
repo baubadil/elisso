@@ -11,6 +11,7 @@
 #ifndef XWP_LOCK_H
 #define XWP_LOCK_H
 
+#include <thread>
 #include <mutex>
 #include <atomic>
 
@@ -31,7 +32,8 @@ namespace XWP
 class Thread : public ProhibitCopy
 {
 public:
-    static unsigned int Create(std::function<void ()> &&fn);
+    static std::thread* Create(std::function<void ()> &&fn,
+                               bool fDetach = true);
 
     static unsigned int getHardwareConcurrency();
 

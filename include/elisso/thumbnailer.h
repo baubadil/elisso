@@ -96,7 +96,7 @@ public:
 
     bool isBusy();
 
-    void stop();
+    void clearQueues();
 
 private:
     void fileReaderThread();
