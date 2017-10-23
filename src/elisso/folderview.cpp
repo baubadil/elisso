@@ -461,7 +461,7 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
             {
                 ++_pImpl->cTotal;
 
-                if (_pImpl->pPopulateThread->shouldBeSelected(pFS))
+                if (pFS == pResult->pDirSelectPrevious)
                     itSelect = it;
 
                 switch (pFS->getResolvedType())
@@ -662,9 +662,12 @@ ElissoFolderView::removeFile(PFSModelBase pFS)
     {
         auto &rowref= itSTL->second;
         Gtk::TreePath path = rowref.get_path();
-        auto itModel = _pImpl->pListStore->get_iter(path);
-        if (itModel)
-            _pImpl->pListStore->erase(itModel);
+        if (path)
+        {
+            auto itModel = _pImpl->pListStore->get_iter(path);
+            if (itModel)
+                _pImpl->pListStore->erase(itModel);
+        }
     }
 }
 
@@ -677,10 +680,13 @@ ElissoFolderView::renameFile(PFSModelBase pFS, const std::string &strOldName, co
     {
         auto rowref= itSTL->second;
         Gtk::TreePath path = rowref.get_path();
-        auto itModel = _pImpl->pListStore->get_iter(path);
-        auto row = *itModel;
-        FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
-        row[cols._colFilename] = strNewName;
+        if (path)
+        {
+            auto itModel = _pImpl->pListStore->get_iter(path);
+            auto row = *itModel;
+            FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
+            row[cols._colFilename] = strNewName;
+        }
 
         _pImpl->mapRowReferences.erase(itSTL);
         _pImpl->mapRowReferences[strNewName] = rowref;

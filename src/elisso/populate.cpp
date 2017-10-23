@@ -77,7 +77,9 @@ void
 PopulateThread::threadFunc(uint idPopulateThread,
                            bool fClickFromTree)
 {
-    PViewPopulatedResult pResult = std::make_shared<ViewPopulatedResult>(idPopulateThread, fClickFromTree);
+    PViewPopulatedResult pResult = std::make_shared<ViewPopulatedResult>(idPopulateThread,
+                                                                         fClickFromTree,
+                                                                         _pDirSelectPrevious);
     try
     {
         FSContainer *pCnr = _pDir->getContainer();

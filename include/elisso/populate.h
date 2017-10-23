@@ -29,12 +29,14 @@ struct ViewPopulatedResult
     FSVector        vRemoved;           // Files that were removed. Useful for refresh.
     uint            idPopulateThread;
     bool            fClickFromTree;     // true if SetDirectoryFlag::CLICK_FROM_TREE was set.
+    PFSModelBase    pDirSelectPrevious; // Item to select among populate results, or nullptr.
     Glib::ustring   strError;
 
-    ViewPopulatedResult(uint idPopulateThread_, bool fClickFromTree_)
+    ViewPopulatedResult(uint idPopulateThread_, bool fClickFromTree_, PFSModelBase pDirSelectPrevious_)
         : pvContents(make_shared<FSVector>()),
           idPopulateThread(idPopulateThread_),
-          fClickFromTree(fClickFromTree_)
+          fClickFromTree(fClickFromTree_),
+          pDirSelectPrevious(pDirSelectPrevious_)
     { }
 };
 typedef std::shared_ptr<ViewPopulatedResult> PViewPopulatedResult;
@@ -97,11 +99,6 @@ public:
     void stop()
     {
         _stopFlag.set();
-    }
-
-    bool shouldBeSelected(PFSModelBase &pFS)
-    {
-        return (pFS == _pDirSelectPrevious);
     }
 
 private:

@@ -138,6 +138,7 @@ protected:
 
     void handleViewAction(const std::string &strAction);
 
+    ElissoFolderView* doAddTab();
     void closeFolderTab(ElissoFolderView &viewClose);
 
     Gtk::ToolButton* makeToolButton(const Glib::ustring &strIconName,
