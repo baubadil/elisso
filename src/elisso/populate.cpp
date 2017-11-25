@@ -97,5 +97,5 @@ PopulateThread::threadFunc(uint idPopulateThread,
 
     if (!_stopFlag)
         // Trigger the dispatcher, which will call "populate done".
-        _pWorkerResult->postResultToGUI(pResult);
+        _pWorkerResult->postResultToGui(pResult);
 }

@@ -143,7 +143,7 @@ public:
         return dispatcher.connect(fn);
     }
 
-    void postResultToGUI(P pResult)
+    void postResultToGui(P pResult)
     {
         // Do not hold the mutex while messing with the dispatcher -> that could deadlock.
         {

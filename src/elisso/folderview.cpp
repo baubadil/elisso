@@ -412,6 +412,13 @@ ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
         }
         _mainWindow.setStatusbarFree(strFree);
     }
+    else
+    {
+        if (pDirOrSymlinkToDir)
+            this->setError("The given file " + quote(pDirOrSymlinkToDir->getPath()) + " is not a folder");
+        else
+            this->setError("The given file does not exist");
+    }
 
     _mainWindow.enableBackForwardActions();
 

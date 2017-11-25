@@ -214,7 +214,7 @@ FileOperation::threadFunc()
             if (_stopFlag)
                 throw FSCancelledException();
 
-            postResultToGUI(pFSForGUI);     // Temporarily requests the lock.
+            postResultToGui(pFSForGUI);     // Temporarily requests the lock.
 
             ++cCurrent;
         }
@@ -225,7 +225,7 @@ FileOperation::threadFunc()
     }
 
     // Report "finished" by pushing a nullptr.
-    postResultToGUI(nullptr);
+    postResultToGui(nullptr);
 }
 
 /**

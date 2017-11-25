@@ -90,6 +90,10 @@ struct ElissoFolderTree::Impl : public ProhibitCopy
     // the "node selected" signal then and recurse infinitely.
     bool                                    fInExplicitSelect = false;
 
+    // This gets set by selectNode so that a previously selected node gets
+    // scrolled back into view every time a subtree has been expanded.
+    PFolderTreeModelRow                     pScrollToAfterExpand;
+
     Impl()
         : cThreadsRunning(0)
     { }
@@ -322,12 +326,17 @@ ElissoFolderTree::selectNode(PFSModelBase pDir)
                              && ((pFSParticle = pDir2->find(strParticle)))
                            )
                         {
-                            Debug::Log(FOLDER_POPULATE_HIGH, "    node " + quote(strParticle) + " is not yet in tree, inserting");
-                            pParticleRow = _pImpl->pModel->append(pParticleRow,
+                            auto pParent = pParticleRow;
+                            Debug::Log(FOLDER_POPULATE_HIGH,
+                                       "    node " + quote(strParticle) + " is not yet in tree, inserting under " + quote(pParent->name));
+                            pParticleRow = _pImpl->pModel->append(pParent,
                                                                   0,        // overrideSort
-                                                                  pDir,
-                                                                  pDir->getBasename());
+                                                                  pFSParticle,
+                                                                  pFSParticle->getBasename());
                             pRowSelect = pParticleRow;
+
+                            path = _pImpl->pModel->getPath(pParent);
+                            _treeView.expand_row(path, false);
                         }
                         else
                         {
@@ -351,6 +360,8 @@ ElissoFolderTree::selectNode(PFSModelBase pDir)
             _treeView.get_selection()->select(path);
             _treeView.scroll_to_row(path);
             _pImpl->fInExplicitSelect = false;
+
+            _pImpl->pScrollToAfterExpand = pRowSelect;
         }
     }
 }
@@ -469,7 +480,7 @@ ElissoFolderTree::spawnPopulate(PFolderTreeModelRow pRow)
                 --_pImpl->cThreadsRunning;
 
                 // Hand the results over to the instance: add it to the queue, signal the dispatcher.
-                this->_pImpl->workerSubtreePopulated.postResultToGUI(pResult);
+                this->_pImpl->workerSubtreePopulated.postResultToGui(pResult);
                 // This triggers onPopulateDone().
             });
 
@@ -514,6 +525,12 @@ ElissoFolderTree::onPopulateDone()
 
     if (pllToAddFirst->size())
         this->spawnAddFirstSubfolders(pllToAddFirst);
+
+    if (_pImpl->pScrollToAfterExpand)
+    {
+        auto path = _pImpl->pModel->getPath(_pImpl->pScrollToAfterExpand);
+        _treeView.scroll_to_row(path);
+    }
 
     this->updateCursor();
 }
@@ -570,7 +587,7 @@ ElissoFolderTree::spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst)
                         if (!pFS->isHidden())
                         {
                             pAddOneFirst->_pFirstSubfolder = pFS;
-                            _pImpl->workerAddOneFirst.postResultToGUI(pAddOneFirst);
+                            _pImpl->workerAddOneFirst.postResultToGui(pAddOneFirst);
                             break;
                         }
                 }
@@ -578,12 +595,12 @@ ElissoFolderTree::spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst)
             catch (exception &e)
             {
                 pAddOneFirst->setError(e);
-                _pImpl->workerAddOneFirst.postResultToGUI(pAddOneFirst);
+                _pImpl->workerAddOneFirst.postResultToGui(pAddOneFirst);
             }
         }
 
         --_pImpl->cThreadsRunning;
-        _pImpl->workerAddOneFirst.postResultToGUI(nullptr);
+        _pImpl->workerAddOneFirst.postResultToGui(nullptr);
     });
 
     this->updateCursor();

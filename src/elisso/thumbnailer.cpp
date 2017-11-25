@@ -509,7 +509,7 @@ void Thumbnailer::scalerSmallThread()
         }
 
         if (fBothThumbnailsReady)
-            _pImpl->postResultToGUI(pTemp->pThumb);
+            _pImpl->postResultToGui(pTemp->pThumb);
     }
 }
 
@@ -544,6 +544,6 @@ void Thumbnailer::scalerBigThread()
         }
 
         if (fBothThumbnailsReady)
-            _pImpl->postResultToGUI(pTemp->pThumb);
+            _pImpl->postResultToGui(pTemp->pThumb);
     }
 }

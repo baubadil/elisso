@@ -172,7 +172,7 @@ ElissoApplicationWindow::addFolderTab(PFSModelBase pDirOrSymlink)       //!< in:
         if (!p2)
             p2 = FSDirectory::GetHome();
         pView->setDirectory(p2,
-                            SetDirectoryFlag::PUSH_TO_HISTORY);
+                            SetDirectoryFlag::PUSH_TO_HISTORY); // but not CLICK_FROM_TREE
 
         return false;       // disconnect, do not call again
     }, Glib::PRIORITY_LOW);
@@ -795,7 +795,10 @@ ElissoApplicationWindow::setStatusbarFree(const Glib::ustring &str)
 void
 ElissoApplicationWindow::selectInFolderTree(PFSModelBase pDir)
 {
-    this->_treeViewLeft.selectNode(pDir);
+    if (pDir)
+    {
+        this->_treeViewLeft.selectNode(pDir);
+    }
 }
 
 void
