@@ -47,13 +47,13 @@ enum class ShowHideOrNothing : uint8_t
  *       |
  *       +- GtkPaned: to split between tree (left) and notebook (right)
  *           |
- *           +- ElissoFolderTree (subclass of GtkScrolledWindow)
+ *           +- ElissoFolderTreeMgr (derived from GtkScrolledWindow)
  *           |
  *           +- GtkBox (as parent of notebook and status bar)
  *               |
  *               +- GtkNotebook
  *               |   |
- *               |   +- Tab: ElissoFolderView (subclass of GtkOverlay)
+ *               |   +- Tab: ElissoFolderView (derived from GtkOverlay)
  *               |   |   |
  *               |   |   +- GtkScrolledWindow
  *               |   |       |
@@ -88,11 +88,11 @@ public:
     int errorBox(Glib::ustring strMessage);
 
     /**
-     *  Returns the ElissoFolderTree that makes up the left of the member Gtk::Paned.
+     *  Returns the ElissoFolderTreeMgr that makes up the left of the member Gtk::Paned.
      */
-    ElissoFolderTree& getTreeView()
+    ElissoFolderTreeMgr& getTreeMgr()
     {
-        return _treeViewLeft;
+        return _folderTreeMgr;
     }
 
     /**
@@ -112,7 +112,14 @@ public:
     void setWaitCursor(Glib::RefPtr<Gdk::Window> pWindow,
                        Cursor cursor);
 
+    /**
+     *  Called from ElissoFolderView::onSelectionChanged() whenever the selection changes.
+     */
     void enableEditActions(size_t cFolders, size_t cOtherFiles);
+
+    /**
+     *  Called from ElissoFolderView::setDirectory() to enable back/forward actions.
+     */
     void enableBackForwardActions();
 
     void onLoadingFolderView(ElissoFolderView &view);
@@ -127,16 +134,42 @@ public:
 
     void selectInFolderTree(PFSModelBase pDir);
 
+    bool onButtonPressedEvent(GdkEventButton *pEvent, TreeViewPlusMode mode);
+    void onMouseButton3Pressed(GdkEventButton *pEvent, MouseButton3ClickType clickType);
+
+    void openFile(PFSModelBase pFS,
+                  PAppInfo pAppInfo);
+
     void openFolderInTerminal(PFSModelBase pFS);
+
+    void addFileOperation(FileOperationType type,
+                          const FSVector &vFiles,
+                          PFSModelBase pTarget);
+    bool areFileOperationsRunning() const;
 
 protected:
     void initActionHandlers();
+
+    /**
+     *  Adds an action handler that calls handleActiveViewAction() when triggered.
+     */
+    PSimpleAction addActiveViewActionHandler(const string &strAction);
+
+    /**
+     *  Adds an action handler that calls handleTreeAction() when triggered.
+     */
+    PSimpleAction addTreeActionHandler(const string &strAction);
+
     void setSizeAndPosition();
     void setWindowTitle(Glib::ustring str);
     void enableViewTabActions();
     void enableViewTypeActions(bool f);
 
-    void handleViewAction(const std::string &strAction);
+    /**
+     *  Handles all actions that operate on the currently active folder view
+     *  in the notebook.
+     */
+    void handleActiveViewAction(const std::string &strAction);
 
     ElissoFolderView* doAddTab();
     void closeFolderTab(ElissoFolderView &viewClose);
@@ -154,37 +187,8 @@ protected:
 
     ElissoApplication               &_app;
 
-    PSimpleAction                   _pActionEditOpenSelected;
-    PSimpleAction                   _pActionEditOpenSelectedInTab;
-    PSimpleAction                   _pActionEditOpenSelectedInTerminal;
-    PSimpleAction                   _pActionEditCopy;
-    PSimpleAction                   _pActionEditCut;
-    PSimpleAction                   _pActionEditPaste;
-    PSimpleAction                   _pActionEditSelectAll;
-    PSimpleAction                   _pActionEditRename;
-    PSimpleAction                   _pActionEditTrash;
-    PSimpleAction                   _pActionEditTestFileops;
-    PSimpleAction                   _pActionEditProperties;
-
-    PSimpleAction                   _pActionGoBack;
-    Gtk::ToolButton                 *_pButtonGoBack;
-    PSimpleAction                   _pActionGoForward;
-    Gtk::ToolButton                 *_pButtonGoForward;
-    PSimpleAction                   _pActionGoParent;
-    Gtk::ToolButton                 *_pButtonGoParent;
-    PSimpleAction                   _pActionGoHome;
-    Gtk::ToolButton                 *_pButtonGoHome;
-
-    PSimpleAction                   _pActionViewNextTab;
-    PSimpleAction                   _pActionViewPreviousTab;
-    PSimpleAction                   _pActionViewIcons;
-    Gtk::ToolButton                 *_pButtonViewIcons;
-    PSimpleAction                   _pActionViewList;
-    Gtk::ToolButton                 *_pButtonViewList;
-    PSimpleAction                   _pActionViewCompact;
-//     Gtk::ToolButton                 *_pButtonViewCompact;
-    PSimpleAction                   _pActionViewRefresh;
-    Gtk::ToolButton                 *_pButtonViewRefresh;
+    struct Impl;
+    Impl                            *_pImpl;
 
     int                             _x = 0, _y = 0, _width = 100, _height = 100;
     bool                            _fIsMaximized = false,
@@ -193,7 +197,7 @@ protected:
     Gtk::Box                        _mainVBox;
     Gtk::Toolbar                        _toolbar;
     Gtk::Paned                          _vPaned;
-    ElissoFolderTree                        _treeViewLeft;
+    ElissoFolderTreeMgr                        _folderTreeMgr;
     Gtk::Box                                _boxForNotebookAndStatusBar;
     Gtk::Notebook                               _notebook;
     Gtk::Grid                                   _gridStatusBar;

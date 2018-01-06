@@ -11,13 +11,56 @@
 #include "elisso/mainwindow.h"
 
 #include "elisso/elisso.h"
+#include "elisso/fileops.h"
+#include "elisso/contenttype.h"
 #include "xwp/except.h"
+
+struct ElissoApplicationWindow::Impl
+{
+    PSimpleAction                   pActionEditOpenSelected;
+    PSimpleAction                   pActionEditOpenSelectedInTab;
+    PSimpleAction                   pActionEditOpenSelectedInTerminal;
+    PSimpleAction                   pActionEditCopy;
+    PSimpleAction                   pActionEditCut;
+    PSimpleAction                   pActionEditPaste;
+    PSimpleAction                   pActionEditSelectAll;
+    PSimpleAction                   pActionEditRename;
+    PSimpleAction                   pActionEditTrash;
+    PSimpleAction                   pActionEditTestFileops;
+    PSimpleAction                   pActionEditProperties;
+
+    PSimpleAction                   pActionGoBack;
+    Gtk::ToolButton                 *pButtonGoBack;
+    PSimpleAction                   pActionGoForward;
+    Gtk::ToolButton                 *pButtonGoForward;
+    PSimpleAction                   pActionGoParent;
+    Gtk::ToolButton                 *pButtonGoParent;
+    PSimpleAction                   pActionGoHome;
+    Gtk::ToolButton                 *pButtonGoHome;
+
+    PSimpleAction                   pActionViewNextTab;
+    PSimpleAction                   pActionViewPreviousTab;
+    PSimpleAction                   pActionViewIcons;
+    Gtk::ToolButton                 *pButtonViewIcons;
+    PSimpleAction                   pActionViewList;
+    Gtk::ToolButton                 *pButtonViewList;
+    PSimpleAction                   pActionViewCompact;
+//     Gtk::ToolButton                 *_pButtonViewCompact;
+    PSimpleAction                   pActionViewRefresh;
+    Gtk::ToolButton                 *pButtonViewRefresh;
+
+    std::shared_ptr<Gtk::Menu>      pPopupMenu;
+
+    FileOperationsList              llFileOperations;
+    PProgressDialog                 pProgressDialog;
+};
 
 ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app)      //!< in: initial directory or nullptr for "home"
     : _app(app),
+      _pImpl(new Impl),
       _mainVBox(Gtk::ORIENTATION_VERTICAL),
       _vPaned(),
-      _treeViewLeft(*this),
+      _folderTreeMgr(*this),
       _boxForNotebookAndStatusBar(Gtk::ORIENTATION_VERTICAL),
       _notebook()
 {
@@ -53,36 +96,36 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app)      //
      *  Toolbar
      */
 
-    _toolbar.append(*(_pButtonGoBack = makeToolButton("go-previous-symbolic", _pActionGoBack)));
-    _toolbar.append(*(_pButtonGoForward = makeToolButton("go-next-symbolic", _pActionGoForward)));
-    _toolbar.append(*(_pButtonGoParent = makeToolButton("go-up-symbolic", _pActionGoParent)));
-    _toolbar.append(*(_pButtonGoHome = makeToolButton("go-home-symbolic", _pActionGoHome)));
+    _toolbar.append(*(_pImpl->pButtonGoBack = makeToolButton("go-previous-symbolic", _pImpl->pActionGoBack)));
+    _toolbar.append(*(_pImpl->pButtonGoForward = makeToolButton("go-next-symbolic", _pImpl->pActionGoForward)));
+    _toolbar.append(*(_pImpl->pButtonGoParent = makeToolButton("go-up-symbolic", _pImpl->pActionGoParent)));
+    _toolbar.append(*(_pImpl->pButtonGoHome = makeToolButton("go-home-symbolic", _pImpl->pActionGoHome)));
 
     auto pSeparator = new Gtk::SeparatorToolItem();
     pSeparator->set_expand(true);
     pSeparator->set_draw(false);
     _toolbar.append(*pSeparator);
 
-    _toolbar.append(*(_pButtonViewIcons = makeToolButton("view-grid-symbolic", _pActionViewIcons, true)));
-    _toolbar.append(*(_pButtonViewList = makeToolButton("view-list-symbolic", _pActionViewList)));
-    _toolbar.append(*(_pButtonViewRefresh = makeToolButton("view-refresh-symbolic", _pActionViewRefresh)));
+    _toolbar.append(*(_pImpl->pButtonViewIcons = makeToolButton("view-grid-symbolic", _pImpl->pActionViewIcons, true)));
+    _toolbar.append(*(_pImpl->pButtonViewList = makeToolButton("view-list-symbolic", _pImpl->pActionViewList)));
+    _toolbar.append(*(_pImpl->pButtonViewRefresh = makeToolButton("view-refresh-symbolic", _pImpl->pActionViewRefresh)));
 
     this->signal_action_enabled_changed().connect([this](const Glib::ustring &strAction, bool fEnabled)
     {
 //         Debug::Log(DEBUG_ALWAYS, "enabled changed: " + strAction);
         if (strAction == ACTION_GO_BACK)
-            _pButtonGoBack->set_sensitive(fEnabled);
+            _pImpl->pButtonGoBack->set_sensitive(fEnabled);
         else if (strAction == ACTION_GO_FORWARD)
-            _pButtonGoForward->set_sensitive(fEnabled);
+            _pImpl->pButtonGoForward->set_sensitive(fEnabled);
         else if (strAction == ACTION_GO_PARENT)
-            _pButtonGoParent->set_sensitive(fEnabled);
+            _pImpl->pButtonGoParent->set_sensitive(fEnabled);
         else if (strAction == ACTION_VIEW_ICONS)
-            _pButtonViewIcons->set_sensitive(fEnabled);
+            _pImpl->pButtonViewIcons->set_sensitive(fEnabled);
         else if (strAction == ACTION_VIEW_LIST)
-            _pButtonViewList->set_sensitive(fEnabled);
+            _pImpl->pButtonViewList->set_sensitive(fEnabled);
 //         else if (strAction == ACTION_VIEW_COMPACT)
         else if (strAction == ACTION_VIEW_REFRESH)
-            _pButtonViewRefresh->set_sensitive(fEnabled);
+            _pImpl->pButtonViewRefresh->set_sensitive(fEnabled);
     });
 
     _statusbarCurrent.set_hexpand(true);
@@ -105,7 +148,7 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app)      //
 
     _vPaned.set_position(200);
     _vPaned.set_wide_handle(true);
-    _vPaned.add1(_treeViewLeft);
+    _vPaned.add1(_folderTreeMgr);
     _vPaned.add2(_boxForNotebookAndStatusBar);
 
     _mainVBox.pack_start(_toolbar, Gtk::PACK_SHRINK);
@@ -150,6 +193,12 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app)      //
 
     // Finally, add the window to the application for "quit" management.
     app.add_window(*this);
+}
+
+/* virtual */
+ElissoApplicationWindow::~ElissoApplicationWindow()
+{
+    delete _pImpl;
 }
 
 /**
@@ -251,175 +300,78 @@ ElissoApplicationWindow::initActionHandlers()
     /*
      *  File menu
      */
-    this->add_action(ACTION_FILE_NEW_TAB, [this]()
-    {
-        this->handleViewAction(ACTION_FILE_NEW_TAB);
-    });
-
-    this->add_action(ACTION_FILE_NEW_WINDOW, [this]()
-    {
-        this->handleViewAction(ACTION_FILE_NEW_WINDOW);
-    });
-
-    this->add_action(ACTION_FILE_OPEN_IN_TERMINAL, [this]()
-    {
-        this->handleViewAction(ACTION_FILE_OPEN_IN_TERMINAL);
-    });
-
-    this->add_action(ACTION_FILE_CREATE_FOLDER, [this]()
-    {
-        this->handleViewAction(ACTION_FILE_CREATE_FOLDER);
-    });
-
-    this->add_action(ACTION_FILE_CREATE_DOCUMENT, [this]()
-    {
-        this->handleViewAction(ACTION_FILE_CREATE_DOCUMENT);
-    });
+    this->addActiveViewActionHandler(ACTION_FILE_NEW_TAB);
+    this->addActiveViewActionHandler(ACTION_FILE_NEW_WINDOW);
+    this->addActiveViewActionHandler(ACTION_FILE_OPEN_IN_TERMINAL);
+    this->addActiveViewActionHandler(ACTION_FILE_CREATE_FOLDER);
+    this->addActiveViewActionHandler(ACTION_FILE_CREATE_DOCUMENT);
 
     this->add_action(ACTION_FILE_QUIT, [this]()
     {
         getApplication().quit();
     });
 
-    this->add_action(ACTION_FILE_CLOSE_TAB, [this]()
-    {
-        this->handleViewAction(ACTION_FILE_CLOSE_TAB);
-    });
-
+    this->addActiveViewActionHandler(ACTION_FILE_CLOSE_TAB);
 
     /*
      *  Edit menu
      */
 
-    _pActionEditOpenSelected = this->add_action(ACTION_EDIT_OPEN_SELECTED, [this]()
-    {
-        this->handleViewAction(ACTION_EDIT_OPEN_SELECTED);
-    });
-
-    _pActionEditOpenSelectedInTab = this->add_action(ACTION_EDIT_OPEN_SELECTED_IN_TAB, [this]()
-    {
-        this->handleViewAction(ACTION_EDIT_OPEN_SELECTED_IN_TAB);
-    });
-
-    _pActionEditOpenSelectedInTerminal = this->add_action(ACTION_EDIT_OPEN_SELECTED_IN_TERMINAL, [this]()
-    {
-        this->handleViewAction(ACTION_EDIT_OPEN_SELECTED_IN_TERMINAL);
-    });
-
-    _pActionEditCopy = this->add_action(ACTION_EDIT_COPY, [this]()
-    {
-        this->handleViewAction(ACTION_EDIT_COPY);
-    });
-
-    _pActionEditCut = this->add_action(ACTION_EDIT_CUT, [this]()
-    {
-        this->handleViewAction(ACTION_EDIT_CUT);
-    });
-
-    _pActionEditPaste = this->add_action(ACTION_EDIT_PASTE, [this]()
-    {
-        this->handleViewAction(ACTION_EDIT_PASTE);
-    });
-
-    _pActionEditSelectAll = this->add_action(ACTION_EDIT_SELECT_ALL, [this]()
-    {
-        this->handleViewAction(ACTION_EDIT_SELECT_ALL);
-    });
-
-    _pActionEditRename = this->add_action(ACTION_EDIT_RENAME, [this]()
-    {
-        this->handleViewAction(ACTION_EDIT_RENAME);
-    });
-
-    _pActionEditTrash = this->add_action(ACTION_EDIT_TRASH, [this]()
-    {
-        this->handleViewAction(ACTION_EDIT_TRASH);
-    });
+    _pImpl->pActionEditOpenSelected = this->addActiveViewActionHandler(ACTION_EDIT_OPEN_SELECTED);
+    _pImpl->pActionEditOpenSelectedInTab = this->addActiveViewActionHandler(ACTION_EDIT_OPEN_SELECTED_IN_TAB);
+    _pImpl->pActionEditOpenSelectedInTerminal = this->addActiveViewActionHandler(ACTION_EDIT_OPEN_SELECTED_IN_TERMINAL);
+    _pImpl->pActionEditCopy = this->addActiveViewActionHandler(ACTION_EDIT_COPY);
+    _pImpl->pActionEditCut = this->addActiveViewActionHandler(ACTION_EDIT_CUT);
+    _pImpl->pActionEditPaste = this->addActiveViewActionHandler(ACTION_EDIT_PASTE);
+    _pImpl->pActionEditSelectAll = this->addActiveViewActionHandler(ACTION_EDIT_SELECT_ALL);
+    _pImpl->pActionEditRename = this->addActiveViewActionHandler(ACTION_EDIT_RENAME);
+    _pImpl->pActionEditTrash = this->addActiveViewActionHandler(ACTION_EDIT_TRASH);
 
 #ifdef USE_TESTFILEOPS
-    _pActionEditTestFileops = this->add_action(ACTION_EDIT_TEST_FILEOPS, [this]()
-    {
-        this->handleViewAction(ACTION_EDIT_TEST_FILEOPS);
-    });
+    _pActionEditTestFileops = this->addOneActionHandler(ACTION_EDIT_TEST_FILEOPS);
 #endif
 
-    _pActionEditProperties = this->add_action(ACTION_EDIT_PROPERTIES, [this]()
-    {
-        this->handleViewAction(ACTION_EDIT_PROPERTIES);
-    });
+    _pImpl->pActionEditProperties = this->addActiveViewActionHandler(ACTION_EDIT_PROPERTIES);
 
+    /*
+     *  Tree popup menu items
+     */
+    this->addTreeActionHandler(ACTION_TREE_OPEN_SELECTED);
+    this->addTreeActionHandler(ACTION_TREE_OPEN_SELECTED_IN_TAB);
+    this->addTreeActionHandler(ACTION_TREE_OPEN_SELECTED_IN_TERMINAL);
+    this->addTreeActionHandler(ACTION_TREE_TRASH_SELECTED);
 
     /*
      *  View menu
      */
-    _pActionViewNextTab = this->add_action(ACTION_VIEW_NEXT_TAB, [this]()
+    _pImpl->pActionViewNextTab = this->add_action(ACTION_VIEW_NEXT_TAB, [this]()
     {
         int i = _notebook.get_current_page();
         if (i < _notebook.get_n_pages() - 1)
             _notebook.set_current_page(i + 1);
     });
 
-    _pActionViewPreviousTab = this->add_action(ACTION_VIEW_PREVIOUS_TAB, [this]()
+    _pImpl->pActionViewPreviousTab = this->add_action(ACTION_VIEW_PREVIOUS_TAB, [this]()
     {
         int i = _notebook.get_current_page();
         if (i > 0)
             _notebook.set_current_page(i - 1);
     });
 
-    _pActionViewIcons = this->add_action(ACTION_VIEW_ICONS, [this]()
-    {
-        this->handleViewAction(ACTION_VIEW_ICONS);
-    });
-
-    _pActionViewList = this->add_action(ACTION_VIEW_LIST, [this]()
-    {
-        this->handleViewAction(ACTION_VIEW_LIST);
-    });
-
-    _pActionViewCompact = this->add_action(ACTION_VIEW_COMPACT, [this]()
-    {
-        this->handleViewAction(ACTION_VIEW_COMPACT);
-    });
-
-    _pActionViewRefresh = this->add_action(ACTION_VIEW_REFRESH, [this]()
-    {
-        this->handleViewAction(ACTION_VIEW_REFRESH);
-    });
-
+    _pImpl->pActionViewIcons = this->addActiveViewActionHandler(ACTION_VIEW_ICONS);
+    _pImpl->pActionViewList = this->addActiveViewActionHandler(ACTION_VIEW_LIST);
+    _pImpl->pActionViewCompact = this->addActiveViewActionHandler(ACTION_VIEW_COMPACT);
+    _pImpl->pActionViewRefresh = this->addActiveViewActionHandler(ACTION_VIEW_REFRESH);
 
     /*
      *  Go menu
      */
-    _pActionGoBack = this->add_action(ACTION_GO_BACK, [this]()
-    {
-        this->handleViewAction(ACTION_GO_BACK);
-    });
-
-    _pActionGoForward = this->add_action(ACTION_GO_FORWARD, [this]()
-    {
-        this->handleViewAction(ACTION_GO_FORWARD);
-    });
-
-    _pActionGoParent = this->add_action(ACTION_GO_PARENT, [this]()
-    {
-        this->handleViewAction(ACTION_GO_PARENT);
-    });
-
-    _pActionGoHome = this->add_action(ACTION_GO_HOME, [this]()
-    {
-        this->handleViewAction(ACTION_GO_HOME);
-    });
-
-    this->add_action(ACTION_GO_COMPUTER, [this]()
-    {
-        this->handleViewAction(ACTION_GO_COMPUTER);
-    });
-
-    this->add_action(ACTION_GO_TRASH, [this]()
-    {
-        this->handleViewAction(ACTION_GO_TRASH);
-    });
-
+    _pImpl->pActionGoBack = this->addActiveViewActionHandler(ACTION_GO_BACK);
+    _pImpl->pActionGoForward = this->addActiveViewActionHandler(ACTION_GO_FORWARD);
+    _pImpl->pActionGoParent = this->addActiveViewActionHandler(ACTION_GO_PARENT);
+    _pImpl->pActionGoHome = this->addActiveViewActionHandler(ACTION_GO_HOME);
+    this->addActiveViewActionHandler(ACTION_GO_COMPUTER);
+    this->addActiveViewActionHandler(ACTION_GO_TRASH);
 
     /*
      *  Help menu
@@ -442,6 +394,29 @@ ElissoApplicationWindow::initActionHandlers()
         w.run();
     });
 }
+
+PSimpleAction
+ElissoApplicationWindow::addActiveViewActionHandler(const string &strAction)
+{
+    PSimpleAction p = this->add_action(strAction, [this, &strAction]()
+    {
+        this->handleActiveViewAction(strAction);
+    });
+
+    return p;
+}
+
+PSimpleAction
+ElissoApplicationWindow::addTreeActionHandler(const string &strAction)
+{
+    PSimpleAction p = this->add_action(strAction, [this, &strAction]()
+    {
+        auto &tmgr = this->getTreeMgr();
+        tmgr.handleAction(strAction);
+    });
+
+    return p;
+};
 
 void
 ElissoApplicationWindow::setSizeAndPosition()
@@ -580,7 +555,7 @@ void ElissoApplicationWindow::onClipboardChanged()
                 break;
             }
 
-        _pActionEditPaste->set_enabled(fPaste);
+        _pImpl->pActionEditPaste->set_enabled(fPaste);
     });
 }
 
@@ -611,11 +586,6 @@ ElissoApplicationWindow::closeFolderTab(ElissoFolderView &viewClose)
         this->close();
 }
 
-/* virtual */
-ElissoApplicationWindow::~ElissoApplicationWindow()
-{
-}
-
 int ElissoApplicationWindow::errorBox(Glib::ustring strMessage)
 {
     Gtk::MessageDialog dialog(*this,
@@ -639,30 +609,22 @@ ElissoApplicationWindow::getActiveFolderView()
     return nullptr;
 }
 
-/**
- *  Called from ElissoFolderView::onSelectionChanged() whenever the selection changes.
- *
- *  If nothing is selected, then
- */
 void
 ElissoApplicationWindow::enableEditActions(size_t cFolders, size_t cOtherFiles)
 {
 //     Debug::Log(DEBUG_ALWAYS, "cFolders: " + to_string(cFolders) + ", cOtherFiles: " + to_string(cOtherFiles));
     size_t cTotal = cFolders + cOtherFiles;
     bool fSingleFolder = (cTotal == 1) && (cFolders == 1);
-    _pActionEditOpenSelected->set_enabled(cTotal == 1);
-    _pActionEditOpenSelectedInTab->set_enabled(fSingleFolder);
-    _pActionEditOpenSelectedInTerminal->set_enabled(fSingleFolder);
-    _pActionEditCopy->set_enabled(cTotal > 0);
-    _pActionEditCut->set_enabled(cTotal > 0);
-    _pActionEditRename->set_enabled(cTotal == 1);
-    _pActionEditTrash->set_enabled(cTotal > 0);
-    _pActionEditProperties->set_enabled(cTotal == 1);
+    _pImpl->pActionEditOpenSelected->set_enabled(cTotal == 1);
+    _pImpl->pActionEditOpenSelectedInTab->set_enabled(fSingleFolder);
+    _pImpl->pActionEditOpenSelectedInTerminal->set_enabled(fSingleFolder);
+    _pImpl->pActionEditCopy->set_enabled(cTotal > 0);
+    _pImpl->pActionEditCut->set_enabled(cTotal > 0);
+    _pImpl->pActionEditRename->set_enabled(cTotal == 1);
+    _pImpl->pActionEditTrash->set_enabled(cTotal > 0);
+    _pImpl->pActionEditProperties->set_enabled(cTotal == 1);
 }
 
-/**
- *  Called from ElissoFolderView::setDirectory() to enable back/forward actions.
- */
 void
 ElissoApplicationWindow::enableBackForwardActions()
 {
@@ -673,8 +635,8 @@ ElissoApplicationWindow::enableBackForwardActions()
         fBack = pActive->canGoBack();
         fForward = pActive->canGoForward();
     }
-    _pActionGoBack->set_enabled(fBack);
-    _pActionGoForward->set_enabled(fForward);
+    _pImpl->pActionGoBack->set_enabled(fBack);
+    _pImpl->pActionGoForward->set_enabled(fForward);
 }
 
 void
@@ -797,7 +759,336 @@ ElissoApplicationWindow::selectInFolderTree(PFSModelBase pDir)
 {
     if (pDir)
     {
-        this->_treeViewLeft.selectNode(pDir);
+        this->_folderTreeMgr.selectNode(pDir);
+    }
+}
+
+/**
+ *  Handler for the "button press event" signal for
+ *
+ *   -- the IconView when the folder contents is in icon mode;
+ *
+ *   -- the TreeViewPlus of the folder contents when in list mode;
+ *
+ *   -- the TreeViewPlus of the folder tree on the left.
+ *
+ *  If this returns true, then the event has been handled, and the parent handler should NOT
+ *  be called.
+ */
+bool
+ElissoApplicationWindow::onButtonPressedEvent(GdkEventButton *pEvent,
+                                              TreeViewPlusMode mode)
+{
+    if (pEvent->type == GDK_BUTTON_PRESS)
+    {
+        switch (pEvent->button)
+        {
+            case 3:
+            {
+                MouseButton3ClickType clickType = MouseButton3ClickType::WHITESPACE;
+                Gtk::TreeModel::Path path;
+
+                if (mode == TreeViewPlusMode::IS_FOLDER_TREE_LEFT)
+                {
+                    auto &tmgr = this->getTreeMgr();
+                    auto &twp = tmgr.getTreeViewPlus();
+                    auto pSel = twp.get_selection();
+                    if (pSel)
+                    {
+                        if (twp.get_path_at_pos((int)pEvent->x, (int)pEvent->y, path))
+                        {
+                            // Select, but without populating the contents.
+                            tmgr.suppressSelectHandler(true);
+                            pSel->select(path);
+                            tmgr.suppressSelectHandler(false);
+
+                            clickType = MouseButton3ClickType::TREE_ITEM_SELECTED;
+                            // Call our handler for the popup menu below.
+                        }
+                        else
+                            // Click on white space: do nothing.
+                            return true;
+                    }
+                }
+                else
+                {
+                    auto pActiveView = getActiveFolderView();
+                    if (pActiveView)
+                        clickType = pActiveView->handleClick(pEvent, path);
+                }
+
+                // Open a popup menu.
+                this->onMouseButton3Pressed(pEvent, clickType);
+                return true;        // do not propagate
+            }
+            break;
+
+            // GTK+ routes mouse button 8 to the "back" event.
+            case 8:
+                this->activate_action(ACTION_GO_BACK);
+                return true;
+            break;
+
+            // GTK+ routes mouse button 9 to the "forward" event.
+            case 9:
+                this->activate_action(ACTION_GO_FORWARD);
+                return true;
+            break;
+
+            default:
+            break;
+        }
+    }
+
+    return false;
+}
+
+/**
+ *  This is called by our subclass of the GTK TreeView, TreeViewPlus, which
+ *  emulates the right-click and selection behavior of Nautilus/Nemo.
+ *
+ *  Types of context menus to be created:
+ *
+ *   -- One file selected.              Open, Copy/Cut/Paste, Rename, Delete
+ *
+ *   -- One folder selected, closed.    Open, Copy/Cut/Paste, Rename, Delete
+ *
+ *   -- One folder selected, opened.    Open, Copy/Cut/Paste, Rename, Delete
+ *
+ *   -- Multiple objects selected.      Copy/Cut/Paste, Delete
+ */
+void
+ElissoApplicationWindow::onMouseButton3Pressed(GdkEventButton *pEvent,
+                                               MouseButton3ClickType clickType)
+{
+//     Debug::Log(DEBUG_ALWAYS, string(__FUNCTION__) + "(): clickType = " + to_string((int)clickType));
+
+    auto pMenu = Gio::Menu::create();
+    auto pActiveView = getActiveFolderView();
+    Gtk::Widget* pAttachMenuTo = pActiveView;
+
+    std::map<std::string, PAppInfo> mapAppInfosForTempMenuItems;
+
+    switch (clickType)
+    {
+        case MouseButton3ClickType::TREE_ITEM_SELECTED:
+        {
+            _app.addMenuItem(pMenu, MENUITEM_OPEN, ACTION_TREE_OPEN_SELECTED);
+            _app.addMenuItem(pMenu, MENUITEM_OPEN_IN_TAB, ACTION_TREE_OPEN_SELECTED_IN_TAB);
+            _app.addMenuItem(pMenu, MENUITEM_OPEN_IN_TERMINAL, ACTION_TREE_OPEN_SELECTED_IN_TERMINAL);
+            auto pSubSection = _app.addMenuSection(pMenu);
+            _app.addMenuItem(pSubSection, MENUITEM_TRASH, ACTION_TREE_TRASH_SELECTED);
+        }
+        break;
+
+        case MouseButton3ClickType::SINGLE_ROW_SELECTED:
+        case MouseButton3ClickType::MULTIPLE_ROWS_SELECTED:
+        {
+            FileSelection sel;
+            size_t cTotal = pActiveView->getSelection(sel);
+
+            if (cTotal == 1)
+            {
+                if (sel.vFolders.size() == 1)
+                {
+                    _app.addMenuItem(pMenu, MENUITEM_OPEN, ACTION_EDIT_OPEN_SELECTED);
+                    _app.addMenuItem(pMenu, MENUITEM_OPEN_IN_TAB, ACTION_EDIT_OPEN_SELECTED_IN_TAB);
+                    _app.addMenuItem(pMenu, MENUITEM_OPEN_IN_TERMINAL, ACTION_EDIT_OPEN_SELECTED_IN_TERMINAL);
+                }
+                else
+                {
+                    PFSModelBase pFS = sel.vOthers.front();
+                    if (pFS)
+                    {
+                        PFSFile pFile = pFS->getFile();
+                        if (pFile)
+                        {
+                            auto pContentType = ContentType::Guess(pFile);
+                            if (pContentType)
+                            {
+                                auto pDefaultAppInfo = pContentType->getDefaultAppInfo();
+                                if (pDefaultAppInfo)
+                                {
+                                    // The menu item for the default application is easy, it has a a compile-time action.
+                                    _app.addMenuItem(pMenu, "Open with " + pDefaultAppInfo->get_name(), ACTION_EDIT_OPEN_SELECTED);
+
+                                    // The menu items for the non-default application items are difficult because they have
+                                    // no compile-time actions, and we cannot add signals to the Gio::Menu items we are creating
+                                    // here. So make a list of them and override the signals below when we create the Gtk::Menu.
+                                    AppInfoList llInfos = pContentType->getAllAppInfos();
+                                    if (llInfos.size() > 1)
+                                        for (auto &pInfo : llInfos)
+                                            if (pInfo->get_id() != pDefaultAppInfo->get_id())
+                                            {
+                                                std::string strLabel("Open with " + pInfo->get_name());
+                                                auto pMenuItem = Gio::MenuItem::create(strLabel,
+                                                                                       EMPTY_STRING);   // empty action
+                                                // Remember the application info for the signal handlers below.
+                                                mapAppInfosForTempMenuItems[strLabel] = pInfo;
+                                                pMenu->append_item(pMenuItem);
+                                            }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            auto pSubSection = _app.addMenuSection(pMenu);
+            _app.addMenuItem(pSubSection, "Cut", ACTION_EDIT_CUT);
+            _app.addMenuItem(pSubSection, "Copy", ACTION_EDIT_COPY);
+
+            pSubSection = _app.addMenuSection(pMenu);
+            if (cTotal == 1)
+                _app.addMenuItem(pSubSection, "Rename", ACTION_EDIT_RENAME);
+            _app.addMenuItem(pSubSection, MENUITEM_TRASH, ACTION_EDIT_TRASH);
+#ifdef USE_TESTFILEOPS
+            _app.addMenuItem(pSubSection, "TEST FILEOPS", ACTION_EDIT_TEST_FILEOPS);
+#endif
+
+            pSubSection = _app.addMenuSection(pMenu);
+            if (cTotal == 1)
+                _app.addMenuItem(pSubSection, "Properties", ACTION_EDIT_PROPERTIES);
+        }
+        break;
+
+        case MouseButton3ClickType::WHITESPACE:
+            _app.addMenuItem(pMenu, "Open in terminal", ACTION_FILE_OPEN_IN_TERMINAL);
+            auto pSubSection = _app.addMenuSection(pMenu);
+            _app.addMenuItem(pSubSection, "Create new folder", ACTION_FILE_CREATE_FOLDER);
+            _app.addMenuItem(pSubSection, "Create empty document", ACTION_FILE_CREATE_DOCUMENT);
+            _app.addMenuItem(pSubSection, "Paste", ACTION_EDIT_PASTE);
+            pSubSection = _app.addMenuSection(pMenu);
+            _app.addMenuItem(pSubSection, "Properties", ACTION_FILE_PROPERTIES);
+        break;
+    }
+
+    _pImpl->pPopupMenu = std::make_shared<Gtk::Menu>(pMenu);
+
+    // Now fix up the menu items for non-default applications.
+    for (Gtk::Widget *pChild : _pImpl->pPopupMenu->get_children())
+    {
+        // Skip the separators.
+        Gtk::SeparatorMenuItem *pSep = dynamic_cast<Gtk::SeparatorMenuItem*>(pChild);
+        if (!pSep)
+        {
+            Gtk::MenuItem *pMenuItem = dynamic_cast<Gtk::MenuItem*>(pChild);
+            if (pMenuItem)
+            {
+                std::string strLabel(pMenuItem->get_label());
+                auto it = mapAppInfosForTempMenuItems.find(strLabel);
+                if (it != mapAppInfosForTempMenuItems.end())
+                {
+                    PAppInfo pAppInfo = it->second;
+                    pMenuItem->signal_activate().connect([this, pMenuItem, pAppInfo]()
+                    {
+                        this->openFile(nullptr, pAppInfo);
+                    });
+                }
+            }
+        }
+    }
+
+    _pImpl->pPopupMenu->attach_to_widget(*pAttachMenuTo);
+    _pImpl->pPopupMenu->popup(pEvent->button, pEvent->time);
+}
+
+/**
+ *  Opens the given file-system object.
+ *  As a special case, if pFS == nullptr, we try to get the current selection,
+ *  but will take it only if exactly one object is selected.
+ *
+ *  If the object is a directory or a symlink to one, we call setDirectory().
+ *  Otherwise we open the file with the
+ */
+void
+ElissoApplicationWindow::openFile(PFSModelBase pFS,        //!< in: file or folder to open; if nullptr, get single file from selection
+                                  PAppInfo pAppInfo)       //!< in: application to open file with; if nullptr, use file type's default
+{
+    auto pActiveFolderView = getActiveFolderView();
+    if (!pActiveFolderView)
+        return;
+
+    if (!pFS)
+    {
+        FileSelection sel;
+        size_t cTotal = pActiveFolderView->getSelection(sel);
+        if (cTotal == 1)
+        {
+            if (sel.vFolders.size() == 1)
+                pFS = sel.vFolders.front();
+            else
+                pFS = sel.vOthers.front();
+        }
+
+        if (!pFS)
+            return;
+    }
+
+    FSTypeResolved t = pFS->getResolvedType();
+
+    switch (t)
+    {
+        case FSTypeResolved::DIRECTORY:
+        case FSTypeResolved::SYMLINK_TO_DIRECTORY:
+            pActiveFolderView->setDirectory(pFS, SetDirectoryFlag::PUSH_TO_HISTORY);
+        break;
+
+        case FSTypeResolved::FILE:
+        case FSTypeResolved::SYMLINK_TO_FILE:
+        {
+            PFSFile pFile = pFS->getFile();
+            if (pFile)
+            {
+                PAppInfo pAppInfo2(pAppInfo);
+                if (!pAppInfo2)
+                {
+                    const ContentType *pType = ContentType::Guess(pFile);
+                    if (pType)
+                        pAppInfo2 = pType->getDefaultAppInfo();
+                }
+
+                if (pAppInfo2)
+                    pAppInfo2->launch(pFS->getGioFile());
+                else
+                    this->errorBox("Cannot determine default application for file \"" + pFS->getPath() + "\"");
+            }
+        }
+        break;
+
+        case FSTypeResolved::MOUNTABLE:
+        {
+            try
+            {
+                Glib::RefPtr<Gio::MountOperation> pMountOp;
+                Glib::RefPtr<Gio::Cancellable> pCancellable;
+                pFS->getGioFile()->mount_mountable( pMountOp,
+                                                    [pFS, this](Glib::RefPtr<Gio::AsyncResult> &pResult)
+                                                    {
+                                                        try
+                                                        {
+                                                            pFS->getGioFile()->mount_mountable_finish(pResult);
+                                                            Debug::Log(DEBUG_ALWAYS, "mount success");
+                                                        }
+                                                        catch (Gio::Error &e)
+                                                        {
+                                                            this->errorBox(e.what());
+                                                        }
+                                                    },
+                                                    pCancellable,
+                                                    Gio::MOUNT_MOUNT_NONE);
+            }
+            catch (Gio::Error &e)
+            {
+                throw FSException(e.what());
+            }
+        }
+        break;
+
+        case FSTypeResolved::BROKEN_SYMLINK:
+        case FSTypeResolved::SPECIAL:
+        case FSTypeResolved::SYMLINK_TO_OTHER:
+        break;
     }
 }
 
@@ -813,28 +1104,43 @@ ElissoApplicationWindow::openFolderInTerminal(PFSModelBase pFS)
 }
 
 void
+ElissoApplicationWindow::addFileOperation(FileOperationType type,
+                                          const FSVector &vFiles,
+                                          PFSModelBase pTarget)
+{
+    FileOperation::Create(type,
+                          vFiles,
+                          pTarget,
+                          _pImpl->llFileOperations,
+                          &_pImpl->pProgressDialog,
+                          this);
+}
+
+bool
+ElissoApplicationWindow::areFileOperationsRunning() const
+{
+    return !!_pImpl->llFileOperations.size();
+}
+
+void
 ElissoApplicationWindow::enableViewTabActions()
 {
     int cCurrent = _notebook.get_current_page();
-    _pActionViewNextTab->set_enabled(cCurrent < _notebook.get_n_pages() - 1);
-    _pActionViewPreviousTab->set_enabled(cCurrent > 0);
+    _pImpl->pActionViewNextTab->set_enabled(cCurrent < _notebook.get_n_pages() - 1);
+    _pImpl->pActionViewPreviousTab->set_enabled(cCurrent > 0);
 }
 
 void
 ElissoApplicationWindow::enableViewTypeActions(bool f)
 {
-    _pActionViewIcons->set_enabled(f);
-    _pActionViewList->set_enabled(f);
-    _pActionViewCompact->set_enabled(f);
-    _pActionViewRefresh->set_enabled(f);
+    _pImpl->pActionViewIcons->set_enabled(f);
+    _pImpl->pActionViewList->set_enabled(f);
+    _pImpl->pActionViewCompact->set_enabled(f);
+    _pImpl->pActionViewRefresh->set_enabled(f);
 }
 
-/**
- *  Handles all actions that operate on the currently active folder view
- *  in the notebook.
- */
 void
-ElissoApplicationWindow::handleViewAction(const std::string &strAction)
+ElissoApplicationWindow::handleActiveViewAction(const std::string &strAction)
 {
     auto pView = this->getActiveFolderView();
     if (pView)
@@ -900,7 +1206,7 @@ ElissoApplicationWindow::handleViewAction(const std::string &strAction)
             if (it != mapActions.end())
                 pView->handleAction(it->second);
             else
-                this->errorBox("Action " + strAction + " not implemented yet");
+                this->errorBox("View action " + quote(strAction) + " not implemented yet");
         }
     }
 }

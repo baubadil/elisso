@@ -13,6 +13,8 @@
 
 #include "elisso/fsmodel.h"
 #include "elisso/worker.h"
+#include "elisso/elisso.h"
+
 
 /***************************************************************************
  *
@@ -67,22 +69,14 @@ class FileOperation : public WorkerResultQueue<PFSModelBase>,
 public:
     static const uint UPDATE_PROGRESS_MILLIS = 100;
 
-    enum class Type
-    {
-        TEST,
-        TRASH,
-        MOVE,
-        COPY
-    };
-
-    static PFileOperation Create(Type t,
+    static PFileOperation Create(FileOperationType t,
                                  const FSVector &vFiles,
                                  PFSModelBase pTarget,
                                  FileOperationsList &refQueue,
                                  PProgressDialog *ppProgressDialog,
                                  Gtk::Window *pParentWindow);
 
-    Type getType() const
+    FileOperationType getType() const
     {
         return _t;
     }
@@ -95,7 +89,7 @@ public:
     }
 
 protected:
-    FileOperation(Type t,
+    FileOperation(FileOperationType t,
                   FileOperationsList  &refQueue);
     ~FileOperation();
 
@@ -104,7 +98,7 @@ protected:
     void onProgress();
     void onProcessingNextItem(PFSModelBase pFS);
 
-    Type                _t;
+    FileOperationType   _t;
     StopFlag            _stopFlag;
     std::string         _strError;
     FileOperationsList  &_refQueue;

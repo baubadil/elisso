@@ -113,11 +113,7 @@ struct ElissoFolderView::Impl : public ProhibitCopy
 
     Glib::RefPtr<Gtk::IconTheme>    pIconTheme;
 
-    std::shared_ptr<Gtk::Menu>      pPopupMenu;
-
     PFolderViewMonitor              pMonitor;
-    FileOperationsList              llFileOperations;
-    PProgressDialog                 pProgressDialog;
 
     Thumbnailer                     thumbnailer;
     uint                            cToThumbnail;
@@ -161,9 +157,6 @@ struct ElissoFolderView::Impl : public ProhibitCopy
  *
  **************************************************************************/
 
-/**
- *
- */
 ElissoFolderView::ElissoFolderView(ElissoApplicationWindow &mainWindow, int &iPageInserted)
     : Gtk::Overlay(),
       _id(g_uViewID++),
@@ -276,18 +269,6 @@ ElissoFolderView::~ElissoFolderView()
     delete _pImpl;
 }
 
-/**
- *  This gets called whenever the notebook tab on the right needs to be populated with the contents
- *  of another folder, in particular:
- *
- *   -- on startup, when the main window is constructed for the first time;
- *
- *   -- if the user double-clicks on another folder in the folder contents (via onFileActivated());
- *
- *   -- if the user single-clicks on a folder in the tree on the left.
- *
- *  Returns true if a populate thread was started, or false if the folder had already been populated.
- */
 bool
 ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
                                SetDirectoryFlagSet fl)
@@ -425,10 +406,6 @@ ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
     return rc;
 }
 
-/**
- *  Gets called when the populate thread within setDirectory() has finished. We must now
- *  inspect the PopulateThread in the implementation struct for the results.
- */
 void
 ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
 {
@@ -1081,147 +1058,98 @@ ElissoFolderView::getSelectedFolder()
 }
 
 /**
- *  This is called by our subclass of the GTK TreeView, TreeViewPlus, which
- *  emulates the right-click and selection behavior of Nautilus/Nemo.
- *
- *  Types of context menus to be created:
- *
- *   -- One file selected.              Open, Copy/Cut/Paste, Rename, Delete
- *
- *   -- One folder selected, closed.    Open, Copy/Cut/Paste, Rename, Delete
- *
- *   -- One folder selected, opened.    Open, Copy/Cut/Paste, Rename, Delete
- *
- *   -- Multiple objects selected.      Copy/Cut/Paste, Delete
+ *  Fills the given FileSelection object with the selected items from the
+ *  active icon or tree view. Returns the total no. of item selected.
  */
-void
-ElissoFolderView::onMouseButton3Pressed(GdkEventButton *pEvent,
-                                        MouseButton3ClickType clickType)
+size_t
+ElissoFolderView::getSelection(FileSelection &sel)
 {
-    auto &app = _mainWindow.getApplication();
+    std::vector<Gtk::TreePath> vPaths;
 
-//     Debug::Log(DEBUG_ALWAYS, string(__FUNCTION__) + "(): clickType = " + to_string((int)clickType));
-
-    auto pMenu = Gio::Menu::create();
-
-    std::map<std::string, PAppInfo> mapAppInfosForTempMenuItems;
-
-    switch (clickType)
+    switch (_mode)
     {
-        case MouseButton3ClickType::TREE_ITEM_SELECTED:
-        break;
-
-        case MouseButton3ClickType::SINGLE_ROW_SELECTED:
-        case MouseButton3ClickType::MULTIPLE_ROWS_SELECTED:
+        case FolderViewMode::LIST:
         {
-            FileSelection sel;
-            size_t cTotal = this->getSelection(sel);
-
-            if (cTotal == 1)
-            {
-                if (sel.vFolders.size() == 1)
-                {
-                    app.addMenuItem(pMenu, "Open", ACTION_EDIT_OPEN_SELECTED);
-                    app.addMenuItem(pMenu, "Open in new tab", ACTION_EDIT_OPEN_SELECTED_IN_TAB);
-                    app.addMenuItem(pMenu, "Open in terminal", ACTION_EDIT_OPEN_SELECTED_IN_TERMINAL);
-                }
-                else
-                {
-                    PFSModelBase pFS = sel.vOthers.front();
-                    if (pFS)
-                    {
-                        PFSFile pFile = pFS->getFile();
-                        if (pFile)
-                        {
-                            auto pContentType = ContentType::Guess(pFile);
-                            if (pContentType)
-                            {
-                                auto pDefaultAppInfo = pContentType->getDefaultAppInfo();
-                                if (pDefaultAppInfo)
-                                {
-                                    // The menu item for the default application is easy, it has a a compile-time action.
-                                    app.addMenuItem(pMenu, "Open with " + pDefaultAppInfo->get_name(), ACTION_EDIT_OPEN_SELECTED);
-
-                                    // The menu items for the non-default application items are difficult because they have
-                                    // no compile-time actions, and we cannot add signals to the Gio::Menu items we are creating
-                                    // here. So make a list of them and override the signals below when we create the Gtk::Menu.
-                                    AppInfoList llInfos = pContentType->getAllAppInfos();
-                                    if (llInfos.size() > 1)
-                                        for (auto &pInfo : llInfos)
-                                            if (pInfo->get_id() != pDefaultAppInfo->get_id())
-                                            {
-                                                std::string strLabel("Open with " + pInfo->get_name());
-                                                auto pMenuItem = Gio::MenuItem::create(strLabel,
-                                                                                       EMPTY_STRING);   // empty action
-                                                // Remember the application info for the signal handlers below.
-                                                mapAppInfosForTempMenuItems[strLabel] = pInfo;
-                                                pMenu->append_item(pMenuItem);
-                                            }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            auto pSubSection = app.addMenuSection(pMenu);
-            app.addMenuItem(pSubSection, "Cut", ACTION_EDIT_CUT);
-            app.addMenuItem(pSubSection, "Copy", ACTION_EDIT_COPY);
-
-            pSubSection = app.addMenuSection(pMenu);
-            if (cTotal == 1)
-                app.addMenuItem(pSubSection, "Rename", ACTION_EDIT_RENAME);
-            app.addMenuItem(pSubSection, "Move to trash", ACTION_EDIT_TRASH);
-#ifdef USE_TESTFILEOPS
-            app.addMenuItem(pSubSection, "TEST FILEOPS", ACTION_EDIT_TEST_FILEOPS);
-#endif
-
-            pSubSection = app.addMenuSection(pMenu);
-            if (cTotal == 1)
-                app.addMenuItem(pSubSection, "Properties", ACTION_EDIT_PROPERTIES);
+            auto pSelection = _treeView.get_selection();
+            if (pSelection)
+                vPaths = pSelection->get_selected_rows();
         }
         break;
 
-        case MouseButton3ClickType::WHITESPACE:
-            app.addMenuItem(pMenu, "Open in terminal", ACTION_FILE_OPEN_IN_TERMINAL);
-            auto pSubSection = app.addMenuSection(pMenu);
-            app.addMenuItem(pSubSection, "Create new folder", ACTION_FILE_CREATE_FOLDER);
-            app.addMenuItem(pSubSection, "Create empty document", ACTION_FILE_CREATE_DOCUMENT);
-            app.addMenuItem(pSubSection, "Paste", ACTION_EDIT_PASTE);
-            pSubSection = app.addMenuSection(pMenu);
-            app.addMenuItem(pSubSection, "Properties", ACTION_FILE_PROPERTIES);
+        case FolderViewMode::ICONS:
+        case FolderViewMode::COMPACT:
+            vPaths = _iconView.get_selected_items();
+        break;
+
+        case FolderViewMode::UNDEFINED:
+        case FolderViewMode::ERROR:
         break;
     }
 
-    _pImpl->pPopupMenu = std::make_shared<Gtk::Menu>(pMenu);
-
-    // Now fix up the menu items for non-default applications.
-    for (Gtk::Widget *pChild : _pImpl->pPopupMenu->get_children())
+    if (vPaths.size())
     {
-        // Skip the separators.
-        Gtk::SeparatorMenuItem *pSep = dynamic_cast<Gtk::SeparatorMenuItem*>(pChild);
-        if (!pSep)
+        FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
+
+        for (auto &path : vPaths)
         {
-            Gtk::MenuItem *pMenuItem = dynamic_cast<Gtk::MenuItem*>(pChild);
-            if (pMenuItem)
+            Gtk::TreeModel::iterator iter = _pImpl->pListStore->get_iter(path);
+            if (iter)
             {
-                std::string strLabel(pMenuItem->get_label());
-                auto it = mapAppInfosForTempMenuItems.find(strLabel);
-                if (it != mapAppInfosForTempMenuItems.end())
+                Gtk::TreeModel::Row row = *iter;
+                PFSModelBase pFS = row[cols._colPFile];
+                if (pFS)
                 {
-                    PAppInfo pAppInfo = it->second;
-                    pMenuItem->signal_activate().connect([this, pMenuItem, pAppInfo]()
-                    {
-//                         Debug::Log(DEBUG_ALWAYS, pMenuItem->get_label());
-                        this->openFile(nullptr, pAppInfo);
-                    });
+                    sel.vAll.push_back(pFS);
+                    if (pFS->isDirectoryOrSymlinkToDirectory())
+                        sel.vFolders.push_back(pFS);
+                    else
+                        sel.vOthers.push_back(pFS);
                 }
             }
         }
     }
 
-    _pImpl->pPopupMenu->attach_to_widget(*this);
-    _pImpl->pPopupMenu->popup(pEvent->button, pEvent->time);
+    return sel.vAll.size();
+}
+
+MouseButton3ClickType
+ElissoFolderView::handleClick(GdkEventButton *pEvent,
+                              Gtk::TreeModel::Path &path)
+{
+    MouseButton3ClickType clickType = MouseButton3ClickType::WHITESPACE;
+
+    // Figure out if the click was on a row or whitespace, and which row if any.
+    // There are two variants for this call -- but the more verbose one with a column returns
+    // a column always even if the user clicks on the whitespace to the right of the column
+    // so there's no point.
+    if (this->getPathAtPos((int)pEvent->x,
+                           (int)pEvent->y,
+                           path))
+    {
+        // Click on a row with mouse button 3: in list mode, figure out if it's selected
+        if (this->isSelected(path))
+        {
+            // Click on row that's selected: then show context even if it's whitespace.
+//                             Debug::Log(DEBUG_ALWAYS, "row is selected");
+            if (this->countSelectedItems() == 1)
+                clickType = MouseButton3ClickType::SINGLE_ROW_SELECTED;
+            else
+                clickType = MouseButton3ClickType::MULTIPLE_ROWS_SELECTED;
+        }
+        else
+        {
+//                             Debug::Log(DEBUG_ALWAYS, "row is NOT selected");
+            if (    (this->_mode != FolderViewMode::LIST)
+                 || (!_treeView.is_blank_at_pos((int)pEvent->x, (int)pEvent->y))
+               )
+            {
+                selectExactlyOne(path);
+                clickType = MouseButton3ClickType::SINGLE_ROW_SELECTED;
+            }
+        }
+    }
+
+    return clickType;
 }
 
 /**
@@ -1255,7 +1183,7 @@ ElissoFolderView::handleAction(FolderAction action)
             break;
 
             case FolderAction::EDIT_OPEN_SELECTED:
-                openFile(nullptr, {});
+                _mainWindow.openFile(nullptr, {});
             break;
 
             case FolderAction::FILE_CREATE_FOLDER:
@@ -1405,7 +1333,7 @@ void ElissoFolderView::clipboardPaste()
     {
         try
         {
-            FileOperation::Type fopType(FileOperation::Type::TEST);
+            FileOperationType fopType(FileOperationType::TEST);
 
             Glib::ustring data = selectionData.get_data_as_string();
             StringVector lines = explodeVector(data, "\n");
@@ -1415,9 +1343,9 @@ void ElissoFolderView::clipboardPaste()
                 auto it = lines.begin();
                 auto cmd = *it;
                 if (cmd == "copy")
-                    fopType = FileOperation::Type::COPY;
+                    fopType = FileOperationType::COPY;
                 else if (cmd == "cut")
-                    fopType = FileOperation::Type::MOVE;
+                    fopType = FileOperationType::MOVE;
                 else
                     throw FSException("Invalid command " + quote(cmd) + " in clipboard");
 
@@ -1440,15 +1368,12 @@ void ElissoFolderView::clipboardPaste()
 
             if (!vFiles.size())
                 throw FSException("Did not find any files to copy in clipboard");
-            if (fopType == FileOperation::Type::TEST)
+            if (fopType == FileOperationType::TEST)
                 throw FSException("Invalid file operation in clipboard");
 
-            FileOperation::Create(fopType,
-                                  vFiles,
-                                  _pDir,
-                                  _pImpl->llFileOperations,
-                                  &_pImpl->pProgressDialog,
-                                  &_mainWindow);
+            _mainWindow.addFileOperation(fopType,
+                                         vFiles,
+                                         _pDir);
         }
         catch (exception &e)
         {
@@ -1457,100 +1382,6 @@ void ElissoFolderView::clipboardPaste()
     });
 }
 
-/**
- *  Opens the given file-system object.
- *  As a special case, if pFS == nullptr, we try to get the current selection,
- *  but will take it only if exactly one object is selected.
- *
- *  If the object is a directory or a symlink to one, we call setDirectory().
- *  Otherwise we open the file with the
- */
-void
-ElissoFolderView::openFile(PFSModelBase pFS,        //!< in: file or folder to open; if nullptr, get single file from selection
-                           PAppInfo pAppInfo)       //!< in: application to open file with; if nullptr, use file type's default
-{
-    if (!pFS)
-    {
-        FileSelection sel;
-        size_t cTotal = getSelection(sel);
-        if (cTotal == 1)
-        {
-            if (sel.vFolders.size() == 1)
-                pFS = sel.vFolders.front();
-            else
-                pFS = sel.vOthers.front();
-        }
-
-        if (!pFS)
-            return;
-    }
-
-    FSTypeResolved t = pFS->getResolvedType();
-
-    switch (t)
-    {
-        case FSTypeResolved::DIRECTORY:
-        case FSTypeResolved::SYMLINK_TO_DIRECTORY:
-            this->setDirectory(pFS, SetDirectoryFlag::PUSH_TO_HISTORY);
-        break;
-
-        case FSTypeResolved::FILE:
-        case FSTypeResolved::SYMLINK_TO_FILE:
-        {
-            PFSFile pFile = pFS->getFile();
-            if (pFile)
-            {
-                PAppInfo pAppInfo2(pAppInfo);
-                if (!pAppInfo2)
-                {
-                    const ContentType *pType = ContentType::Guess(pFile);
-                    if (pType)
-                        pAppInfo2 = pType->getDefaultAppInfo();
-                }
-
-                if (pAppInfo2)
-                    pAppInfo2->launch(pFS->getGioFile());
-                else
-                    _mainWindow.errorBox("Cannot determine default application for file \"" + pFS->getPath() + "\"");
-            }
-        }
-        break;
-
-        case FSTypeResolved::MOUNTABLE:
-        {
-            try
-            {
-                Glib::RefPtr<Gio::MountOperation> pMountOp;
-                Glib::RefPtr<Gio::Cancellable> pCancellable;
-                pFS->getGioFile()->mount_mountable( pMountOp,
-                                                    [pFS, this](Glib::RefPtr<Gio::AsyncResult> &pResult)
-                                                    {
-                                                        try
-                                                        {
-                                                            pFS->getGioFile()->mount_mountable_finish(pResult);
-                                                            Debug::Log(DEBUG_ALWAYS, "mount success");
-                                                        }
-                                                        catch (Gio::Error &e)
-                                                        {
-                                                            this->_mainWindow.errorBox(e.what());
-                                                        }
-                                                    },
-                                                    pCancellable,
-                                                    Gio::MOUNT_MOUNT_NONE);
-            }
-            catch (Gio::Error &e)
-            {
-                throw FSException(e.what());
-            }
-        }
-        break;
-
-        case FSTypeResolved::BROKEN_SYMLINK:
-        case FSTypeResolved::SPECIAL:
-        case FSTypeResolved::SYMLINK_TO_OTHER:
-        break;
-    }
-}
 
 /**
  *  Prompts for a name and then creates a new subdirectory in the folder that is currently showing.
@@ -1646,12 +1477,9 @@ ElissoFolderView::trashSelected()
 {
     FileSelection sel;
     if (getSelection(sel))
-        FileOperation::Create(FileOperation::Type::TRASH,
-                              sel.vAll,
-                              nullptr,      // pTargetContainer
-                              _pImpl->llFileOperations,
-                              &_pImpl->pProgressDialog,
-                              &_mainWindow);
+        _mainWindow.addFileOperation(FileOperationType::TRASH,
+                                     sel.vAll,
+                                     nullptr);
 }
 
 #ifdef USE_TESTFILEOPS
@@ -1962,114 +1790,12 @@ void ElissoFolderView::selectExactlyOne(Gtk::TreeModel::Path &path)
     }
 }
 
-/**
- *  Handler for the "button press event" signal for
- *
- *   -- the IconView when the folder contents is in icon mode;
- *
- *   -- the TreeViewPlus of the folder contents when in list mode;
- *
- *   -- the TreeViewPlus of the folder tree on the left.
- *
- *  If this returns true, then the event has been handled, and the parent handler should NOT
- *  be called.
- */
-bool
-ElissoFolderView::onButtonPressedEvent(GdkEventButton *pEvent,
-                                       TreeViewPlusMode mode)
-{
-    if (pEvent->type == GDK_BUTTON_PRESS)
-    {
-        switch (pEvent->button)
-        {
-            case 3:
-            {
-                MouseButton3ClickType clickType = MouseButton3ClickType::WHITESPACE;
-                Gtk::TreeModel::Path path;
-
-                if (mode == TreeViewPlusMode::IS_FOLDER_TREE_LEFT)
-                {
-                    auto &twp = _mainWindow.getTreeView().getTreeViewPlus();
-                    auto pSel = twp.get_selection();
-                    if (pSel)
-                    {
-                        if (twp.get_path_at_pos((int)pEvent->x, (int)pEvent->y, path))
-                        {
-                            pSel->select(path);
-                            clickType = MouseButton3ClickType::SINGLE_ROW_SELECTED;
-                            // Call our handler for the popup menu below.
-                        }
-                        else
-                            // Click on white space: do nothing.
-                            return true;
-                    }
-                }
-                else
-                {
-                    // Figure out if the click was on a row or whitespace, and which row if any.
-                    // There are two variants for this call -- but the more verbose one with a column returns
-                    // a column always even if the user clicks on the whitespace to the right of the column
-                    // so there's no point.
-                    if (this->getPathAtPos((int)pEvent->x,
-                                           (int)pEvent->y,
-                                           path))
-                    {
-                        // Click on a row with mouse button 3: in list mode, figure out if it's selected
-                        if (this->isSelected(path))
-                        {
-                            // Click on row that's selected: then show context even if it's whitespace.
-    //                             Debug::Log(DEBUG_ALWAYS, "row is selected");
-                            if (this->countSelectedItems() == 1)
-                                clickType = MouseButton3ClickType::SINGLE_ROW_SELECTED;
-                            else
-                                clickType = MouseButton3ClickType::MULTIPLE_ROWS_SELECTED;
-                        }
-                        else
-                        {
-    //                             Debug::Log(DEBUG_ALWAYS, "row is NOT selected");
-                            if (    (_mode != FolderViewMode::LIST)
-                                 || (!_treeView.is_blank_at_pos((int)pEvent->x, (int)pEvent->y))
-                               )
-                            {
-                                selectExactlyOne(path);
-                                clickType = MouseButton3ClickType::SINGLE_ROW_SELECTED;
-                            }
-                        }
-                    }
-                }
-
-                // Open a popup menu.
-                this->onMouseButton3Pressed(pEvent, clickType);
-                return true;        // do not propagate
-            }
-            break;
-
-            // GTK+ routes mouse button 8 to the "back" event.
-            case 8:
-                _mainWindow.activate_action(ACTION_GO_BACK);
-                return true;
-            break;
-
-            // GTK+ routes mouse button 9 to the "forward" event.
-            case 9:
-                _mainWindow.activate_action(ACTION_GO_FORWARD);
-                return true;
-            break;
-
-            default:
-            break;
-        }
-    }
-
-    return false;
-}
-
 void
 ElissoFolderView::setIconViewColumns()
 {
     _iconView.signal_button_press_event().connect([this](_GdkEventButton *pEvent) -> bool
     {
-        if (this->onButtonPressedEvent(pEvent, TreeViewPlusMode::IS_FOLDER_CONTENTS_RIGHT))
+        if (_mainWindow.onButtonPressedEvent(pEvent, TreeViewPlusMode::IS_FOLDER_CONTENTS_RIGHT))
             return true;
 
         return false;
@@ -2178,61 +1904,6 @@ ElissoFolderView::setListViewColumns()
 }
 
 /**
- *  Fills the given FileSelection object with the selected items from the
- *  active icon or tree view. Returns the total no. of item selected.
- */
-size_t
-ElissoFolderView::getSelection(FileSelection &sel)
-{
-    std::vector<Gtk::TreePath> vPaths;
-
-    switch (_mode)
-    {
-        case FolderViewMode::LIST:
-        {
-            auto pSelection = _treeView.get_selection();
-            if (pSelection)
-                vPaths = pSelection->get_selected_rows();
-        }
-        break;
-
-        case FolderViewMode::ICONS:
-        case FolderViewMode::COMPACT:
-            vPaths = _iconView.get_selected_items();
-        break;
-
-        case FolderViewMode::UNDEFINED:
-        case FolderViewMode::ERROR:
-        break;
-    }
-
-    if (vPaths.size())
-    {
-        FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
-
-        for (auto &path : vPaths)
-        {
-            Gtk::TreeModel::iterator iter = _pImpl->pListStore->get_iter(path);
-            if (iter)
-            {
-                Gtk::TreeModel::Row row = *iter;
-                PFSModelBase pFS = row[cols._colPFile];
-                if (pFS)
-                {
-                    sel.vAll.push_back(pFS);
-                    if (pFS->isDirectoryOrSymlinkToDirectory())
-                        sel.vFolders.push_back(pFS);
-                    else
-                        sel.vOthers.push_back(pFS);
-                }
-            }
-        }
-    }
-
-    return sel.vAll.size();
-}
-
-/**
  *  Shared event handler between the icon view and the tree view for double clicks.
  */
 void
@@ -2245,7 +1916,7 @@ ElissoFolderView::onPathActivated(const Gtk::TreeModel::Path &path)
     if (pFS)
     {
         Debug::Log(FOLDER_POPULATE_HIGH, string(__func__) + "(\"" + pFS->getPath() + "\")");
-        this->openFile(pFS, {});
+        _mainWindow.openFile(pFS, {});
     }
 }
 
@@ -2254,7 +1925,7 @@ ElissoFolderView::onSelectionChanged()
 {
     // Only get the folder selection if we're fully populated and no file operations are going on.
     if (    (_state == ViewState::POPULATED)
-         && (!_pImpl->llFileOperations.size())
+         && (!_mainWindow.areFileOperationsRunning())
        )
     {
         FileSelection sel;

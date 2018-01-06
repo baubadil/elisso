@@ -12,11 +12,12 @@
 
 #include "elisso/mainwindow.h"
 #include "elisso/worker.h"
+#include "elisso/fileops.h"
 
 
 /***************************************************************************
  *
- *  ElissoFolderTree::Impl (private)
+ *  ElissoFolderTreeMgr::Impl (private)
  *
  **************************************************************************/
 
@@ -75,7 +76,7 @@ struct AddOneFirst : ResultBase
     { }
 };
 
-struct ElissoFolderTree::Impl : public ProhibitCopy
+struct ElissoFolderTreeMgr::Impl : public ProhibitCopy
 {
     std::vector<std::pair<PFSDirectory, PFolderTreeModelRow>>  vTreeRoots;
 
@@ -88,7 +89,7 @@ struct ElissoFolderTree::Impl : public ProhibitCopy
 
     // The following is true while we're in select(); we don't want to process
     // the "node selected" signal then and recurse infinitely.
-    bool                                    fInExplicitSelect = false;
+    bool                                    fSuppressSelectHandler = false;
 
     // This gets set by selectNode so that a previously selected node gets
     // scrolled back into view every time a subtree has been expanded.
@@ -121,7 +122,7 @@ public:
  *
  **************************************************************************/
 
-ElissoFolderTree::ElissoFolderTree(ElissoApplicationWindow &mainWindow)
+ElissoFolderTreeMgr::ElissoFolderTreeMgr(ElissoApplicationWindow &mainWindow)
     : Gtk::ScrolledWindow(),
       _mainWindow(mainWindow),
       _treeView(),
@@ -182,21 +183,16 @@ ElissoFolderTree::ElissoFolderTree(ElissoApplicationWindow &mainWindow)
 }
 
 /* virtual */
-ElissoFolderTree::~ElissoFolderTree()
+ElissoFolderTreeMgr::~ElissoFolderTreeMgr()
 {
     delete _pImpl;
 }
 
 uint8_t g_cTreeRootItems = 0;
 
-/**
- *  Adds a new tree root (toplevel folder) to the tree. This gets called
- *  on setup to insert the "Home" and "File system" trees under which
- *  additional items get inserted over time depending on what is selected.
- */
 void
-ElissoFolderTree::addTreeRoot(const Glib::ustring &strName,
-                              PFSDirectory pDir)
+ElissoFolderTreeMgr::addTreeRoot(const Glib::ustring &strName,
+                                 PFSDirectory pDir)
 {
      // Add the first page in an idle loop so we have no delay in showing the window.
     Glib::signal_idle().connect([this, strName, pDir]() -> bool
@@ -217,24 +213,8 @@ ElissoFolderTree::addTreeRoot(const Glib::ustring &strName,
     });
 }
 
-/**
- *  Called from ElissoApplicationWindow::selectInFolderTree() after the notebook page on the
- *  right has finished populating to select the node in the tree that corresponds to the folder
- *  contents being displayed.
- *
- *  If the given directory is already inserted into the tree, for example on startup because it's
- *  the user's home directory, it simply gets selected and then expanded. However, if it is not
- *  yet inserted, this needs to spawn a populate thread first for the parent. If the parent hasn't
- *  been inserted either, that needs to be populated first. So this goes through the path of
- *  the given directory and checks each component; if it is inserted already, it is expanded;
- *  if it is not yet inserted, it is populated and then expanded. This can spawn many threads
- *  as a result.
- *
- *  Example: if $(HOME)/subdir is showing on the right, we expand the $(HOME) item in the tree
- *  and select the "subdir" node under it.
- */
 void
-ElissoFolderTree::selectNode(PFSModelBase pDir)
+ElissoFolderTreeMgr::selectNode(PFSModelBase pDir)
 {
     if (!pDir)
         return;
@@ -357,64 +337,79 @@ ElissoFolderTree::selectNode(PFSModelBase pDir)
         if (pRowSelect)
         {
             // Disable signal processing, or else we'll recurse infinitely and crash.
-            _pImpl->fInExplicitSelect = true;
+            _pImpl->fSuppressSelectHandler = true;
             path = _pImpl->pModel->getPath(pRowSelect);
             _treeView.get_selection()->select(path);
             _treeView.scroll_to_row(path);
-            _pImpl->fInExplicitSelect = false;
+            _pImpl->fSuppressSelectHandler = false;
 
             _pImpl->pScrollToAfterExpand = pRowSelect;
         }
     }
 }
 
-/**
- *  Protected handler called from the lambda for the 'changed' signal. This gets called
- *  every time the selected node in the tree changes. We then want to set the same
- *  directory for the folder list.
- */
 void
-ElissoFolderTree::onNodeSelected()
+ElissoFolderTreeMgr::suppressSelectHandler(bool fSuppress)
 {
-    if (!_pImpl->fInExplicitSelect)
+    _pImpl->fSuppressSelectHandler = fSuppress;
+}
+
+void
+ElissoFolderTreeMgr::handleAction(const string &strAction)
+{
+    auto pDir = this->getSelectedFolder();
+    if (pDir)
     {
-        auto pTreeSelection = _treeView.get_selection();
-        Gtk::TreeModel::iterator it;
-        if ((it = pTreeSelection->get_selected()))
+        if (strAction == ACTION_TREE_OPEN_SELECTED)
+            onNodeSelected();       // duplicates work but less code
+        else if (strAction == ACTION_TREE_OPEN_SELECTED_IN_TAB)
+            _mainWindow.addFolderTab(pDir);
+        else if (strAction == ACTION_TREE_OPEN_SELECTED_IN_TERMINAL)
+            _mainWindow.openFolderInTerminal(pDir);
+        else if (strAction == ACTION_TREE_TRASH_SELECTED)
+            _mainWindow.addFileOperation(FileOperationType::TRASH,
+                                         { pDir },
+                                         nullptr);
+    }
+}
+
+PFSModelBase
+ElissoFolderTreeMgr::getSelectedFolder()
+{
+    PFSModelBase pDir;
+    auto pTreeSelection = _treeView.get_selection();
+    Gtk::TreeModel::iterator it;
+    if ((it = pTreeSelection->get_selected()))
+    {
+        PFolderTreeModelRow pRow = _pImpl->pModel->findRow(it);
+        if (pRow)
+            pDir = pRow->pDir;
+    }
+
+    return pDir;
+}
+
+void
+ElissoFolderTreeMgr::onNodeSelected()
+{
+    if (!_pImpl->fSuppressSelectHandler)
+    {
+        auto pDir = this->getSelectedFolder();
+        if (pDir)
         {
-            PFolderTreeModelRow pRow = _pImpl->pModel->findRow(it);
-            PFSModelBase pDir;
-            if (    (pRow)
-                 && ((pDir = pRow->pDir))
-               )
-            {
-                Debug::Log(FOLDER_POPULATE_LOW, "Selected: " + pDir->getPath());
-                auto pActiveFolderView = _mainWindow.getActiveFolderView();
-                if (pActiveFolderView)
-                    pActiveFolderView->setDirectory(pDir,
-                                                    SetDirectoryFlag::PUSH_TO_HISTORY | SetDirectoryFlag::CLICK_FROM_TREE);
-                                // SetDirectoryFlag::CLICK_FROM_TREE prevents the callback to select the node in the
-                                // tree again, which is already selected, since we're in the "selected" signal handler.
-            }
+            Debug::Log(FOLDER_POPULATE_LOW, "Selected: " + pDir->getPath());
+            auto pActiveFolderView = _mainWindow.getActiveFolderView();
+            if (pActiveFolderView)
+                pActiveFolderView->setDirectory(pDir,
+                                                SetDirectoryFlag::PUSH_TO_HISTORY | SetDirectoryFlag::CLICK_FROM_TREE);
+                            // SetDirectoryFlag::CLICK_FROM_TREE prevents the callback to select the node in the
+                            // tree again, which is already selected, since we're in the "selected" signal handler.
         }
     }
 }
 
-/**
- *  Protected handler called from the lambda for the 'row-expanded' signal. This gets
- *  called every time a node gets expanded in the tree, which happens in two situations:
- *
- *   -- The user actually clicked on the expander icon.
- *
- *   -- Indirectly from the selectNode() method, which expands every parent directory
- *      of the node being selected before actually selecting the node. So that can
- *      trigger several signals in quick succession.
- *
- *  For every such signal, we spawn a populate thread via spawnPopulate() if the node's
- *  folder has not yet been been populated.
- */
 void
-ElissoFolderTree::onNodeExpanded(const Gtk::TreeModel::iterator &it,
+ElissoFolderTreeMgr::onNodeExpanded(const Gtk::TreeModel::iterator &it,
                                  const Gtk::TreeModel::Path &path)
 {
     PFolderTreeModelRow pRow = _pImpl->pModel->findRow(it);
@@ -440,12 +435,8 @@ ElissoFolderTree::onNodeExpanded(const Gtk::TreeModel::iterator &it,
     }
 }
 
-/**
- *  Spawns a TreeJob to populate the tree node represented by the given iterator.
- *  This gets called from
- */
 bool
-ElissoFolderTree::spawnPopulate(PFolderTreeModelRow pRow)
+ElissoFolderTreeMgr::spawnPopulate(PFolderTreeModelRow pRow)
 {
     bool rc = false;
 
@@ -498,7 +489,7 @@ ElissoFolderTree::spawnPopulate(PFolderTreeModelRow pRow)
 }
 
 void
-ElissoFolderTree::onPopulateDone()
+ElissoFolderTreeMgr::onPopulateDone()
 {
     // Fetch the SubtreePopulated result from the queue.
     PSubtreePopulated pSubtreePopulated = this->_pImpl->workerSubtreePopulated.fetchResult();
@@ -541,7 +532,7 @@ ElissoFolderTree::onPopulateDone()
  *  Adds a monitor for the file-system object behind the given tree iterator.
  */
 void
-ElissoFolderTree::addMonitor(PFolderTreeModelRow pRow)
+ElissoFolderTreeMgr::addMonitor(PFolderTreeModelRow pRow)
 {
     if (pRow->pDir)
     {
@@ -564,7 +555,7 @@ ElissoFolderTree::addMonitor(PFolderTreeModelRow pRow)
 }
 
 void
-ElissoFolderTree::spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst)
+ElissoFolderTreeMgr::spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst)
 {
     /*
      * Launch the thread!
@@ -613,7 +604,7 @@ ElissoFolderTree::spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst)
  *  thread has pushed a new item onto the queue.
  */
 void
-ElissoFolderTree::onAddAnotherFirst()
+ElissoFolderTreeMgr::onAddAnotherFirst()
 {
     auto pAddOneFirst = this->_pImpl->workerAddOneFirst.fetchResult();
     if (pAddOneFirst)
@@ -642,7 +633,7 @@ ElissoFolderTree::onAddAnotherFirst()
 }
 
 void
-ElissoFolderTree::updateCursor()
+ElissoFolderTreeMgr::updateCursor()
 {
     _mainWindow.setWaitCursor(_treeView.get_window(),
                               (_pImpl->cThreadsRunning > 0) ? Cursor::WAIT_PROGRESS : Cursor::DEFAULT);

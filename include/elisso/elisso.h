@@ -1,4 +1,4 @@
-/*
+    /*
  * elisso -- fast and friendly gtkmm file manager. (C) 2016--2017 Baubadil GmbH.
  *
  * elisso is free software; you can redistribute it and/or modify it under the terms of the GNU
@@ -54,10 +54,23 @@ const DebugFlag TREEMODEL               = (1 << 29);
 
 using namespace XWP;
 
+enum class FileOperationType
+{
+    TEST,
+    TRASH,
+    MOVE,
+    COPY
+};
+
 DEF_STRING(APPLICATION_NAME, "elisso");
 
 DEF_STRING(CLIPBOARD_TARGET_UTF8_STRING, "UTF8_STRING");
 DEF_STRING(CLIPBOARD_TARGET_GNOME_COPIED_FILES, "x-special/gnome-copied-files");
+
+DEF_STRING(MENUITEM_OPEN, "Open");
+DEF_STRING(MENUITEM_OPEN_IN_TAB, "Open in new tab");
+DEF_STRING(MENUITEM_OPEN_IN_TERMINAL, "Open in terminal");
+DEF_STRING(MENUITEM_TRASH, "Move to trash");
 
 DEF_STRING(TYPE_FILE, "File");
 DEF_STRING(TYPE_FOLDER, "Folder");
@@ -78,7 +91,7 @@ DEF_STRING(ACTION_FILE_PROPERTIES, "file-properties");
 DEF_STRING(ACTION_FILE_QUIT, "file-quit");
 DEF_STRING(ACTION_FILE_CLOSE_TAB, "file-close-tab");
 
-// Items that operate on the selected rows.
+// Items that operate on the selected rows in the contents.
 DEF_STRING(ACTION_EDIT_OPEN_SELECTED, "edit-open-selected");
 DEF_STRING(ACTION_EDIT_OPEN_SELECTED_IN_TAB, "edit-open-selected-in-tab");
 DEF_STRING(ACTION_EDIT_OPEN_SELECTED_IN_TERMINAL, "edit-open-selected-in-terminal");
@@ -92,6 +105,12 @@ DEF_STRING(ACTION_EDIT_TRASH, "edit-trash");
 DEF_STRING(ACTION_EDIT_TEST_FILEOPS, "edit-test-fileops");
 #endif
 DEF_STRING(ACTION_EDIT_PROPERTIES, "edit-properties");
+
+// Items that operate on the selected rows in the tree. Tree popup menu only.
+DEF_STRING(ACTION_TREE_OPEN_SELECTED, "tree-open-selected");
+DEF_STRING(ACTION_TREE_OPEN_SELECTED_IN_TAB, "tree-open-selected-in-tab");
+DEF_STRING(ACTION_TREE_OPEN_SELECTED_IN_TERMINAL, "tree-open-selected-in-terminal");
+DEF_STRING(ACTION_TREE_TRASH_SELECTED, "tree-trash-selected");
 
 DEF_STRING(ACTION_VIEW_NEXT_TAB, "view-next-tab");
 DEF_STRING(ACTION_VIEW_PREVIOUS_TAB, "view-previous-tab");

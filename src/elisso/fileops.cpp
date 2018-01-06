@@ -53,7 +53,7 @@ struct FileOperation::Impl
  */
 /* static */
 PFileOperation
-FileOperation::Create(Type t,
+FileOperation::Create(FileOperationType t,
                       const FSVector &vFiles,
                       PFSModelBase pTarget,                 //!< in: target directory or symlink to directory (required for copy or move, otherwise nullptr)
                       FileOperationsList &refQueue,         //!< in: list to append new FileOperation instance to
@@ -64,7 +64,7 @@ FileOperation::Create(Type t,
     class Derived : public FileOperation
     {
     public:
-        Derived(Type t, FileOperationsList &refQueue)
+        Derived(FileOperationType t, FileOperationsList &refQueue)
             : FileOperation(t, refQueue) { }
     };
 
@@ -131,7 +131,7 @@ FileOperation::Create(Type t,
 /**
  *  Protected constructor, only to be used by Create().
  */
-FileOperation::FileOperation(Type t,
+FileOperation::FileOperation(FileOperationType t,
                              FileOperationsList  &refQueue)
     : _t(t),
       _refQueue(refQueue),
@@ -194,19 +194,19 @@ FileOperation::threadFunc()
 
             switch (_t)
             {
-                case Type::TEST:
+                case FileOperationType::TEST:
                     pFS->testFileOps();
                 break;
 
-                case Type::TRASH:
+                case FileOperationType::TRASH:
                     pFS->sendToTrash();
                 break;
 
-                case Type::MOVE:
+                case FileOperationType::MOVE:
                     pFS->moveTo(_pTarget);
                 break;
 
-                case Type::COPY:
+                case FileOperationType::COPY:
                     pFSForGUI = pFS->copyTo(_pTarget);
                 break;
             }
@@ -260,19 +260,19 @@ FileOperation::onProcessingNextItem(PFSModelBase pFS)
 
         switch (_t)
         {
-            case Type::TEST:
+            case FileOperationType::TEST:
             break;
 
-            case Type::TRASH:
+            case FileOperationType::TRASH:
                 _pImpl->pSourceContainer->notifyFileRemoved(pFS);
             break;
 
-            case Type::MOVE:
+            case FileOperationType::MOVE:
                 _pImpl->pSourceContainer->notifyFileRemoved(pFS);
                 _pImpl->pTargetContainer->notifyFileAdded(pFS);
             break;
 
-            case Type::COPY:
+            case FileOperationType::COPY:
                 // pFS has the newly copied file, not the source file.
                 _pImpl->pTargetContainer->notifyFileAdded(pFS);
             break;

@@ -130,11 +130,23 @@ typedef FlagSet<SetDirectoryFlag> SetDirectoryFlagSet;
 class ElissoFolderView : public Gtk::Overlay
 {
 public:
+    /**
+     *  The constructor.
+     */
     ElissoFolderView(ElissoApplicationWindow &mainWindow, int &iPageInserted);
+
+    /**
+     *  The destructor.
+     */
     virtual ~ElissoFolderView();
 
     /*
      *  Public view methods
+     */
+
+    /**
+     *  Returns the tab ID. This is simply an integer to allow for quick comparison
+     *  which tab an event came from.
      */
     size_t getID()
     {
@@ -159,8 +171,21 @@ public:
         return _pDir;
     }
 
+    /**
+     *  Gets called whenever the notebook tab on the right needs to be populated with the contents
+     *  of another folder, in particular:
+     *
+     *   -- when a new folder tab is added (in particular on application startup);
+     *
+     *   -- if the user double-clicks on another folder in the folder contents (via onFileActivated());
+     *
+     *   -- if the user single-clicks on a folder in the tree on the left.
+     *
+     *  Returns true if a populate thread was started, or false if the folder had already been populated.
+     */
     bool setDirectory(PFSModelBase pDirOrSymlinkToDir,
                       SetDirectoryFlagSet fl);
+
     void refresh();
 
     bool canGoBack();
@@ -181,19 +206,23 @@ public:
 
     PFSModelBase getSelectedFolder();
 
-    void onMouseButton3Pressed(GdkEventButton *pEvent, MouseButton3ClickType clickType);
-
     /*
      *  Public file action methods
      */
+
+    size_t getSelection(FileSelection &sel);
+
+    /**
+     *  Called from our mouse button handler override to handle mouse button 1 and 3 clicks
+     *  with advanced selections.
+     */
+    MouseButton3ClickType handleClick(GdkEventButton *pEvent,       //!< in: mouse button event
+                                      Gtk::TreeModel::Path &path);  //!< out: path of selected item
 
     void handleAction(FolderAction action);
 
     void clipboardCopyOrCutSelected(bool fCut);
     void clipboardPaste();
-
-    void openFile(PFSModelBase pFS,
-                  PAppInfo pAppInfo);
 
     PFSDirectory createSubfolderDialog();
 
@@ -213,7 +242,13 @@ private:
 
     void setWaitCursor(Cursor cursor);
     void dumpStack();
+
+    /**
+     *  Gets called when the populate thread within setDirectory() has finished. We must now
+     *  inspect the PopulateThread in the implementation struct for the results.
+     */
     void onPopulateDone(PViewPopulatedResult p);
+
     Gtk::ListStore::iterator insertFile(PFSModelBase pFS);
     void removeFile(PFSModelBase pFS);
     void renameFile(PFSModelBase pFS, const std::string &strOldName, const std::string &strNewName);
@@ -234,11 +269,8 @@ private:
     int countSelectedItems();
     void selectExactlyOne(Gtk::TreeModel::Path &path);
 
-    bool onButtonPressedEvent(GdkEventButton *pEvent, TreeViewPlusMode mode);
     void setIconViewColumns();
     void setListViewColumns();
-
-    size_t getSelection(FileSelection &sel);
 
     void onPathActivated(const Gtk::TreeModel::Path &path);
     void onSelectionChanged();

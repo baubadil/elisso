@@ -98,19 +98,19 @@ public:
 
                 switch (_pOp->getType())
                 {
-                    case FileOperation::Type::TEST:
+                    case FileOperationType::TEST:
                         _label.set_markup("Testing <b>" + Glib::Markup::escape_text(pfsCurrent->getBasename()) + "</b>");
                     break;
 
-                    case FileOperation::Type::TRASH:
+                    case FileOperationType::TRASH:
                         _label.set_markup("Sending <b>" + Glib::Markup::escape_text(pfsCurrent->getBasename()) + "</b> to trash");
                     break;
 
-                    case FileOperation::Type::MOVE:
+                    case FileOperationType::MOVE:
                         _label.set_markup("Moving <b>" + Glib::Markup::escape_text(pfsCurrent->getBasename()) + "</b>");
                     break;
 
-                    case FileOperation::Type::COPY:
+                    case FileOperationType::COPY:
                         _label.set_markup("Copying <b>" + Glib::Markup::escape_text(pfsCurrent->getBasename()) + "</b>");
                     break;
                 }
@@ -154,16 +154,16 @@ public:
     {
         switch (_pOp->getType())
         {
-            case FileOperation::Type::TEST:
+            case FileOperationType::TEST:
                 return "Testing file operations";
 
-            case FileOperation::Type::TRASH:
+            case FileOperationType::TRASH:
                 return "Sending files to trash";
 
-            case FileOperation::Type::MOVE:
+            case FileOperationType::MOVE:
                 return "Moving files";
 
-            case FileOperation::Type::COPY:
+            case FileOperationType::COPY:
                 return "Copying files";
         }
 

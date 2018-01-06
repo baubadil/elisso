@@ -44,14 +44,10 @@
 bool
 TreeViewPlus::on_button_press_event(GdkEventButton *pEvent) /* override */
 {
-    if (this->_pMainWindow)
+    if (_pMainWindow)
     {
-        auto pView = this->_pMainWindow->getActiveFolderView();
-        if (pView)
-        {
-            if (pView->onButtonPressedEvent(pEvent, this->_mode))
-                return true;        // handled, do not propagate
-        }
+        if (_pMainWindow->onButtonPressedEvent(pEvent, this->_mode))
+            return true;        // handled, do not propagate
     }
 
     return Gtk::TreeView::on_button_press_event(pEvent);
