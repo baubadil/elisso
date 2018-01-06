@@ -175,7 +175,7 @@ ElissoFolderView::ElissoFolderView(ElissoApplicationWindow &mainWindow, int &iPa
                                     _labelNotebookPage,
                                     _labelNotebookMenu);
 
-    _treeView.setParent(*this);
+    _treeView.setParent(mainWindow, TreeViewPlusMode::IS_FOLDER_CONTENTS_RIGHT);
 
     // Create the monitor. We need the this pointer so we can't do it in the Impl constructor.
     _pImpl->pMonitor = make_shared<FolderViewMonitor>(*this);
@@ -1108,6 +1108,9 @@ ElissoFolderView::onMouseButton3Pressed(GdkEventButton *pEvent,
 
     switch (clickType)
     {
+        case MouseButton3ClickType::TREE_ITEM_SELECTED:
+        break;
+
         case MouseButton3ClickType::SINGLE_ROW_SELECTED:
         case MouseButton3ClickType::MULTIPLE_ROWS_SELECTED:
         {
@@ -1851,7 +1854,9 @@ ElissoFolderView::onThumbnailReady()
  *  depending on which view is active.
  */
 bool
-ElissoFolderView::getPathAtPos(int x, int y, Gtk::TreeModel::Path &path)
+ElissoFolderView::getPathAtPos(int x,
+                               int y,
+                               Gtk::TreeModel::Path &path)
 {
     switch (_mode)
     {
@@ -1958,38 +1963,62 @@ void ElissoFolderView::selectExactlyOne(Gtk::TreeModel::Path &path)
 }
 
 /**
- *  Handler for the "button press event" signal for both the icon view and the tree view.
+ *  Handler for the "button press event" signal for
+ *
+ *   -- the IconView when the folder contents is in icon mode;
+ *
+ *   -- the TreeViewPlus of the folder contents when in list mode;
+ *
+ *   -- the TreeViewPlus of the folder tree on the left.
  *
  *  If this returns true, then the event has been handled, and the parent handler should NOT
  *  be called.
  */
 bool
-ElissoFolderView::onButtonPressedEvent(GdkEventButton *pEvent)
+ElissoFolderView::onButtonPressedEvent(GdkEventButton *pEvent,
+                                       TreeViewPlusMode mode)
 {
     if (pEvent->type == GDK_BUTTON_PRESS)
     {
-//         Debug::Log(DEBUG_ALWAYS, "button " + to_string(pEvent->button) + " pressed");
-
         switch (pEvent->button)
         {
-            case 1:
             case 3:
             {
                 MouseButton3ClickType clickType = MouseButton3ClickType::WHITESPACE;
-                // Figure out if the click was on a row or whitespace, and which row if any.
-                // There are two variants for this call -- but the more verbose one with a column returns
-                // a column always even if the user clicks on the whitespace to the right of the column
-                // so there's no point.
                 Gtk::TreeModel::Path path;
-                if (this->getPathAtPos((int)pEvent->x, (int)pEvent->y, path))
+
+                if (mode == TreeViewPlusMode::IS_FOLDER_TREE_LEFT)
                 {
-                    if (pEvent->button == 3)
+                    auto &twp = _mainWindow.getTreeView().getTreeViewPlus();
+                    auto pSel = twp.get_selection();
+                    if (pSel)
                     {
-                        // Click on a row: with mouse button 3, figure out if it's selected.
+                        if (twp.get_path_at_pos((int)pEvent->x, (int)pEvent->y, path))
+                        {
+                            pSel->select(path);
+                            clickType = MouseButton3ClickType::SINGLE_ROW_SELECTED;
+                            // Call our handler for the popup menu below.
+                        }
+                        else
+                            // Click on white space: do nothing.
+                            return true;
+                    }
+                }
+                else
+                {
+                    // Figure out if the click was on a row or whitespace, and which row if any.
+                    // There are two variants for this call -- but the more verbose one with a column returns
+                    // a column always even if the user clicks on the whitespace to the right of the column
+                    // so there's no point.
+                    if (this->getPathAtPos((int)pEvent->x,
+                                           (int)pEvent->y,
+                                           path))
+                    {
+                        // Click on a row with mouse button 3: in list mode, figure out if it's selected
                         if (this->isSelected(path))
                         {
                             // Click on row that's selected: then show context even if it's whitespace.
-//                             Debug::Log(DEBUG_ALWAYS, "row is selected");
+    //                             Debug::Log(DEBUG_ALWAYS, "row is selected");
                             if (this->countSelectedItems() == 1)
                                 clickType = MouseButton3ClickType::SINGLE_ROW_SELECTED;
                             else
@@ -1997,7 +2026,7 @@ ElissoFolderView::onButtonPressedEvent(GdkEventButton *pEvent)
                         }
                         else
                         {
-//                             Debug::Log(DEBUG_ALWAYS, "row is NOT selected");
+    //                             Debug::Log(DEBUG_ALWAYS, "row is NOT selected");
                             if (    (_mode != FolderViewMode::LIST)
                                  || (!_treeView.is_blank_at_pos((int)pEvent->x, (int)pEvent->y))
                                )
@@ -2009,12 +2038,9 @@ ElissoFolderView::onButtonPressedEvent(GdkEventButton *pEvent)
                     }
                 }
 
-                // On right-click, open a pop-up menu.
-                if (pEvent->button == 3)
-                {
-                    this->onMouseButton3Pressed(pEvent, clickType);
-                    return true;        // do not propagate
-                }
+                // Open a popup menu.
+                this->onMouseButton3Pressed(pEvent, clickType);
+                return true;        // do not propagate
             }
             break;
 
@@ -2043,7 +2069,7 @@ ElissoFolderView::setIconViewColumns()
 {
     _iconView.signal_button_press_event().connect([this](_GdkEventButton *pEvent) -> bool
     {
-        if (this->onButtonPressedEvent(pEvent))
+        if (this->onButtonPressedEvent(pEvent, TreeViewPlusMode::IS_FOLDER_CONTENTS_RIGHT))
             return true;
 
         return false;

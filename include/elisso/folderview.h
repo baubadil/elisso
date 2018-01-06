@@ -228,11 +228,13 @@ private:
     void onThumbnailReady();
 
     bool isSelected(Gtk::TreeModel::Path &path);
-    bool getPathAtPos(int x, int y, Gtk::TreeModel::Path &path);
+    bool getPathAtPos(int x,
+                      int y,
+                      Gtk::TreeModel::Path &path);
     int countSelectedItems();
     void selectExactlyOne(Gtk::TreeModel::Path &path);
 
-    bool onButtonPressedEvent(GdkEventButton *pEvent);
+    bool onButtonPressedEvent(GdkEventButton *pEvent, TreeViewPlusMode mode);
     void setIconViewColumns();
     void setListViewColumns();
 

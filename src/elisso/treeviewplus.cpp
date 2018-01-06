@@ -10,6 +10,7 @@
 
 #include "elisso/treeviewplus.h"
 
+#include "elisso/mainwindow.h"
 #include "elisso/folderview.h"
 
 #include "xwp/except.h"
@@ -43,9 +44,15 @@
 bool
 TreeViewPlus::on_button_press_event(GdkEventButton *pEvent) /* override */
 {
-    if (this->_pView)
-        if (this->_pView->onButtonPressedEvent(pEvent))
-            return true;        // handled, do not propagate
+    if (this->_pMainWindow)
+    {
+        auto pView = this->_pMainWindow->getActiveFolderView();
+        if (pView)
+        {
+            if (pView->onButtonPressedEvent(pEvent, this->_mode))
+                return true;        // handled, do not propagate
+        }
+    }
 
     return Gtk::TreeView::on_button_press_event(pEvent);
 }

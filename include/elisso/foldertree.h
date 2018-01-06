@@ -54,6 +54,11 @@ public:
 
     void selectNode(PFSModelBase pDir);
 
+    TreeViewPlus& getTreeViewPlus()
+    {
+        return _treeView;
+    }
+
 private:
     friend class FolderTreeMonitor;
 
@@ -72,6 +77,7 @@ private:
     void updateCursor();
 
     ElissoApplicationWindow     &_mainWindow;
+
     TreeViewPlus                _treeView;
 
     struct Impl;

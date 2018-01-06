@@ -21,26 +21,44 @@ class ElissoFolderView;
  *
  **************************************************************************/
 
+class ElissoApplicationWindow;
+
 enum class MouseButton3ClickType
 {
-    SINGLE_ROW_SELECTED = 1,        // MB3 click on a single row. This could also be the row that was automatically selected after the click.
-    MULTIPLE_ROWS_SELECTED,         // MB3 click on one row that is selected, but there is at least one other row that is selected.
-    WHITESPACE                      // MB3 click on tree view whitespace (not on a row).
+    TREE_ITEM_SELECTED = 1,         // MB3 click on row in tree view on the left.
+    SINGLE_ROW_SELECTED,            // MB3 click on a single row in contents. This could also be the row that was automatically selected after the click.
+    MULTIPLE_ROWS_SELECTED,         // MB3 click on one row in contents that is selected, but there is at least one other row that is selected.
+    WHITESPACE,                     // MB3 click on contents whitespace (not on a row).
 };
 
+enum class TreeViewPlusMode
+{
+    UNKNOWN,
+    IS_FOLDER_TREE_LEFT,
+    IS_FOLDER_CONTENTS_RIGHT
+};
+
+/**
+ *  TreeViewPlus is our TreeView override to be able to handle button clicks for
+ *  popup menus. This is used as a child for both the tree view on the left
+ *  (ElissoFolderTree) and the tree view of the folder contents on the right
+ *  (ElissoFolderView).
+ */
 class TreeViewPlus : public Gtk::TreeView
 {
 public:
-    void setParent(ElissoFolderView &view)
+    void setParent(ElissoApplicationWindow &mainWindow, TreeViewPlusMode mode)
     {
-        this->_pView = &view;
+        this->_pMainWindow = &mainWindow;
+        this->_mode = mode;
     }
 
 protected:
     bool on_button_press_event(GdkEventButton* button_event) override;
 
 private:
-    ElissoFolderView *_pView = NULL;
+    TreeViewPlusMode _mode = TreeViewPlusMode::UNKNOWN;
+    ElissoApplicationWindow *_pMainWindow = NULL;
 };
 
 #endif // ELISSO_TREEVIEWPLUS_H

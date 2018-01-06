@@ -137,6 +137,8 @@ ElissoFolderTree::ElissoFolderTree(ElissoApplicationWindow &mainWindow)
     _treeView.set_headers_visible(false);
     _treeView.append_column("Name", cols._colIconAndName);
 
+    _treeView.setParent(mainWindow, TreeViewPlusMode::IS_FOLDER_TREE_LEFT);
+
     // Connect the GUI thread dispatcher for when a folder populate is done.
     _pImpl->workerSubtreePopulated.connect([this]()
     {
