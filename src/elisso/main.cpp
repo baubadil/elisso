@@ -299,6 +299,7 @@ main(int argc, char *argv[])
     g_flDebugSet =  0
                   | CMD_TOP
 //                   | FOLDER_POPULATE_HIGH
+//                   | FOLDER_POPULATE_LOW
 //                   | FSEXCEPTION
 //                   | FILE_LOW
 //                   | FILE_MID
