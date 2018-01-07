@@ -43,12 +43,14 @@ struct ProgressDialog::Impl
 /**
  *  Each OperationRow consists of a label, a progress bar, and a "cancel" button.
  */
-class OperationRow : public Gtk::Frame
+class OperationRow : public Gtk::Frame,
+                     public enable_shared_from_this<OperationRow>
 {
 public:
     OperationRow(ProgressDialog &dlg,
                  PFileOperation pOp)
-        : _pOp(pOp),
+        : _parentDlg(dlg),
+          _pOp(pOp),
           _boxMain(Gtk::Orientation::ORIENTATION_VERTICAL)
     {
         // Width of the border around the frame.
@@ -75,7 +77,12 @@ public:
         _cancelButton.signal_clicked().connect([this]()
         {
             if (_pOp)
-                _pOp->cancel();
+            {
+                if (!_pOp->getError().empty())
+                    _parentDlg.removeOperationDone(shared_from_this());
+                else
+                    _pOp->cancel();
+            }
         });
         _boxProgressAndCancel.pack_start(_progressBar, true, true);
         _boxProgressAndCancel.pack_start(_cancelButton, false, false);
@@ -125,8 +132,9 @@ public:
                 strDescription += ": " + strError;
             else
             {
-                auto pContext = get_style_context();
-                pContext->add_class("file-ops-success");
+                _cancelButton.set_label("OK!");
+//                 auto pContext = get_style_context();
+//                 pContext->add_class("file-ops-success");
             }
 
             _label.set_text(strDescription);
@@ -147,6 +155,7 @@ public:
     {
         Debug::Log(PROGRESSDIALOG, __func__);
         _label.set_markup("<b>Error:</b> " + Glib::Markup::escape_text(strError));
+        _cancelButton.set_label("Close");
     }
 
     Glib::ustring
@@ -170,6 +179,7 @@ public:
         return "";
     }
 
+    ProgressDialog      &_parentDlg;
     PFileOperation      _pOp;
 
     Gtk::Box            _boxMain;
@@ -269,12 +279,17 @@ ProgressDialog::setError(PFileOperation pOp, const Glib::ustring &strError)
 void
 ProgressDialog::removeOperationDone(POperationRow pRow)
 {
+    Debug d(DEBUG_ALWAYS, __func__);
+
     // Remove the item from the list.
     auto it2 = std::find(_pImpl->llOpRows.begin(), _pImpl->llOpRows.end(), pRow);
     if (it2 == _pImpl->llOpRows.end())
         throw FSException("Cannot find file operation box in list");
     _pImpl->llOpRows.erase(it2);
-            // This destroys the row and removes it from this VBox automatically.
+
+    auto it3 = _pImpl->mapOpRows.find(pRow->_pOp);
+    _pImpl->mapOpRows.erase(it3);
+        // This releases the last reference, destroys the row and removes it from this VBox automatically.
 
     if (_pImpl->llOpRows.empty())
         hide();

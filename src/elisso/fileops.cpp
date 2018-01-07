@@ -69,63 +69,63 @@ FileOperation::Create(FileOperationType t,
     };
 
     // Create the instance.
-    auto p = make_shared<Derived>(t, refQueue);
+    auto pOp = make_shared<Derived>(t, refQueue);
 
     // Connect the dispatcher from the parent WorkerResult.
-    p->_pImpl->connDispatch = p->connect([p]()
+    pOp->_pImpl->connDispatch = pOp->connect([pOp]()
     {
-        auto pFS = p->fetchResult();
-        p->onProcessingNextItem(pFS);
+        auto pFS = pOp->fetchResult();
+        pOp->onProcessingNextItem(pFS);
     });
 
     // Instantiate a timer for progress reporting.
-    p->_pImpl->connTimer = Glib::signal_timeout().connect([p]() -> bool
+    pOp->_pImpl->connTimer = Glib::signal_timeout().connect([pOp]() -> bool
     {
-        p->onProgress();
+        pOp->onProgress();
         return true;
     }, UPDATE_PROGRESS_MILLIS);
 
     // Enqueue *this in the caller's file operations list.
-    refQueue.push_back(p);
+    refQueue.push_back(pOp);
 
     // If the parent has given us a pointer to a progress dialog pointer, update
     // or create the dialog therein.
-    if ((p->_pImpl->_ppProgressDialog = ppProgressDialog))
+    if ((pOp->_pImpl->_ppProgressDialog = ppProgressDialog))
     {
         if (!*ppProgressDialog)
             *ppProgressDialog = make_shared<ProgressDialog>(*pParentWindow);
 
-        (*ppProgressDialog)->addOperation(p);
+        (*ppProgressDialog)->addOperation(pOp);
     }
 
     // Deep-copy the list of files to operate on.
     for (auto &pFS : vFiles)
     {
-        p->_vFiles.push_back(pFS);
+        pOp->_vFiles.push_back(pFS);
         auto pParent = pFS->getParent();
         if (!pParent)
             throw FSException("File has no parent");
         FSContainer *pContainerThis = pParent->getContainer();
-        if (!p->_pImpl->pSourceContainer)
-            p->_pImpl->pSourceContainer = pContainerThis;
-        else if (pContainerThis != p->_pImpl->pSourceContainer)
+        if (!pOp->_pImpl->pSourceContainer)
+            pOp->_pImpl->pSourceContainer = pContainerThis;
+        else if (pContainerThis != pOp->_pImpl->pSourceContainer)
             throw FSException("Files in given list have more than one parent container");
     }
 
-    if ((p->_pTarget = pTarget))
-        if (!(p->_pImpl->pTargetContainer = pTarget->getContainer()))
+    if ((pOp->_pTarget = pTarget))
+        if (!(pOp->_pImpl->pTargetContainer = pTarget->getContainer()))
             throw FSException("Missing target container");
 
     // Launch the thread.
-    XWP::Thread::Create([p]()
+    XWP::Thread::Create([pOp]()
     {
         /*
          *  Thread function!
          */
-        p->threadFunc();
+        pOp->threadFunc();
     });
 
-    return p;
+    return pOp;
 }
 
 /**
@@ -184,12 +184,13 @@ FileOperation::threadFunc()
         {
             {
                 // Temporarily request the lock.
-                Lock lock(mutex);
+                Lock lock(_mutex);
                 _pImpl->pFSCurrent = pFS;
                 _pImpl->dProgress = (double)cCurrent / (double)cFiles;
             }
 
-            // This is what gets posted to the GUI callback. This is
+            // This is what gets posted to the GUI callback. This is in
+            // a separate variable because it will be changed by COPY.
             PFSModelBase pFSForGUI(pFS);
 
             switch (_t)
@@ -234,7 +235,7 @@ FileOperation::threadFunc()
 void
 FileOperation::onProgress()
 {
-    Lock lock(mutex);
+    Lock lock(_mutex);
 //     Debug::Log(FILE_HIGH, "File ops progress: " + to_string(_pImpl->dProgress * 100) + "%");
 
     if (_pImpl->_ppProgressDialog)

@@ -140,35 +140,35 @@ class WorkerResultQueue : public ProhibitCopy
 public:
     sigc::connection connect(std::function<void ()> fn)
     {
-        return dispatcher.connect(fn);
+        return _dispatcher.connect(fn);
     }
 
     void postResultToGui(P pResult)
     {
         // Do not hold the mutex while messing with the dispatcher -> that could deadlock.
         {
-            Lock lock(mutex);
-            deque.push_back(pResult);
+            Lock lock(_mutex);
+            _deque.push_back(pResult);
         }
-        dispatcher.emit();
+        _dispatcher.emit();
     }
 
     P fetchResult()
     {
-        Lock lock(mutex);
+        Lock lock(_mutex);
         P p;
-        if (deque.size())
+        if (_deque.size())
         {
-            p = deque.at(0);
-            deque.pop_front();
+            p = _deque.at(0);
+            _deque.pop_front();
         }
         return p;
     }
 
 protected:
-    Mutex               mutex;
-    Glib::Dispatcher    dispatcher;
-    std::deque<P>       deque;
+    Mutex               _mutex;
+    Glib::Dispatcher    _dispatcher;
+    std::deque<P>       _deque;
 };
 
 #endif // ELISSO_WORKER_H
