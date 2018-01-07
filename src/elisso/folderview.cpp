@@ -120,6 +120,8 @@ struct ElissoFolderView::Impl : public ProhibitCopy
     uint                            cThumbnailed;
     sigc::connection                connThumbnailProgressTimer;
 
+    sigc::connection                connSelectionChanged;       // needs to be disconnected in destructor
+
     // This is a map which allows us to look up rows quickly for efficient removal of items by name.
     std::map<std::string, Gtk::TreeRowReference> mapRowReferences;
 
@@ -137,11 +139,15 @@ struct ElissoFolderView::Impl : public ProhibitCopy
         connWorker.disconnect();
         // Just in case the thumbnailer is running.
         connThumbnailProgressTimer.disconnect();
+
+        // Disconnect the "selection changed" signal or we might get crashes.
+        connSelectionChanged.disconnect();
     }
 
     void clearModel()
     {
         pListStore->clear();
+        mapRowReferences.clear();
         pllFolderContents = nullptr;
         cFolders = 0;
         cFiles = 0;
@@ -228,7 +234,7 @@ ElissoFolderView::ElissoFolderView(ElissoApplicationWindow &mainWindow, int &iPa
     /*
      *  List and icon view signal handlers.
      */
-    _iconView.signal_selection_changed().connect([this]()
+    _pImpl->connSelectionChanged = _iconView.signal_selection_changed().connect([this]()
     {
         this->onSelectionChanged();
     });
