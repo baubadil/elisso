@@ -655,7 +655,9 @@ FSModelBase::copyOrMoveImpl(PFSModelBase pTarget,
 
             {
                 ContentsLock cLock(*pTargetCnr);
-                pParentCnr->addChild(cLock, shared_from_this());
+                pTargetCnr->addChild(cLock, shared_from_this());
+
+//                 pParentCnr->dumpContents("After copy/move, contents of ", cLock);
             }
         }
 
