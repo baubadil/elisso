@@ -45,6 +45,7 @@ const DebugFlag XWPTAGS         = (1 <<  1);
 const DebugFlag FILE_LOW        = (1 <<  3);
 
     // mid-level
+const DebugFlag FILE_CONTENTS   = (1 << 14);
 const DebugFlag FILE_MID        = (1 << 15);
 const DebugFlag XICONVIEW       = (1 << 16);
 

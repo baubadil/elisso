@@ -188,9 +188,6 @@ public:
  *
  **************************************************************************/
 
-/**
- *  Constructor.
- */
 ProgressDialog::ProgressDialog(Gtk::Window &wParent)
     : _pImpl(new Impl),
       _vbox(Gtk::Orientation::ORIENTATION_VERTICAL)
@@ -210,19 +207,12 @@ ProgressDialog::ProgressDialog(Gtk::Window &wParent)
     present();
 }
 
-/**
- *  Destructor.
- */
+/* virtual */
 ProgressDialog::~ProgressDialog()
 {
     delete _pImpl;
 }
 
-/**
- *  Adds a new operation to the progress dialog. The dialog's contents is a VBox,
- *  and this method adds another item to it. Each such item has a label and a
- *  progress bar.
- */
 void
 ProgressDialog::addOperation(PFileOperation pOp)
 {
@@ -236,14 +226,6 @@ ProgressDialog::addOperation(PFileOperation pOp)
     show_all();
 }
 
-/**
- *  Updates the operation that was previously added with addOperation
- *  with a new file and progress. This gets called periodically by
- *  FSOperation::onProgress().
- *
- *  As a special case, calling this with pFSCurrent == nullptr declares
- *  the operation finished and removes it from the dialog's VBox.
- */
 void
 ProgressDialog::updateOperation(PFileOperation pOp,
                                 PFSModelBase pFSCurrent,

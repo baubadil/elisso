@@ -184,23 +184,6 @@ FSMonitorBase::stopWatching(FSContainer &cnr)
  *
  **************************************************************************/
 
-/**
- *  Finds the FSModelBase for the given file system path, waking up all parent
- *  objects as necessary.
- *
- *  For example, if you call this on "/home/user/subdir/file.txt", this will
- *  wake up every one of the parent directories from left to right, if they
- *  have not been woken up yet, and finally file.txt, setting parent items
- *  as necessary.
- *
- *  This is the most common entry point into the file-system model. From here
- *  on up, you can iterate over folder contents or find more files.
- *
- *  This supports URI prefixes like "file://" or "trash://" as far as Gio::File
- *  recognizes them.
- *
- *  This is thread-safe. This throws FSException if the path is invalid.
- */
 /* static */
 PFSModelBase
 FSModelBase::FindPath(const string &strPath0)
@@ -317,20 +300,6 @@ FSModelBase::FindPath(const string &strPath0)
     return pCurrent;
 }
 
-/**
- *  Protected internal method to creates a new FSModelBase instance around the given Gio::File,
- *  picking the correct FSModelBase subclass depending on the file's type.
- *
- *  Note that creating a Gio::File never fails because there is no I/O involved, but this
- *  function does perform blocking I/O to test for the file's existence and dermine its type,
- *  so it can fail. If it does fail, e.g. because the file does not exist, then we throw FSException.
- *
- *  If this returns something, it is a dangling file object without an owner. You MUST call
- *  FSContainer::addChild() with the return value.
- *
- *  In any case, DO NOT CALL THIS FOR ROOT DIRECTORIES since this will mess up our internal
- *  management. Use RootDirectory::Get() instead.
- */
 /* static */
 PFSModelBase
 FSModelBase::MakeAwake(Glib::RefPtr<Gio::File> pGioFile)
@@ -422,11 +391,6 @@ PGioFile FSModelBase::getGioFile()
     return Gio::File::create_for_uri(strPath);
 }
 
-/**
- *  Returns true if the file-system object has the "hidden" attribute, according to however Gio defines it.
- *
- *  Overridden for symlinks!
- */
 bool
 FSModelBase::isHidden()
 {
@@ -452,9 +416,6 @@ FSModelBase::isHidden()
 //     return pInfo->is_hidden();
 }
 
-/*
- *  Expands the path without resorting to realpath(), which would hit the disk.
- */
 string
 FSModelBase::getPath() const
 {
@@ -464,11 +425,6 @@ FSModelBase::getPath() const
     return getPathImpl();
 }
 
-/**
- *  Implementation for getPath(), which only gets called if *this is not a root directory. This
- *  is necessary to correctly return file:/// for the root but file:///dir for anything else
- *  without double slashes.
- */
 string
 FSModelBase::getPathImpl() const
 {
@@ -491,10 +447,6 @@ FSModelBase::getIcon() const
     return _pIcon->to_string();
 }
 
-/**
- *  Returns an FSFile if *this is a file or a symlink to a file; otherwise, this returns
- *  nullptr.
- */
 PFSFile
 FSModelBase::getFile()
 {
@@ -506,10 +458,6 @@ FSModelBase::getFile()
     return nullptr;
 }
 
-/**
- *  Returns the parent directory of this filesystem object. Note that this
- *  can be either a FSDirectory or a FSSymlink that points to one.
- */
 PFSModelBase
 FSModelBase::getParent() const
 {
@@ -521,13 +469,6 @@ FSModelBase::getParent() const
     return _pParent;
 }
 
-/**
- *  Returns true if this is located under the given directory, either directly
- *  or somewhere more deeply.
- *
- *  Does NOT return true if this and pDir are the same; you need to test for that
- *  manually.
- */
 bool
 FSModelBase::isUnder(PFSDirectory pDir) const
 {
@@ -542,17 +483,6 @@ FSModelBase::isUnder(PFSDirectory pDir) const
     return false;
 }
 
-/**
- *  Returns the FSContainer component of this directory or symlink.
- *
- *  We use C++ multiple inheritance to be able to store directory contents for
- *  both real directories and symlinks to real directories. In both cases,
- *  this returns a pointer to the FSContainer class of this instance. Otherwise
- *  (including for non-directory symlinks), this returns nullptr.
- *
- *  This allows you to call container methods like find() and getContents() for
- *  both directories and directory symlinks without losing path information.
- */
 FSContainer*
 FSModelBase::getContainer()
 {
@@ -599,13 +529,6 @@ FSModelBase::describe(bool fLong /* = false */ ) const
     return  describeType() + " \"" + (fLong ? getPath() : getBasename()) + "\" (#" + to_string(_uID) + ")";
 }
 
-/**
- *  Renames this file to the given new name.
- *
- *  This does not notify file monitors since we can't be sure which thread we're running on. Call
- *  FSContainer::notifyFileRenamed() either afterwards if you call this on thread one, or have a
- *  GUI dispatcher which calls it instead.
- */
 void
 FSModelBase::rename(const string &strNewName)
 {
@@ -630,16 +553,6 @@ FSModelBase::rename(const string &strNewName)
         }
 }
 
-/**
- *  Attempts to send the file (or directory) to the desktop's trash can via the Gio methods.
- *
- *  Throws an exception if that fails, for example, if the underlying file system has no trash
- *  support, or if the object's permissions are insufficient.
- *
- *  This does not notify file monitors since we can't be sure which thread we're running on. Call
- *  FSContainer::notifyFileRemoved() either afterwards if you call this on thread one, or have a
- *  GUI dispatcher which calls it instead.
- */
 void
 FSModelBase::sendToTrash()
 {
@@ -669,14 +582,6 @@ FSModelBase::sendToTrash()
     }
 }
 
-/**
- *  Moves *this to the given target directory. pTarget mus either be a directory
- *  or a symlink to one.
- *
- *  This does not notify file monitors since we can't be sure which thread we're running on. Call
- *  FSContainer::notifyFileRemoved() and FSContainer::notifyFileAdded() either afterwards if you
- *  call this on thread one, or have a GUI dispatcher which calls it instead.
- */
 void
 FSModelBase::moveTo(PFSModelBase pTarget)
 {
@@ -707,6 +612,11 @@ FSModelBase::copyOrMoveImpl(PFSModelBase pTarget,
         auto pParentCnr = pParent->getContainer();
         if (!pParentCnr)
             throw FSException("cannot get parent container for moving");
+
+//         {
+//             ContentsLock cLock(*pParentCnr);
+//             pParentCnr->dumpContents("Before copy/move, contents of ", cLock);
+//         }
 
         auto pTargetCnr = pTarget->getContainer();
         if (!pTargetCnr)
@@ -777,12 +687,6 @@ struct FSFile::ThumbData
     map<uint32_t, PPixbuf> mapThumbnails;
 };
 
-/**
- *  Factory method to create an instance and return a shared_ptr to it.
- *  This normally gets called by FSModelBase::MakeAwake() only. This
- *  does not add the new object to a container; you must call setParent()
- *  on the result.
- */
 /* static */
 PFSFile
 FSFile::Create(Glib::RefPtr<Gio::File> pGioFile, uint64_t cbSize)
@@ -797,14 +701,6 @@ FSFile::Create(Glib::RefPtr<Gio::File> pGioFile, uint64_t cbSize)
     return make_shared<Derived>(pGioFile, cbSize);
 }
 
-FSFile::FSFile(Glib::RefPtr<Gio::File> pGioFile,
-               uint64_t cbSize)
-    : FSModelBase(FSType::FILE,
-                  pGioFile,
-                  cbSize)
-{
-}
-
 /* virtual */
 FSFile::~FSFile()
 {
@@ -813,9 +709,6 @@ FSFile::~FSFile()
         delete _pThumbData;
 }
 
-/**
- *  Caches the given pixbuf for *this and the given thumbnail size.
- */
 void
 FSFile::setThumbnail(uint32_t thumbsize, PPixbuf ppb)
 {
@@ -837,10 +730,6 @@ FSFile::setThumbnail(uint32_t thumbsize, PPixbuf ppb)
         }
 }
 
-/**
- *  Returns a pixbuf for *this and the given thumbnail size if
- *  setThumbnail() gave us one fore.
- */
 PPixbuf
 FSFile::getThumbnail(uint32_t thumbsize) const
 {
@@ -864,10 +753,6 @@ FSFile::getThumbnail(uint32_t thumbsize) const
  *
  **************************************************************************/
 
-/**
- *  Constructor. This is protected because an FSContainer only ever gets created through
- *  multiple inheritance.
- */
 FSContainer::FSContainer(FSModelBase &refBase)
     : _pImpl(new Impl),
       _refBase(refBase)
@@ -892,12 +777,6 @@ FSContainer::~FSContainer()
     delete _pImpl;
 }
 
-/**
- *  Protected method to add the given child to this container's list of children, under
- *  this container's ContentsLock. Also updates the parent pointer in the child.
- *
- *  This must be called after an object has been instantiated with FSModelBase::MakeAwake().
- */
 void FSContainer::addChild(ContentsLock &lock, PFSModelBase p)
 {
     const string &strBasename = p->getBasename();
@@ -915,10 +794,6 @@ void FSContainer::addChild(ContentsLock &lock, PFSModelBase p)
     p->_pParent = _refBase.getSharedFromThis();
 }
 
-/*
- *  Inversely to addChild(), removes the given child from this container's list of
- *  children.
- */
 void
 FSContainer::removeChild(ContentsLock &lock, PFSModelBase p)
 {
@@ -927,6 +802,17 @@ FSContainer::removeChild(ContentsLock &lock, PFSModelBase p)
         throw FSException("internal: cannot find myself in parent");
 
     _pImpl->removeImpl(lock, it);
+}
+
+void
+FSContainer::dumpContents(const string &strIntro, ContentsLock &lock)
+{
+    if (g_flDebugSet & FOLDER_POPULATE_LOW)
+    {
+        Debug::Log(FOLDER_POPULATE_LOW, strIntro + _refBase.getPath() + ": ");
+        for (auto &p : _pImpl->mapContents)
+            Debug::Log(FOLDER_POPULATE_LOW, "  " + quote(p.second->getPath()));
+    }
 }
 
 PFSDirectory
@@ -952,14 +838,6 @@ FSContainer::resolveDirectory()
     throw FSException("Cannot create directory under " + _refBase.getPath());
 }
 
-/**
- *  Attempts to find a file-system object in the current container (directory or symlink
- *  to a directory). This first calls isAwake() to check if the object has already been
- *  instantiated in memory; if not, we try to find it on disk and instantiate it.
- *  Returns nullptr if the file definitely doesn't exist or cannot be read.
- *
- *  This calls into the Gio backend and may throw.
- */
 PFSModelBase
 FSContainer::find(const string &strParticle)
 {
@@ -987,10 +865,6 @@ FSContainer::find(const string &strParticle)
     return pReturn;
 }
 
-/**
- *  Returns true if the container has the "populated with directories" flag set.
- *  See getContents() for what that means.
- */
 bool
 FSContainer::isPopulatedWithDirectories() const
 {
@@ -998,10 +872,6 @@ FSContainer::isPopulatedWithDirectories() const
     return _refBase._fl.test(FSFlag::POPULATED_WITH_DIRECTORIES);
 }
 
-/**
- *  Returns true if the container has the "populated with all" flag set.
- *  See getContents() for what that means.
- */
 bool
 FSContainer::isCompletelyPopulated() const
 {
@@ -1009,11 +879,6 @@ FSContainer::isCompletelyPopulated() const
     return _refBase._fl.test(FSFlag::POPULATED_WITH_ALL);
 }
 
-/**
- *  Unsets both the "populated with all" and "populated with directories" flags for this
- *  directory, which will cause getContents() to refresh the contents list from disk on
- *  the next call.
- */
 void
 FSContainer::unsetPopulated()
 {
@@ -1024,50 +889,6 @@ FSContainer::unsetPopulated()
 
 condition_variable_any g_condFolderPopulated;
 
-/**
- *  Returns the container's contents by copying them into the given list.
- *
- *  This will perform blocking I/O and can take several seconds to complete, depending on
- *  the size of the directory contents and the medium, unless this is not the first
- *  call on this container and the container contents have been cached before. Caching
- *  depends on the given getContents flag:
- *
- *   -- If getContents == Get::ALL, this will return all files and direct subdirectories
- *      of the container, and all these objects will be cached, and the "populated with all"
- *      flag is set on the container. When called for a second time on the same container,
- *      contents can then be returned without blocking I/O again regardless of the getContents
- *      flag, since all objects are already awake.
- *
- *   -- If getContents == Get::FOLDERS_ONLY, this only wakes up directories and symlinks
- *      to directories in the container, which might be slightly faster. (Probably not
- *      a lot since we still have to enumerate the entire directory contents and wake
- *      up all symlinks to test for whether they point to subdirectories.) This will
- *      only copy directories and symlinks to directories to the given list and then set
- *      the "populated with directories" flag on the container. If this mode is called
- *      on a container with the "populated with all" or "populated with directories"
- *      flag already set, this can return without blocking disk I/O.
- *
- *   -- If getContents == Get::FIRST_FOLDER_ONLY, this will only enumerate directory
- *      contents until the first directory or symlink to a directory is encountered.
- *      This has the potential to be a lot faster. This can be useful for a directory
- *      tree view where an expander ("+" sign) needs to be shown for folders that
- *      have at least one subfolder, but a full populate with folders only needs to
- *      happen once the folder is actually expanded. Note that this will not return the
- *      first folder in a strictly alphabetical sense, but simply the first directory
- *      or symlink pointing to a directory that happens to be returned by the Gio
- *      backend. Unfortunately even this cannot be faster than Get::FOLDERS_ONLY if
- *      the container happens to contain only files but no subdirectories, since in
- *      that case, the code will have to enumerate the entire directory contents.
- *
- *  For all modes, you can optionally pass the address of an atomic bool with pfStopFlag,
- *  which is useful if you run this on a secondary thread and you want this function to be
- *  interruptible: if pfStopFlag is not nullptr, it is checked periodically, and the functions
- *  returns early once the stop flag is set.
- *
- *  To clear all "populated" flags and force a refresh from disk, call unsetPopulated()
- *  before calling this. For that case, you can pass in two FSVectors with pvFilesAdded
- *  and pvFilesRemoved so you can call notifiers after the refresh.
- */
 size_t
 FSContainer::getContents(FSVector &vFiles,
                          Get getContents,
@@ -1319,15 +1140,6 @@ FSContainer::getContents(FSVector &vFiles,
     return c;
 }
 
-/**
- *  Creates a new physical directory in this container (physical directory or symlink
- *  pointing to one), which is returned.
- *
- *  Throws an FSException on I/O errors.
- *
- *  This does not automatically call file-system monitors since this may not run on
- *  the GUI thread. Call notifyFileAdded() with the returned instance afterwards.
- */
 PFSDirectory
 FSContainer::createSubdirectory(const string &strName)
 {
@@ -1363,15 +1175,6 @@ FSContainer::createSubdirectory(const string &strName)
     return pDirReturn;
 }
 
-/**
- *  Creates a new physical directory in this container (physical directory or symlink
- *  pointing to one), which is returned.
- *
- *  Throws an FSException on I/O errors.
- *
- *  This does not automatically call file-system monitors since this may not run on
- *  the GUI thread. Call notifyFileAdded() with the returned instance afterwards.
- */
 PFSFile
 FSContainer::createEmptyDocument(const string &strName)
 {
@@ -1408,11 +1211,6 @@ FSContainer::createEmptyDocument(const string &strName)
     return pFileReturn;
 }
 
-/**
- *  Notifies all monitors attached to *this that a file has been added.
- *
- *  Call this on the GUI thread after calling FSContainer::create*().
- */
 void
 FSContainer::notifyFileAdded(PFSModelBase pFS) const
 {
@@ -1421,13 +1219,6 @@ FSContainer::notifyFileAdded(PFSModelBase pFS) const
         pMonitor->onItemAdded(pFS);
 }
 
-/**
- *  Notifies all monitors attached to *this that a file has been removed.
- *
- *  Call this on the GUI thread after calling FSModelBase::sendToTrash().
- *  Note that at this time, the file no longer exists on disk and is only
- *  an empty shell any more.
- */
 void
 FSContainer::notifyFileRemoved(PFSModelBase pFS) const
 {
@@ -1451,18 +1242,6 @@ FSContainer::notifyFileRenamed(PFSModelBase pFS, const string &strOldName, const
  *
  **************************************************************************/
 
-FSDirectory::FSDirectory(Glib::RefPtr<Gio::File> pGioFile)
-    : FSModelBase(FSType::DIRECTORY, pGioFile, 0),
-      FSContainer((FSModelBase&)*this)
-{
-}
-
-/**
- *  Factory method to create an instance and return a shared_ptr to it.
- *  This normally gets called by FSModelBase::MakeAwake() only. This
- *  does not add the new object to a container; you must call setParent()
- *  on the result.
- */
 /* static */
 PFSDirectory
 FSDirectory::Create(Glib::RefPtr<Gio::File> pGioFile)
@@ -1477,9 +1256,6 @@ FSDirectory::Create(Glib::RefPtr<Gio::File> pGioFile)
     return make_shared<Derived>(pGioFile);
 }
 
-/**
- *  Returns the user's home directory, or nullptr on errors.
- */
 /* static */
 PFSDirectory
 FSDirectory::GetHome()
@@ -1500,10 +1276,6 @@ RootDirectory::RootDirectory(const string &strScheme, PGioFile pGioFile)
     _strBasename = strScheme + "://";
 }
 
-/**
- *  Returns the root directory for the given URI scheme, e.g. "file" or "trash" or
- *  "ftp". Throws on errors.
- */
 /*static */
 PRootDirectory
 RootDirectory::Get(const string &strScheme)        //<! in: URI scheme (e.g. "file")
@@ -1581,13 +1353,6 @@ CurrentDirectory::GetImpl()
  *
  **************************************************************************/
 
-FSSymlink::FSSymlink(Glib::RefPtr<Gio::File> pGioFile)
-    : FSModelBase(FSType::SYMLINK, pGioFile, 0),
-      FSContainer((FSModelBase&)*this),
-      _state(State::NOT_FOLLOWED_YET)
-{
-}
-
 /* virtual */
 FSTypeResolved
 FSSymlink::getResolvedType() /* override */
@@ -1617,12 +1382,6 @@ FSSymlink::getResolvedType() /* override */
     throw FSException("shouldn't happen");
 }
 
-/**
- *  Factory method to create an instance and return a shared_ptr to it.
- *  This normally gets called by FSModelBase::MakeAwake() only. This
- *  does not add the new object to a container; you must call setParent()
- *  on the result.
- */
 /* static */
 PFSSymlink
 FSSymlink::Create(Glib::RefPtr<Gio::File> pGioFile)
@@ -1637,10 +1396,6 @@ FSSymlink::Create(Glib::RefPtr<Gio::File> pGioFile)
     return make_shared<Derived>(pGioFile);
 }
 
-/**
- *  Returns the symlink target, or nullptr if the symlink is broken. This is not const
- *  as the target may need to be resolved on the first call.
- */
 PFSModelBase
 FSSymlink::getTarget()
 {
@@ -1650,10 +1405,6 @@ FSSymlink::getTarget()
 
 condition_variable_any g_condSymlinkResolved;
 
-/**
- *  Atomically resolves the symlink and caches the result. This may need to
- *  to blocking disk I/O and may therefore not be quick.
- */
 FSSymlink::State
 FSSymlink::follow()
 {
@@ -1759,17 +1510,6 @@ FSSymlink::follow()
  *
  **************************************************************************/
 
-FSSpecial::FSSpecial(Glib::RefPtr<Gio::File> pGioFile)
-    : FSModelBase(FSType::SPECIAL, pGioFile, 0)
-{
-}
-
-/**
- *  Factory method to create an instance and return a shared_ptr to it.
- *  This normally gets called by FSModelBase::MakeAwake() only. This
- *  does not add the new object to a container; you must call setParent()
- *  on the result.
- */
 /* static */
 PFSSpecial
 FSSpecial::Create(Glib::RefPtr<Gio::File> pGioFile)
@@ -1791,17 +1531,6 @@ FSSpecial::Create(Glib::RefPtr<Gio::File> pGioFile)
  *
  **************************************************************************/
 
-FSMountable::FSMountable(Glib::RefPtr<Gio::File> pGioFile)
-    : FSModelBase(FSType::MOUNTABLE, pGioFile, 0)
-{
-}
-
-/**
- *  Factory method to create an instance and return a shared_ptr to it.
- *  This normally gets called by FSModelBase::MakeAwake() only. This
- *  does not add the new object to a container; you must call setParent()
- *  on the result.
- */
 /* static */
 PFSMountable
 FSMountable::Create(Glib::RefPtr<Gio::File> pGioFile)

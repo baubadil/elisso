@@ -27,8 +27,10 @@ std::atomic<uint> g_uPopulateThreadID(0);
  **************************************************************************/
 
 /**
- *  Creates an instance and returns a shared_ptr to it. Caller MUST store that shared_ptr
- *  in instance data until the thread ends.
+ *  Creates an instance and returns a shared_ptr to it. This returns a shared_ptr,
+ *  which the caller can use to control the populate thread; another shared_ptr
+ *  is held by the running thread, so the instance gets deleted when both the
+ *  caller and the thread fund have released it.
  */
 /* static */
 PPopulateThread

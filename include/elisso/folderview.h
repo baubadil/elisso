@@ -181,6 +181,8 @@ public:
      *
      *   -- if the user single-clicks on a folder in the tree on the left.
      *
+     *  This starts a populate thread if needed, whose execution can take a long time.
+     *
      *  Returns true if a populate thread was started, or false if the folder had already been populated.
      */
     bool setDirectory(PFSModelBase pDirOrSymlinkToDir,
@@ -230,6 +232,10 @@ public:
 
     void renameSelected();
 
+    /**
+     *  Trashes all files which are currently selected in the folder contents.
+     *  This launches a FileOperation with FileOperationType::TRASH.
+     */
     void trashSelected();
 
 #ifdef USE_TESTFILEOPS

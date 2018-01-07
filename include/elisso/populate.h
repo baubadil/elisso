@@ -61,19 +61,18 @@ typedef std::shared_ptr<PopulateThread> PPopulateThread;
  *      to an instance and spawns the thread. The instance is also passed to the
  *      thread, which increases the refcount.
  *
- *   2) Create() takes a reference to a Glib::Dispatcher which gets fired when
- *      the populate thread ends. Create() also takes a reference to an FSList,
- *      which gets filled by the populate thread with the contents from
- *      FSContainer::getContents().
+ *   2) Create() takes a reference to a ViewPopulatedWorker with a Glib::Dispatcher
+ *      which gets fired when the populate thread ends. That returns a
+ *      ViewPopulatedResult with the results from the populate thread's
+ *      FSContainer::getContents() call.
  *
  *   3) When the dispatcher then fires on the GUI thread, it should check
- *      getError() if an exception occured on the populate thread. If not,
- *      it can take the folder contents that was referenced by Create()
- *      and fill the folder view with it.
+ *      ViewPopulatedResult::strError if an exception occured on the populate thread.
+ *      If not, it can fill the folder view with the results.
  *
  *   4) If, for any reason, the populate needs to be stopped early, the caller
  *      can call stop() which will set the stop flag passed to
- *      FSContainer::getContents() and block until the populate thread has ended.
+ *      FSContainer::getContents().
  */
 class PopulateThread : public ProhibitCopy
 {

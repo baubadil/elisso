@@ -157,17 +157,17 @@ void FileOperation::cancel()
  *
  *  The semantics of the variables are:
  *
- *   -- Type::TEST: does nothing really. FSModelBase::testFileOps() only waits a little
+ *   -- FileOperationType::TEST: does nothing really. FSModelBase::testFileOps() only waits a little
  *      while for testing the progress dialog.
  *
- *   -- Type::TRASH: sends all files on the list to the desktop's trash can. This removes
+ *   -- FileOperationType::TRASH: sends all files on the list to the desktop's trash can. This removes
  *      the files from all views they were inserted into; a target folder is not needed.
  *
- *   -- Type::MOVES: moves all files to the target folder given to the constructor.
+ *   -- FileOperationType::MOVE: moves all files to the target folder given to the constructor.
  *      This removes the files from all views where they were inserted and inserts them
  *      into views of the target folder, if they are currently being monitored.
  *
- *   -- Type::COPY: copies all files to the target folder given to the constructor.
+ *   -- FileOperationType::COPY: copies all files to the target folder given to the constructor.
  *      This inserts the copies into views of the target folder.
  *
  *  This passes the source file pointer to postResultToGUI() except in the case of COPY,

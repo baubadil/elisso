@@ -37,16 +37,39 @@ typedef std::shared_ptr<OperationRow> POperationRow;
 class ProgressDialog : public Gtk::Window, public std::enable_shared_from_this<ProgressDialog>
 {
 public:
+    /**
+     *  Constructor.
+     */
     ProgressDialog(Gtk::Window &wParent);
-    ~ProgressDialog();
 
+    /**
+     *  Destructor.
+     */
+    virtual ~ProgressDialog();
+
+    /**
+     *  Adds a new operation to the progress dialog. The dialog's contents is a VBox,
+     *  and this method adds another item to it. Each such item has a label and a
+     *  progress bar.
+     */
     void addOperation(PFileOperation pOp);
+
+    /**
+     *  Updates the operation that was previously added with addOperation
+     *  with a new file and progress. This gets called periodically by
+     *  FSOperation::onProgress().
+     *
+     *  As a special case, calling this with pFSCurrent == nullptr declares
+     *  the operation finished and removes it from the dialog's VBox.
+     */
     void updateOperation(PFileOperation pOp,
                          PFSModelBase pFSCurrent,
                          double dProgress);
+
     void setError(PFileOperation pOp, const Glib::ustring &strError);
 
 private:
+    friend class OperationRow;
     void removeOperationDone(POperationRow pRow);
 
     struct      Impl;

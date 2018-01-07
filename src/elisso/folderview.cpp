@@ -299,7 +299,7 @@ ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
         break;
     }
 
-    // Container is only != NULL if this is a directory or a symlink to onee.
+    // Container is only != NULL if this is a directory or a symlink to one.
     FSContainer *pContainer;
     if ((pContainer = pDirOrSymlinkToDir->getContainer()))
     {
@@ -419,7 +419,7 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
         ;
     else
     {
-        Debug::Log(FOLDER_POPULATE_LOW, "ElissoFolderView::onPopulateDone(\"" + _pDir->getPath() + "\")");
+        Debug::Log(FOLDER_POPULATE_LOW, "ElissoFolderView::onPopulateDone(\"" + _pDir->getPath() + "\", id=" + to_string(pResult->idPopulateThread) + ")");
 
         Gtk::ListStore::iterator itSelect;
 
@@ -569,6 +569,8 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
 Gtk::ListStore::iterator
 ElissoFolderView::insertFile(PFSModelBase pFS)
 {
+    Debug::Log(FOLDER_POPULATE_LOW, "ElissoFolderView::insertFile(" + quote(pFS->getPath()) + ")");
+
     Gtk::ListStore::iterator it;
 
     if (!pFS->isHidden())
@@ -1469,9 +1471,6 @@ ElissoFolderView::renameSelected()
         _mainWindow.errorBox("Bad selection");
 }
 
-/**
- *  Trashes all files which are currently selected in the folder contents.
- */
 void
 ElissoFolderView::trashSelected()
 {
