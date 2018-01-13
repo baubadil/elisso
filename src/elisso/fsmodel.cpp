@@ -1217,6 +1217,7 @@ void
 FSContainer::notifyFileAdded(PFSModelBase pFS) const
 {
     Debug d(FILEMONITORS, string(__func__) + "(" + pFS->getPath() + ")");
+    FSLock lock;
     for (auto &pMonitor : _pImpl->llMonitors)
         pMonitor->onItemAdded(pFS);
 }
@@ -1225,6 +1226,7 @@ void
 FSContainer::notifyFileRemoved(PFSModelBase pFS) const
 {
     Debug d(FILEMONITORS, string(__func__) + "(" + pFS->getPath() + ")");
+    FSLock lock;
     for (auto &pMonitor : _pImpl->llMonitors)
         pMonitor->onItemRemoved(pFS);
 }
@@ -1233,6 +1235,7 @@ void
 FSContainer::notifyFileRenamed(PFSModelBase pFS, const string &strOldName, const string &strNewName) const
 {
     Debug d(FILEMONITORS, string(__func__) + "(" + strOldName + " -> " + strNewName + ")");
+    FSLock lock;
     for (auto &pMonitor : _pImpl->llMonitors)
         pMonitor->onItemRenamed(pFS, strOldName, strNewName);
 }
