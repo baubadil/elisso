@@ -30,7 +30,7 @@ typedef std::list<POperationRow> OperationRowsList;
 struct ProgressDialog::Impl
 {
     OperationRowsList                       llOpRows;
-    std::map<PFileOperation, POperationRow> mapOpRows;
+    std::map<uint, POperationRow> mapOpRows;
 };
 
 
@@ -138,10 +138,6 @@ public:
             }
 
             _label.set_text(strDescription);
-
-            // finished: release the reference to the file operation
-            _pOp = nullptr;
-            _cancelButton.set_sensitive(false);
         }
 
         if (dProgress != _dProgressLast)
@@ -230,7 +226,7 @@ ProgressDialog::addOperation(PFileOperation pOp)
     // Store in list for sequence.
     _pImpl->llOpRows.push_back(pOpBox);
     // Store in map for lookup.
-    _pImpl->mapOpRows[pOp] = pOpBox;
+    _pImpl->mapOpRows[pOp->getId()] = pOpBox;
 
     _vbox.pack_start(*pOpBox, false, false, 5);
     show_all();
@@ -241,7 +237,7 @@ ProgressDialog::updateOperation(PFileOperation pOp,
                                 PFSModelBase pFSCurrent,
                                 double dProgress)
 {
-    auto it1 = _pImpl->mapOpRows.find(pOp);
+    auto it1 = _pImpl->mapOpRows.find(pOp->getId());
     if (it1 == _pImpl->mapOpRows.end())
         throw FSException("Cannot find file operation box in map");
     // Make a copy of the pointer before removing the item from the map.
@@ -255,8 +251,6 @@ ProgressDialog::updateOperation(PFileOperation pOp,
         // Remove the item from the map.
         pOpBox->update(nullptr, 100);
 
-        _pImpl->mapOpRows.erase(it1);
-
         Glib::signal_timeout().connect([this, pOpBox]() -> bool
         {
             this->removeOperationDone(pOpBox);
@@ -268,7 +262,7 @@ ProgressDialog::updateOperation(PFileOperation pOp,
 void
 ProgressDialog::setError(PFileOperation pOp, const Glib::ustring &strError)
 {
-    auto it1 = _pImpl->mapOpRows.find(pOp);
+    auto it1 = _pImpl->mapOpRows.find(pOp->getId());
     if (it1 == _pImpl->mapOpRows.end())
         throw FSException("Cannot find file operation box in map");
 
@@ -281,13 +275,18 @@ ProgressDialog::removeOperationDone(POperationRow pRow)
 {
     Debug d(DEBUG_ALWAYS, __func__);
 
+    uint id = pRow->_pOp->getId();
+
     // Remove the item from the list.
     auto it2 = std::find(_pImpl->llOpRows.begin(), _pImpl->llOpRows.end(), pRow);
     if (it2 == _pImpl->llOpRows.end())
         throw FSException("Cannot find file operation box in list");
     _pImpl->llOpRows.erase(it2);
 
-    auto it3 = _pImpl->mapOpRows.find(pRow->_pOp);
+    auto it3 = _pImpl->mapOpRows.find(id);
+    if (it3 == _pImpl->mapOpRows.end())
+        throw FSException("Cannot find file operation box in map");
+
     _pImpl->mapOpRows.erase(it3);
         // This releases the last reference, destroys the row and removes it from this VBox automatically.
 

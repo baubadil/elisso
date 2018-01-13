@@ -19,6 +19,15 @@
 
 /***************************************************************************
  *
+ *  Globals
+ *
+ **************************************************************************/
+
+uint g_lastOperationID = 0;
+
+
+/***************************************************************************
+ *
  *  FileOperation::Impl
  *
  **************************************************************************/
@@ -134,6 +143,7 @@ FileOperation::Create(FileOperationType t,
 FileOperation::FileOperation(FileOperationType t,
                              FileOperationsList  &refQueue)
     : _t(t),
+       _id(++g_lastOperationID),
       _refQueue(refQueue),
       _pImpl(new Impl)
 {

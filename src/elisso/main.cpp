@@ -316,5 +316,20 @@ main(int argc, char *argv[])
 
     auto app = ElissoApplication::create(argc,
                                          argv);
-    return app->run();
+    int rc = 0;
+    try
+    {
+        rc = app->run();
+    }
+    catch (exception &e)
+    {
+        Gtk::MessageDialog dlg("elisso: unhandled exception",
+                               false /* use_markup */,
+                               Gtk::MESSAGE_ERROR,
+                               Gtk::BUTTONS_CLOSE);
+        dlg.set_secondary_text(e.what());
+        dlg.run();
+    }
+
+    return rc;
 }

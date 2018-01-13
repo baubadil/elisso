@@ -81,6 +81,11 @@ public:
         return _t;
     }
 
+    uint getId() const
+    {
+        return _id;
+    }
+
     void cancel();
 
     const std::string& getError() const
@@ -99,6 +104,7 @@ protected:
     void onProcessingNextItem(PFSModelBase pFS);
 
     FileOperationType   _t;
+    uint                _id;
     StopFlag            _stopFlag;
     std::string         _strError;
     FileOperationsList  &_refQueue;
