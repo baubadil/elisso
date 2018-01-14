@@ -82,6 +82,7 @@ struct ElissoFolderTreeMgr::Impl : public ProhibitCopy
 
     Glib::RefPtr<FolderTreeModel>           pModel;
 
+    WorkerResultQueue<PFSVector>            workerAddMounts;
     WorkerResultQueue<PSubtreePopulated>    workerSubtreePopulated;
     WorkerResultQueue<PAddOneFirst>         workerAddOneFirst;
 
@@ -140,12 +141,20 @@ ElissoFolderTreeMgr::ElissoFolderTreeMgr(ElissoApplicationWindow &mainWindow)
 
     _treeView.setParent(mainWindow, TreeViewPlusMode::IS_FOLDER_TREE_LEFT);
 
+    // Connect the GUI thread dispatcher for when "add mounts" is done.
+    _pImpl->workerAddMounts.connect([this]()
+    {
+        Debug d(MOUNTS, "workerAddMounts.dispatcher");
+//         this->onPopulateDone();
+    });
+
     // Connect the GUI thread dispatcher for when a folder populate is done.
     _pImpl->workerSubtreePopulated.connect([this]()
     {
         Debug d(FOLDER_POPULATE_LOW, "workerSubtreePopulated.dispatcher");
         this->onPopulateDone();
     });
+
     // Connect the GUI thread dispatcher for when a folder populate is done.
     _pImpl->workerAddOneFirst.connect([this]()
     {
@@ -179,7 +188,7 @@ ElissoFolderTreeMgr::ElissoFolderTreeMgr(ElissoApplicationWindow &mainWindow)
 
     this->addTreeRoot("Home", FSDirectory::GetHome());
     this->addTreeRoot("File system", FSModelBase::FindDirectory("/"));
-//     this->addTreeRoot("File system", FSDirectory::GetRoot());
+    this->spawnAddMounts();
 }
 
 /* virtual */
@@ -371,6 +380,38 @@ ElissoFolderTreeMgr::handleAction(const string &strAction)
                                          { pDir },
                                          nullptr);
     }
+}
+
+void
+ElissoFolderTreeMgr::spawnAddMounts()
+{
+    /*
+     * Launch the thread!
+     */
+    XWP::Thread::Create([this]()
+    {
+        ++_pImpl->cThreadsRunning;
+        // Create an FSList on the thread's stack and have it filled by the back-end.
+        PFSVector pResult = std::make_shared<FSVector>();
+
+        try
+        {
+            FSMountable::GetMountables();
+        }
+        catch (exception &e)
+        {
+        }
+
+        --_pImpl->cThreadsRunning;
+
+        // Hand the results over to the instance: add it to the queue, signal the dispatcher.
+        this->_pImpl->workerAddMounts.postResultToGui(pResult);
+        // This triggers onPopulateDone().
+    });
+
+    this->updateCursor();
+
+    Debug::Log(MOUNTS, "spawned");
 }
 
 PFSModelBase

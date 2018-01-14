@@ -312,6 +312,7 @@ main(int argc, char *argv[])
 //                   | CLIPBOARD
 //                   | PROGRESSDIALOG
 //                   | TREEMODEL
+                   | MOUNTS
                   ;
 
     auto app = ElissoApplication::create(argc,

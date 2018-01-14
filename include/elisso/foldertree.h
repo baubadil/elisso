@@ -96,6 +96,11 @@ private:
     friend class FolderTreeMonitor;
 
     /**
+     *  Spawns a thread to add or refresh mounts (volumes) to the tree view.
+     */
+    void spawnAddMounts();
+
+    /**
      *  Returns the currently selected folder (or symlink to one) from the
      *  folder tree. Returns nullptr if nothing is selected or the selection
      *  is not a folder.
@@ -135,6 +140,9 @@ private:
      *
      *   -- onNodeExpanded() when a node gets expanded (either by the user or automatically
      *      as a result of selectNode() expanding subnodes).
+     *
+     *  Returns true if the thread was actually started. This is will not happen if the
+     *  folder was already populated with subfolders or if the directory is invalid.
      */
     bool spawnPopulate(PFolderTreeModelRow pRow);
 

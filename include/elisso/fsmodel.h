@@ -855,6 +855,9 @@ class FSMountable : public FSModelBase
 {
     friend class FSModelBase;
 
+public:
+    static void GetMountables();
+
 protected:
     /**
      *  Factory method to create an instance and return a shared_ptr to it.

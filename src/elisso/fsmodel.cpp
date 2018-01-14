@@ -336,6 +336,7 @@ FSModelBase::MakeAwake(Glib::RefPtr<Gio::File> pGioFile)
             break;
 
             case Gio::FileType::FILE_TYPE_MOUNTABLE:       // File is a mountable location.
+                Debug::Log(MOUNTS, "  creating FSMountable");
                 pReturn = FSMountable::Create(pGioFile);
             break;
 
@@ -1535,6 +1536,31 @@ FSSpecial::Create(Glib::RefPtr<Gio::File> pGioFile)
  *  FSMountable
  *
  **************************************************************************/
+
+/* static */
+void
+FSMountable::GetMountables()
+{
+    Glib::RefPtr<Gio::VolumeMonitor> pVolm = Gio::VolumeMonitor::get();
+    if (pVolm)
+    {
+        std::list<Glib::RefPtr<Gio::Volume>> llVolumes = pVolm->get_volumes();
+        for (auto pVolume : llVolumes)
+        {
+            Debug::Log(MOUNTS, "Volume: " + pVolume->get_name());
+            auto pMount = pVolume->get_mount();
+            if (pMount)
+            {
+                Debug::Log(MOUNTS, "  Mount: " + pMount->get_name());
+                auto pGioFile = pMount->get_root();
+                if (pGioFile)
+                {
+                    Debug::Log(MOUNTS, "  => file: " + pGioFile->get_path());
+                }
+            }
+        }
+    }
+}
 
 /* static */
 PFSMountable
