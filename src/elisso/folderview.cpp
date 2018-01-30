@@ -1630,7 +1630,7 @@ ElissoFolderView::loadIcon(const Gtk::TreeModel::iterator& it,
 
                         });
 
-        Gtk::IconInfo i = _pImpl->pIconTheme->choose_icon(sv, size);
+        Gtk::IconInfo i = _pImpl->pIconTheme->choose_icon(sv, size, Gtk::IconLookupFlags::ICON_LOOKUP_FORCE_SIZE);
         if (i)
             pReturn = i.load_icon();
 
