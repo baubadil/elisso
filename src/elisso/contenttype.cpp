@@ -11,7 +11,7 @@
 #include "elisso/contenttype.h"
 
 #include <gtkmm.h>
-#include "elisso/fsmodel.h"
+#include "elisso/fsmodel_gio.h"
 #include "xwp/debug.h"
 #include <atomic>
 

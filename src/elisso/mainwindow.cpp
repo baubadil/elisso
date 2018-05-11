@@ -219,7 +219,7 @@ ElissoApplicationWindow::addFolderTab(PFSModelBase pDirOrSymlink)       //!< in:
 
         auto p2 = pDirOrSymlink;
         if (!p2)
-            p2 = FSDirectory::GetHome();
+            p2 = FSModelBase::GetHome();
         pView->setDirectory(p2,
                             SetDirectoryFlag::PUSH_TO_HISTORY); // but not CLICK_FROM_TREE
 
@@ -900,7 +900,7 @@ ElissoApplicationWindow::onMouseButton3Pressed(GdkEventButton *pEvent,
                     PFSModelBase pFS = sel.vOthers.front();
                     if (pFS)
                     {
-                        PFSFile pFile = pFS->getFile();
+                        PFsGioFile pFile = g_pFsGioImpl->getFile(pFS);
                         if (pFile)
                         {
                             auto pContentType = ContentType::Guess(pFile);
@@ -1037,7 +1037,7 @@ ElissoApplicationWindow::openFile(PFSModelBase pFS,        //!< in: file or fold
         case FSTypeResolved::FILE:
         case FSTypeResolved::SYMLINK_TO_FILE:
         {
-            PFSFile pFile = pFS->getFile();
+            PFsGioFile pFile = g_pFsGioImpl->getFile(pFS);
             if (pFile)
             {
                 PAppInfo pAppInfo2(pAppInfo);
@@ -1049,7 +1049,7 @@ ElissoApplicationWindow::openFile(PFSModelBase pFS,        //!< in: file or fold
                 }
 
                 if (pAppInfo2)
-                    pAppInfo2->launch(pFS->getGioFile());
+                    pAppInfo2->launch(g_pFsGioImpl->getGioFile(*pFile));
                 else
                     this->errorBox("Cannot determine default application for file \"" + pFS->getPath() + "\"");
             }
@@ -1062,12 +1062,13 @@ ElissoApplicationWindow::openFile(PFSModelBase pFS,        //!< in: file or fold
             {
                 Glib::RefPtr<Gio::MountOperation> pMountOp;
                 Glib::RefPtr<Gio::Cancellable> pCancellable;
-                pFS->getGioFile()->mount_mountable( pMountOp,
-                                                    [pFS, this](Glib::RefPtr<Gio::AsyncResult> &pResult)
+                PGioFile pGioFile = g_pFsGioImpl->getGioFile(*pFS);
+                pGioFile->mount_mountable( pMountOp,
+                                                    [pGioFile, this](Glib::RefPtr<Gio::AsyncResult> &pResult)
                                                     {
                                                         try
                                                         {
-                                                            pFS->getGioFile()->mount_mountable_finish(pResult);
+                                                            pGioFile->mount_mountable_finish(pResult);
                                                             Debug::Log(DEBUG_ALWAYS, "mount success");
                                                         }
                                                         catch (Gio::Error &e)

@@ -13,7 +13,7 @@
 
 #include "elisso/elisso.h"
 
-#include "elisso/fsmodel.h"
+#include "elisso/fsmodel_gio.h"
 #include "xwp/basetypes.h"
 
 class ElissoApplication;

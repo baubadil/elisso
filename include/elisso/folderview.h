@@ -12,7 +12,7 @@
 #define ELISSO_FOLDERVIEW_H
 
 #include "elisso/elisso.h"
-#include "elisso/fsmodel.h"
+#include "elisso/fsmodel_gio.h"
 #include "elisso/treeviewplus.h"
 
 #include "xwp/flagset.h"
@@ -254,6 +254,12 @@ private:
      *  inspect the PopulateThread in the implementation struct for the results.
      */
     void onPopulateDone(PViewPopulatedResult p);
+
+    /**
+     *  Returns the filesystem object for the given row, looking it up by name, or nullptr
+     *  if it could not be found.
+     */
+    PFSModelBase getFileFromRow(Gtk::TreeModel::Row &row);
 
     Gtk::ListStore::iterator insertFile(PFSModelBase pFS);
     void removeFile(PFSModelBase pFS);

@@ -36,15 +36,15 @@ Glib::ustring implode(const std::string &strGlue, const std::vector<Glib::ustrin
 // const DebugFlag XICONVIEW       = (1 << 16);
 
     // high-level
-// const DebugFlag FILE_HIGH       = (1 << 19);
+// const DebugFlag FILE_HIGH            = (1 << 19);
 // const DebugFlag CMD_TOP              = (1 << 20);
 
-const DebugFlag FOLDER_POPULATE_HIGH    = (1 << 21);
-const DebugFlag FOLDER_POPULATE_LOW     = (1 << 22);
-const DebugFlag FOLDER_STACK            = (1 << 23);
-const DebugFlag THUMBNAILER             = (1 << 24);
-const DebugFlag WINDOWHIERARCHY         = (1 << 25);
-const DebugFlag FILEMONITORS            = (1 << 26);
+// const DebugFlag FOLDER_POPULATE_HIGH    = (1 << 21);
+// const DebugFlag FOLDER_POPULATE_LOW     = (1 << 22);
+// const DebugFlag FILEMONITORS            = (1 << 23);
+const DebugFlag FOLDER_STACK            = (1 << 24);
+const DebugFlag THUMBNAILER             = (1 << 25);
+const DebugFlag WINDOWHIERARCHY         = (1 << 26);
 const DebugFlag CLIPBOARD               = (1 << 27);
 const DebugFlag PROGRESSDIALOG          = (1 << 28);
 const DebugFlag TREEMODEL               = (1 << 29);

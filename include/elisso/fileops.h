@@ -11,7 +11,7 @@
 #ifndef ELISSO_FILEOPS_H
 #define ELISSO_FILEOPS_H
 
-#include "elisso/fsmodel.h"
+#include "elisso/fsmodel_gio.h"
 #include "elisso/worker.h"
 #include "elisso/elisso.h"
 

@@ -9,7 +9,7 @@ elisso_SOURCES += \
 	src/elisso/fileops.cpp \
 	src/elisso/folderview.cpp \
 	src/elisso/foldertree.cpp \
-	src/elisso/fsmodel.cpp \
+	src/elisso/fsmodel_gio.cpp \
 	src/elisso/populate.cpp \
 	src/elisso/progressdialog.cpp \
 	src/elisso/textentrydialog.cpp \

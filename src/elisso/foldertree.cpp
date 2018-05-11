@@ -186,7 +186,7 @@ ElissoFolderTreeMgr::ElissoFolderTreeMgr(ElissoApplicationWindow &mainWindow)
 
     this->show_all_children();
 
-    this->addTreeRoot("Home", FSDirectory::GetHome());
+    this->addTreeRoot("Home", FSModelBase::GetHome());
     this->addTreeRoot("File system", FSModelBase::FindDirectory("/"));
     this->spawnAddMounts();
 }
@@ -396,7 +396,7 @@ ElissoFolderTreeMgr::spawnAddMounts()
 
         try
         {
-            FSMountable::GetMountables();
+            FsGioMountable::GetMountables();
         }
         catch (exception &e)
         {

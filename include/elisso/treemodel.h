@@ -13,7 +13,7 @@
 
 #include <gtkmm.h>
 
-#include "elisso/fsmodel.h"
+#include "elisso/fsmodel_gio.h"
 
 class FolderTreeModel;
 typedef Glib::RefPtr<FolderTreeModel> PFolderTreeModel;

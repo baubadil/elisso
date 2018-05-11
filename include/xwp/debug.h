@@ -54,6 +54,9 @@ const DebugFlag DEBUG_C         = (1 << 17);
 const DebugFlag FSEXCEPTION     = (1 << 18);
 const DebugFlag FILE_HIGH       = (1 << 19);
 const DebugFlag CMD_TOP         = (1 << 20);
+const DebugFlag FOLDER_POPULATE_HIGH    = (1 << 21);
+const DebugFlag FOLDER_POPULATE_LOW     = (1 << 22);
+const DebugFlag FILEMONITORS            = (1 << 23);
 
 // #define DFL(a) (a)
 // const DebugFlag g_dflLevel1 =   DFL(CMD_TOP);

@@ -254,7 +254,7 @@ Thumbnailer::isImageFile(PFSModelBase pFile)
  *  call first.
  */
 void
-Thumbnailer::enqueue(PFSFile pFile,
+Thumbnailer::enqueue(PFsGioFile pFile,
                      const Gdk::PixbufFormat *pFormat)
 {
     Debug::Log(THUMBNAILER, string(__func__) + ":  " + pFile->getBasename());
@@ -352,7 +352,7 @@ void Thumbnailer::fileReaderThread()
 
         if (pThumbnailIn->pFormat)
         {
-            std::shared_ptr<FileContents> pFileContents = make_shared<FileContents>(pThumbnailIn->pFile->getGioFile());
+            std::shared_ptr<FileContents> pFileContents = make_shared<FileContents>(g_pFsGioImpl->getGioFile(*pThumbnailIn->pFile));
 
             auto pThumbnailTemp = make_shared<ThumbnailTemp>(pThumbnailIn,
                                                              pFileContents);
@@ -438,7 +438,7 @@ void Thumbnailer::pixbufLoaderThread(uint threadno)
     }
 }
 
-PPixbuf Thumbnailer::scale(PFSFile pFS,
+PPixbuf Thumbnailer::scale(PFsGioFile pFS,
                            PPixbuf ppbIn,
                            size_t thumbsize)
 {

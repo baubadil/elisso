@@ -8,14 +8,11 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the LICENSE file for more details.
  */
 
-#ifndef ELISSO_FSMODEL_H
-#define ELISSO_FSMODEL_H
+#ifndef XWP_FSMODEL_BASE_H
+#define XWP_FSMODEL_BASE_H
 
 #include <memory>
 #include <type_traits>
-
-#include "glibmm.h"
-#include "giomm.h"
 
 #include "xwp/thread.h"
 #include "xwp/flagset.h"
@@ -56,22 +53,158 @@ typedef std::shared_ptr<FSDirectory> PFSDirectory;
 class FSSymlink;
 typedef std::shared_ptr<FSSymlink> PFSSymlink;
 
-class FSSpecial;
-typedef std::shared_ptr<FSSpecial> PFSSpecial;
-
-class FSMountable;
-typedef std::shared_ptr<FSMountable> PFSMountable;
-
 typedef std::vector<PFSModelBase> FSVector;
 typedef std::shared_ptr<FSVector> PFSVector;
 
-typedef Glib::RefPtr<Gio::File> PGioFile;
-
-namespace Gdk { class Pixbuf; }
-typedef Glib::RefPtr<Gdk::Pixbuf> PPixbuf;
-
 class FSContainer;
 class ContentsLock;
+
+namespace XWP { class Debug; }
+
+
+/***************************************************************************
+ *
+ *  FSLock
+ *
+ **************************************************************************/
+
+/**
+ *  Global lock for the whole file-system model. This is used to protect
+ *  instance data of FSModelBase and the derived classes. Since the
+ *  file-system model is designed to be thread-safe, this lock must always
+ *  be held when reading or modifying instance data.
+ *
+ *  This is a global lock so it must only ever be held for a very short
+ *  amount of time, say, a few instructions.
+ *
+ *  The one exception is ContentsLock, see below.
+ *
+ *  To avoid deadlocks, never hold FSLock when requesting a ContentsLock.
+ *
+ *  Again, do not hold this for a long time since this will block all
+ *  file operations. If you have something that takes longer but needs
+ *  to be atomic, use a mechanism like in FSSymlink::follow(), which
+ *  introduces a per-object state flag (which is protected by FSLock)
+ *  together with a condition variable.
+ */
+class FSLock : public XWP::Lock
+{
+public:
+    FSLock();
+};
+
+
+/***************************************************************************
+ *
+ *  FsImplBase
+ *
+ **************************************************************************/
+
+/**
+ *  Empty class to be subclassed by client code that subclasses FsImplBase
+ *  as well. An instance of this is returned by FsImplBase::beginEnumerateChildren().
+ */
+class FsDirEnumeratorBase
+{
+};
+
+typedef std::shared_ptr<FsDirEnumeratorBase> PFsDirEnumeratorBase;
+
+/**
+ *  Abstract base class that the using code must implement to actually connect
+ *  the logic of this to the disk. This way the library can be used for both
+ *  Glib/Gio and standard C POSIX calls.
+ *
+ *  Client code must implement all the methods herein.
+ */
+class FsImplBase
+{
+protected:
+    FsImplBase();
+
+public:
+    /**
+     *  This should return an FSModelBase instance for the given file system path,
+     *  waking up all parent objects as necessary.
+     *
+     *  For example, if you call this on "/home/user/subdir/file.txt", this will
+     *  wake up every one of the parent directories from left to right, if they
+     *  have not been woken up yet, and finally file.txt, setting parent items
+     *  as necessary.
+     *
+     *  This is the most common entry point into the file-system model. From here
+     *  on up, you can iterate over folder contents or find more files.
+     *
+     *  This supports URI prefixes like "file://" or "trash://" as far as Gio::File
+     *  recognizes them.
+     *
+     *  This is thread-safe. This throws FSException if the path is invalid.
+     */
+    virtual PFSModelBase findPath(const string &strPath) = 0;
+
+    /**
+     *  Instantiates the given file system object from the given path and returns it,
+     *  but does NOT add it to the parent container. This gets called if no object
+     *  for this path has been instantiated yet.
+     */
+    virtual PFSModelBase makeAwake(const string &strParentPath,
+                                   const string &strBasename,
+                                   bool fIsLocal) = 0;
+
+    /**
+     *  The equivalent of opendir(). This returns a shared pointer to a buffer with
+     *  implementation-defined data. Keep calling getNextChild() until that returns
+     *  false.
+     */
+    virtual PFsDirEnumeratorBase beginEnumerateChildren(FSContainer &cnr) = 0;
+
+    /**
+     *  To be used with the buffer returned by beginEnumerateChildren(). If this
+     *  returns true, then strBasename has been set to another directory entry;
+     *  otherwise no other items have been found. This never returns the "." or
+     *  ".." entries so it may return false even on the first call if the directory
+     *  is empty.
+     */
+    virtual bool getNextChild(PFsDirEnumeratorBase pEnum, string &strBasename) = 0;
+
+    /**
+     *  The equivalent of readlink(). Returns the unprocessed contents of the given
+     *  symlink.
+     */
+    virtual string getSymlinkContents(FSSymlink &ln) = 0;
+
+    /**
+     *  This renames a file. Throws an FSException on errors.
+     */
+    virtual void rename(FSModelBase &fs, const string &strNewName) = 0;
+
+    /**
+     *  This sends a file to the trash can. Throws an FSException on errors.
+     */
+    virtual void trash(FSModelBase &fs) = 0;
+
+    /**
+     *  This copies a file. Throws an FSException on errors.
+     */
+    virtual void copy(XWP::Debug &d, FSModelBase &fs, const string &strTargetPath) = 0;
+
+    /**
+     *  This moves a file. Throws an FSException on errors.
+     */
+    virtual void move(XWP::Debug &d, FSModelBase &fs, const string &strTargetPath) = 0;
+
+    /**
+     *  This creates a subdirectory in the given directory. Throws an FSException on errors.
+     */
+    virtual PFSDirectory createSubdirectory(const string &strParentPath,
+                                            const string &strBasename) = 0;
+
+    /**
+     *  This creates an empty file in the given directory. Throws an FSException on errors.
+     */
+    virtual PFSFile createEmptyDocument(const string &strParentPath,
+                                        const string &strBasename) = 0;
+};
 
 
 /***************************************************************************
@@ -107,6 +240,22 @@ class FSMonitorBase : public ProhibitCopy, public enable_shared_from_this<FSMoni
 {
     friend class FSContainer;
 
+    /**************************************
+     *
+     *  Constructors / destructors
+     *
+     *************************************/
+
+protected:
+    virtual ~FSMonitorBase() {}
+
+
+    /**************************************
+     *
+     *  Public methods
+     *
+     *************************************/
+
 public:
     virtual void onItemAdded(PFSModelBase &pFS) = 0;
     virtual void onItemRemoved(PFSModelBase &pFS) = 0;
@@ -120,8 +269,12 @@ public:
     void startWatching(FSContainer &cnr);
     void stopWatching(FSContainer &cnr);
 
-protected:
-    virtual ~FSMonitorBase() {}
+
+    /**************************************
+     *
+     *  Protected instance data
+     *
+     *************************************/
 
 private:
     FSContainer *_pContainer = nullptr;
@@ -171,35 +324,49 @@ typedef FlagSet<FSFlag> FSFlagSet;
  */
 class FSModelBase : public std::enable_shared_from_this<FSModelBase>
 {
-public:
-    /**
-     *  Finds the FSModelBase for the given file system path, waking up all parent
-     *  objects as necessary.
-     *
-     *  For example, if you call this on "/home/user/subdir/file.txt", this will
-     *  wake up every one of the parent directories from left to right, if they
-     *  have not been woken up yet, and finally file.txt, setting parent items
-     *  as necessary.
-     *
-     *  This is the most common entry point into the file-system model. From here
-     *  on up, you can iterate over folder contents or find more files.
-     *
-     *  This supports URI prefixes like "file://" or "trash://" as far as Gio::File
-     *  recognizes them.
-     *
-     *  This is thread-safe. This throws FSException if the path is invalid.
-     */
-    static PFSModelBase FindPath(const std::string &strPath);
-    static PFSDirectory FindDirectory(const std::string &strPath);
+    friend class FSContainer;
+    friend class FSSymlink;
 
-    /*
-     *  Public Information methods
+    /**************************************
+     *
+     *  Constructors / destructors
+     *
+     *************************************/
+
+protected:
+    /**
+     *  Protected internal method to creates a new FSModelBase instance around the given Gio::File,
+     *  picking the correct FSModelBase subclass depending on the file's type.
+     *
+     *  Note that creating a Gio::File never fails because there is no I/O involved, but this
+     *  function does perform blocking I/O to test for the file's existence and dermine its type,
+     *  so it can fail. If it does fail, e.g. because the file does not exist, then we throw FSException.
+     *
+     *  If this returns something, it is a dangling file object without an owner. You MUST call
+     *  FSContainer::addChild() with the return value.
+     *
+     *  In any case, DO NOT CALL THIS FOR ROOT DIRECTORIES since this will mess up our internal
+     *  management. Use RootDirectory::Get() instead.
      */
+//     static PFSModelBase MakeAwake(PGioFile pGioFile);
+
+    FSModelBase(FSType type,
+                const string &strBasename,
+                uint64_t cbSize);
+    virtual ~FSModelBase() { };
+
+
+    /**************************************
+     *
+     *  Public instance methods
+     *
+     *************************************/
+public:
 
     /**
      *  Returns a Gio::File for this instance. This creates a new instance on every call.
      */
-    PGioFile getGioFile();
+//     PGioFile getGioFile();
 
     const std::string& getBasename() const
     {
@@ -255,13 +422,11 @@ public:
      */
     std::string getPath() const;
 
-    Glib::ustring getIcon() const;
-
     /**
      *  Returns an FSFile if *this is a file or a symlink to a file; otherwise, this returns
      *  nullptr.
      */
-    PFSFile getFile();
+//     PFSFile getFile();
 
     /**
      *  Returns the parent directory of this filesystem object. Note that this
@@ -333,35 +498,32 @@ public:
 
     void testFileOps();
 
-protected:
-    /*
-     *  Protected methods
-     */
 
-    friend class FSContainer;
-    friend class FSSymlink;
+    /**************************************
+     *
+     *  Public static methods
+     *
+     *************************************/
 
     /**
-     *  Protected internal method to creates a new FSModelBase instance around the given Gio::File,
-     *  picking the correct FSModelBase subclass depending on the file's type.
-     *
-     *  Note that creating a Gio::File never fails because there is no I/O involved, but this
-     *  function does perform blocking I/O to test for the file's existence and dermine its type,
-     *  so it can fail. If it does fail, e.g. because the file does not exist, then we throw FSException.
-     *
-     *  If this returns something, it is a dangling file object without an owner. You MUST call
-     *  FSContainer::addChild() with the return value.
-     *
-     *  In any case, DO NOT CALL THIS FOR ROOT DIRECTORIES since this will mess up our internal
-     *  management. Use RootDirectory::Get() instead.
+     *  Looks up the given full path and returns it as a directory, or nullptr
+     *  if the path does not exist or is not a directory.
      */
-    static PFSModelBase MakeAwake(PGioFile pGioFile);
+    static PFSDirectory FindDirectory(const string &strPath);
 
-    FSModelBase(FSType type,
-                PGioFile pGioFile,
-                uint64_t cbSize);
-    virtual ~FSModelBase() { };
+    /**
+     *  Returns the user's home directory, or nullptr on errors.
+     */
+    static PFSDirectory GetHome();
 
+
+    /**************************************
+     *
+     *  Protected instance methods
+     *
+     *************************************/
+
+protected:
     PFSModelBase getSharedFromThis()
     {
         return shared_from_this();
@@ -376,13 +538,18 @@ protected:
      */
     std::string getPathImpl() const;
 
+
+    /**************************************
+     *
+     *  Protected data
+     *
+     *************************************/
+
     uint64_t                    _uID = 0;
     FSType                      _type = FSType::UNINITIALIZED;
     FSFlagSet                   _fl;
-//     PGioFile                    _pGioFile;
     std::string                 _strBasename;
     uint64_t                    _cbSize;
-    Glib::RefPtr<Gio::Icon>     _pIcon;
     PFSModelBase                _pParent;
 };
 
@@ -400,6 +567,32 @@ protected:
 class FSFile : public FSModelBase
 {
     friend class FSModelBase;
+    friend class FSContainer;
+
+
+    /**************************************
+     *
+     *  Constructors / destructors
+     *
+     *************************************/
+
+protected:
+    FSFile(const string &strBasename,
+           uint64_t cbSize)
+        : FSModelBase(FSType::FILE,
+                      strBasename,
+                      cbSize)
+    { }
+
+    virtual ~FSFile()
+    { }
+
+
+    /**************************************
+     *
+     *  Public instance methods
+     *
+     *************************************/
 
 public:
     virtual FSTypeResolved getResolvedType() override
@@ -407,40 +600,6 @@ public:
         return FSTypeResolved::FILE;
     }
 
-    /**
-     *  Caches the given pixbuf for *this and the given thumbnail size.
-     */
-    void setThumbnail(uint32_t thumbsize, PPixbuf ppb);
-
-    /**
-     *  Returns a pixbuf for *this and the given thumbnail size if
-     *  setThumbnail() gave us one before.
-     */
-    PPixbuf getThumbnail(uint32_t thumbsize) const;
-
-protected:
-    friend class FSContainer;
-
-    /**
-     *  Factory method to create an instance and return a shared_ptr to it.
-     *  This normally gets called by FSModelBase::MakeAwake() only. This
-     *  does not add the new object to a container; you must call setParent()
-     *  on the result.
-     */
-    static PFSFile Create(PGioFile pGioFile,
-                          uint64_t cbSize);
-
-    FSFile(PGioFile pGioFile,
-           uint64_t cbSize)
-        : FSModelBase(FSType::FILE,
-                      pGioFile,
-                      cbSize)
-    { }
-
-    virtual ~FSFile();
-
-    struct ThumbData;
-    ThumbData   *_pThumbData = nullptr;
 };
 
 
@@ -468,6 +627,11 @@ protected:
  */
 class FSContainer : public ProhibitCopy
 {
+    friend class FSModelBase;
+    friend class FsImplBase;
+    friend class FSMonitorBase;
+    friend class ContentsLock;
+
 public:
     enum class Get
     {
@@ -476,13 +640,36 @@ public:
         FIRST_FOLDER_ONLY
     };
 
+
+    /**************************************
+     *
+     *  Constructors / destructors
+     *
+     *************************************/
+protected:
+    /**
+     *  Constructor. This is protected because an FSContainer only ever gets created through
+     *  multiple inheritance.
+     */
+    FSContainer(FSModelBase &refBase);
+
+    virtual ~FSContainer();
+
+
+    /**************************************
+     *
+     *  Public instance methods
+     *
+     *************************************/
+
+public:
     /**
      *  Attempts to find a file-system object in the current container (directory or symlink
      *  to a directory). This first calls isAwake() to check if the object has already been
      *  instantiated in memory; if not, we try to find it on disk and instantiate it.
-     *  Returns nullptr if the file definitely doesn't exist or cannot be read.
+     *  Returns nullptr if the file definitely doesn't exist or cannot be accessed.
      *
-     *  This calls into the Gio backend and may throw.
+     *  This calls into the backend and may throw.
      */
     PFSModelBase find(const std::string &strParticle);
 
@@ -601,19 +788,14 @@ public:
      */
     void notifyFileRenamed(PFSModelBase pFS, const std::string &strOldName, const std::string &strNewName) const;
 
+
+    /**************************************
+     *
+     *  Protected instance methods
+     *
+     *************************************/
+
 protected:
-    friend class FSModelBase;
-    friend class FSMonitorBase;
-    friend class ContentsLock;
-
-    /**
-     *  Constructor. This is protected because an FSContainer only ever gets created through
-     *  multiple inheritance.
-     */
-    FSContainer(FSModelBase &refBase);
-
-    virtual ~FSContainer();
-
     PFSDirectory resolveDirectory();
 
     /**
@@ -635,11 +817,20 @@ protected:
      */
     void dumpContents(const string &strIntro, ContentsLock &lock);
 
+
+    /**************************************
+     *
+     *  Protected data
+     *
+     *************************************/
+
     struct Impl;
     Impl                *_pImpl;
 
+public:
     FSModelBase         &_refBase;
 };
+
 
 /***************************************************************************
  *
@@ -656,80 +847,35 @@ protected:
  */
 class FSDirectory : public FSModelBase, public FSContainer
 {
+    friend class FSModelBase;
+    friend class FSContainer;
+
+    /**************************************
+     *
+     *  Constructors / destructors
+     *
+     *************************************/
+
+protected:
+    FSDirectory(const string &strBasename)
+        : FSModelBase(FSType::DIRECTORY, strBasename, 0),
+          FSContainer((FSModelBase&)*this)
+    { }
+
+
+    /**************************************
+     *
+     *  Public instance methods
+     *
+     *************************************/
+
 public:
     virtual FSTypeResolved getResolvedType() override
     {
         return FSTypeResolved::DIRECTORY;
     }
 
-    /**
-     *  Returns the user's home directory, or nullptr on errors.
-     */
-    static PFSDirectory GetHome();
-
-protected:
-    friend class FSModelBase;
-    friend class FSContainer;
-
-    /**
-     *  Factory method to create an instance and return a shared_ptr to it.
-     *  This normally gets called by FSModelBase::MakeAwake() only. This
-     *  does not add the new object to a container; you must call setParent()
-     *  on the result.
-     */
-    static PFSDirectory Create(PGioFile pGioFile);
-
-    FSDirectory(PGioFile pGioFile)
-        : FSModelBase(FSType::DIRECTORY, pGioFile, 0),
-          FSContainer((FSModelBase&)*this)
-    { }
-};
-
-class RootDirectory;
-typedef std::shared_ptr<RootDirectory> PRootDirectory;
-
-/**
- *  Specialization of root directories ("/") with a URI scheme.
- *  Most commonly, "/" for the "file" scheme is the root of the
- *  local file system, but we can instantiate all of the schemes
- *  supported by Gio::File.
- */
-class RootDirectory : public FSDirectory
-{
-public:
-    const std::string& getURIScheme() const
-    {
-        return _strScheme;
-    }
-
-    /**
-     *  Returns the root directory for the given URI scheme, e.g. "file" or "trash" or
-     *  "ftp". Throws on errors.
-     */
-    static PRootDirectory Get(const std::string &strScheme);
-
-private:
-    RootDirectory(const std::string &strScheme, PGioFile pGioFile);
-
-    std::string     _strScheme;
-};
-
-class CurrentDirectory;
-typedef std::shared_ptr<CurrentDirectory> PCurrentDirectory;
-
-/**
- *  Specialization of the current user's home directory.
- */
-class CurrentDirectory : public FSDirectory
-{
-    friend class FSModelBase;
-
-private:
-    CurrentDirectory();
-
-    static PCurrentDirectory s_theCWD;
-
-    static PCurrentDirectory GetImpl();
+    static PFSDirectory GetCwdOrThrow();
 };
 
 
@@ -768,7 +914,35 @@ private:
  */
 class FSSymlink : public FSModelBase, public FSContainer
 {
-    friend class FSModelBase;
+    friend class FsGioImpl;
+
+    /**************************************
+     *
+     *  Constructors / destructors
+     *
+     *************************************/
+
+protected:
+    /**
+     *  Factory method to create an instance and return a shared_ptr to it.
+     *  This normally gets called by FSModelBase::MakeAwake() only. This
+     *  does not add the new object to a container; you must call setParent()
+     *  on the result.
+     */
+    static PFSSymlink Create(const string &strBasename);
+
+    FSSymlink(const string &strBasename)
+        : FSModelBase(FSType::SYMLINK, strBasename, 0),
+          FSContainer((FSModelBase&)*this),
+          _state(State::NOT_FOLLOWED_YET)
+    { }
+
+
+    /**************************************
+     *
+     *  Public instance methods
+     *
+     *************************************/
 
 public:
     virtual FSTypeResolved getResolvedType() override;
@@ -779,21 +953,14 @@ public:
      */
     PFSModelBase getTarget();
 
+
+    /**************************************
+     *
+     *  Protected instance data
+     *
+     *************************************/
+
 protected:
-    /**
-     *  Factory method to create an instance and return a shared_ptr to it.
-     *  This normally gets called by FSModelBase::MakeAwake() only. This
-     *  does not add the new object to a container; you must call setParent()
-     *  on the result.
-     */
-    static PFSSymlink Create(PGioFile pGioFile);
-
-    FSSymlink(PGioFile pGioFile)
-        : FSModelBase(FSType::SYMLINK, pGioFile, 0),
-          FSContainer((FSModelBase&)*this),
-          _state(State::NOT_FOLLOWED_YET)
-    { }
-
     enum class State
     {
         NOT_FOLLOWED_YET = 0,
@@ -803,10 +970,10 @@ protected:
         TO_DIRECTORY = 4,
         TO_OTHER = 5
     };
+
     State           _state;
     PFSModelBase    _pTarget;
 
-private:
     /**
      *  Atomically resolves the symlink and caches the result. This may need to
      *  to blocking disk I/O and may therefore not be quick.
@@ -815,67 +982,4 @@ private:
 };
 
 
-/***************************************************************************
- *
- *  FSSpecial
- *
- **************************************************************************/
-
-class FSSpecial : public FSModelBase
-{
-    friend class FSModelBase;
-
-protected:
-    /**
-     *  Factory method to create an instance and return a shared_ptr to it.
-     *  This normally gets called by FSModelBase::MakeAwake() only. This
-     *  does not add the new object to a container; you must call setParent()
-     *  on the result.
-     */
-    static PFSSpecial Create(PGioFile pGioFile);
-
-    FSSpecial(PGioFile pGioFile)
-        : FSModelBase(FSType::SPECIAL, pGioFile, 0)
-    { }
-
-    virtual FSTypeResolved getResolvedType() override
-    {
-        return FSTypeResolved::SPECIAL;
-    }
-};
-
-
-/***************************************************************************
- *
- *  FSMountable
- *
- **************************************************************************/
-
-class FSMountable : public FSModelBase
-{
-    friend class FSModelBase;
-
-public:
-    static void GetMountables();
-
-protected:
-    /**
-     *  Factory method to create an instance and return a shared_ptr to it.
-     *  This normally gets called by FSModelBase::MakeAwake() only. This
-     *  does not add the new object to a container; you must call setParent()
-     *  on the result.
-     */
-    static PFSMountable Create(PGioFile pGioFile);
-
-    FSMountable(PGioFile pGioFile)
-        : FSModelBase(FSType::MOUNTABLE, pGioFile, 0)
-    { }
-
-
-    virtual FSTypeResolved getResolvedType() override
-    {
-        return FSTypeResolved::MOUNTABLE;
-    }
-};
-
-#endif // ELISSO_FSMODEL_H
+#endif // XWP_FSMODEL_BASE_H

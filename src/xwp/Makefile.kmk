@@ -9,6 +9,7 @@ xwp_SOURCES += \
 	src/xwp/debug.cpp \
 	src/xwp/except.cpp \
 	src/xwp/exec.cpp \
+	src/xwp/fsmodel_base.cpp \
 	src/xwp/regex.cpp \
 	src/xwp/stringhelp.cpp \
 	src/xwp/thread.cpp

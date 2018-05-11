@@ -12,18 +12,20 @@
 #define ELISSO_THUMBNAILER_H
 
 #include "elisso/elisso.h"
-#include "elisso/fsmodel.h"
+#include "elisso/fsmodel_gio.h"
 // #include "xwp/except.h"
 
 struct Thumbnail
 {
-    PFSFile                 pFile;
+    PFsGioFile              pFile;
     const Gdk::PixbufFormat *pFormat;
     PPixbuf                 ppbIconSmall;
     PPixbuf                 ppbIconBig;
 
-    Thumbnail(PFSFile pFile_, const Gdk::PixbufFormat *pFormat_)
-        : pFile(pFile_), pFormat(pFormat_)
+    Thumbnail(PFsGioFile pFile_,
+              const Gdk::PixbufFormat *pFormat_)
+        : pFile(pFile_),
+          pFormat(pFormat_)
     {
     }
 };
@@ -90,7 +92,7 @@ public:
 
     const Gdk::PixbufFormat* isImageFile(PFSModelBase pFile);
 
-    void enqueue(PFSFile pFile, const Gdk::PixbufFormat *pFormat);
+    void enqueue(PFsGioFile pFile, const Gdk::PixbufFormat *pFormat);
 
     PThumbnail fetchResult();
 
@@ -103,7 +105,7 @@ private:
 
     void pixbufLoaderThread(uint threadno);
 
-    PPixbuf scale(PFSFile pFS, PPixbuf ppbIn, size_t size);
+    PPixbuf scale(PFsGioFile pFS, PPixbuf ppbIn, size_t size);
 
     void scalerSmallThread();
     void scalerBigThread();

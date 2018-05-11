@@ -247,7 +247,7 @@ ElissoApplication::on_activate() /* override */
 {
     Debug d(CMD_TOP, __func__);
     auto p = new ElissoApplicationWindow(*this);
-    p->addFolderTab(FSDirectory::GetHome());
+    p->addFolderTab(FSModelBase::GetHome());
     this->add_window(*p);
     p->show();
 }
@@ -274,8 +274,10 @@ ElissoApplication::on_open(const type_vec_files &files,
         try
         {
             Debug::Log(CMD_TOP, std::string(__FUNCTION__) + ": handling " + strPath);
-            PFSModelBase pFSBase = FSModelBase::FindPath(strPath);
-            pWindow->addFolderTab(pFSBase);
+            auto pDir = FSModelBase::FindDirectory(strPath);
+            if (!pDir)
+                throw FSException(quote(strPath) + " is not a directory");
+            pWindow->addFolderTab(pDir);
         }
         catch (std::exception &e)
         {
@@ -314,6 +316,8 @@ main(int argc, char *argv[])
 //                   | TREEMODEL
                    | MOUNTS
                   ;
+
+    FsGioImpl::Init();
 
     auto app = ElissoApplication::create(argc,
                                          argv);
