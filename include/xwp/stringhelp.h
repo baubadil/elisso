@@ -35,6 +35,12 @@ StringVector explodeVector(const string &str,
                            bool fTrim = false,
                            bool fKeepEmpty = false);
 
+template <typename T>
+void appendVector(vector<T> &vTarget, const vector<T> &v)
+{
+    vTarget.insert(vTarget.end(), v.begin(), v.end());
+}
+
 string implode(const string &strGlue, const StringSet &v);
 string implode(const string &strGlue, const StringVector &v);
 string implode(const string &strGlue, const StringRefVector &v);
@@ -57,6 +63,8 @@ bool endsWith(const string &strHaystack,
               const string &strEnd);
 
 string quote(const string &str1);
+
+const string& trueFalse(bool f);
 
 string makePath(const string &str1,
                 const string &str2);

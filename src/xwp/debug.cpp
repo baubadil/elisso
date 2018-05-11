@@ -21,6 +21,7 @@
 namespace XWP {
 
 int g_flDebugSet = 0;
+string g_strDebugProgramName;
 
 struct FuncItem
 {
@@ -108,9 +109,9 @@ void Debug::Log(DebugFlag fl,
 
         string strIndent;
         if (fAlways && (g_iIndent2 > 0))
-            cout << MakeColor(AnsiColor::BRIGHT_WHITE, ">") << string(g_iIndent2 * 2 - 1, ' ');
+            cout << g_strDebugProgramName << MakeColor(AnsiColor::BRIGHT_WHITE, ">") << string(g_iIndent2 * 2 - 1, ' ');
         else
-            cout << string(g_iIndent2 * 2, ' ');
+            cout << g_strDebugProgramName << string(g_iIndent2 * 2, ' ');
         cout << str;
         if ( (!fAlways) || (0 == (flMessage & NO_ECHO_NEWLINE)) )
             cout << "\n";
@@ -132,15 +133,16 @@ void Debug::Message(const string &str,
 }
 
 // https://en.wikipedia.org/wiki/ANSI_escape_code#Colors
-#define ANSI_COLOR_RED          "\x1b[31m"
-#define ANSI_COLOR_RED_BRIGHT   "\x1b[31;1m"
-#define ANSI_COLOR_GREEN        "\x1b[32m"
-#define ANSI_COLOR_YELLOW       "\x1b[33m"
-#define ANSI_COLOR_BLUE         "\x1b[34m"
-#define ANSI_COLOR_MAGENTA      "\x1b[35m"
-#define ANSI_COLOR_CYAN         "\x1b[36m"
-#define ANSI_COLOR_RESET        "\x1b[0m"
-#define ANSI_COLOR_WHITE_BRIGHT "\x1b[37;1m"
+#define ANSI_COLOR_RED                  "\x1b[31m"
+#define ANSI_COLOR_RED_BRIGHT           "\x1b[31;1m"
+#define ANSI_COLOR_GREEN                "\x1b[32m"
+#define ANSI_COLOR_YELLOW               "\x1b[33m"
+#define ANSI_COLOR_BLUE                 "\x1b[34m"
+#define ANSI_COLOR_BLUE_BRIGHT_BOLD     "\x1b[34;1m"
+#define ANSI_COLOR_MAGENTA              "\x1b[35m"
+#define ANSI_COLOR_CYAN                 "\x1b[36m"
+#define ANSI_COLOR_RESET                "\x1b[0m"
+#define ANSI_COLOR_WHITE_BRIGHT         "\x1b[37;1m"
 
 string
 Debug::MakeColor(AnsiColor c, string str)
@@ -171,6 +173,10 @@ Debug::MakeColor(AnsiColor c, string str)
             return ANSI_COLOR_BLUE + str + ANSI_COLOR_RESET;
         break;
 
+        case AnsiColor::BRIGHT_BLUE:
+            return ANSI_COLOR_BLUE_BRIGHT_BOLD + str + ANSI_COLOR_RESET;
+        break;
+
         case AnsiColor::MAGENTA:
             return ANSI_COLOR_MAGENTA + str + ANSI_COLOR_RESET;
         break;
@@ -181,6 +187,13 @@ Debug::MakeColor(AnsiColor c, string str)
     }
 
     return str;
+}
+
+/* static */
+void
+Debug::SetProgramName(const char *pcsz)
+{
+    g_strDebugProgramName = "[" + string(pcsz) + "] ";
 }
 
 void

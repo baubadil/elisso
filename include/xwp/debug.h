@@ -26,6 +26,7 @@ enum class AnsiColor
     GREEN,
     YELLOW,
     BLUE,
+    BRIGHT_BLUE,
     MAGENTA,
     CYAN
 };
@@ -57,6 +58,7 @@ const DebugFlag CMD_TOP         = (1 << 20);
 const DebugFlag FOLDER_POPULATE_HIGH    = (1 << 21);
 const DebugFlag FOLDER_POPULATE_LOW     = (1 << 22);
 const DebugFlag FILEMONITORS            = (1 << 23);
+const DebugFlag CMD_ARGS        = (1 << 24);
 
 // #define DFL(a) (a)
 // const DebugFlag g_dflLevel1 =   DFL(CMD_TOP);
@@ -98,6 +100,8 @@ public:
     static void Warning(const string &str);
 
     static string MakeColor(AnsiColor c, string str);
+
+    static void SetProgramName(const char *pcsz);
 };
 
 } // namespace XWP
