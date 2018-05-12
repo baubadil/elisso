@@ -427,6 +427,13 @@ FSModelBase::testFileOps()
 }
 
 /* static */
+PFSModelBase
+FSModelBase::FindPath(const string &strPath)
+{
+    return g_pFsImpl->findPath(strPath);
+}
+
+/* static */
 PFSDirectory
 FSModelBase::FindDirectory(const string &strPath)
 {

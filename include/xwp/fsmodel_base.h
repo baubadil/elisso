@@ -123,23 +123,6 @@ protected:
     FsImplBase();
 
 public:
-    /**
-     *  This should return an FSModelBase instance for the given file system path,
-     *  waking up all parent objects as necessary.
-     *
-     *  For example, if you call this on "/home/user/subdir/file.txt", this will
-     *  wake up every one of the parent directories from left to right, if they
-     *  have not been woken up yet, and finally file.txt, setting parent items
-     *  as necessary.
-     *
-     *  This is the most common entry point into the file-system model. From here
-     *  on up, you can iterate over folder contents or find more files.
-     *
-     *  This supports URI prefixes like "file://" or "trash://" as far as Gio::File
-     *  recognizes them.
-     *
-     *  This is thread-safe. This throws FSException if the path is invalid.
-     */
     virtual PFSModelBase findPath(const string &strPath) = 0;
 
     /**
@@ -504,6 +487,25 @@ public:
      *  Public static methods
      *
      *************************************/
+
+    /**
+     *  This should return an FSModelBase instance for the given file system path,
+     *  waking up all parent objects as necessary.
+     *
+     *  For example, if you call this on "/home/user/subdir/file.txt", this will
+     *  wake up every one of the parent directories from left to right, if they
+     *  have not been woken up yet, and finally file.txt, setting parent items
+     *  as necessary.
+     *
+     *  This is the most common entry point into the file-system model. From here
+     *  on up, you can iterate over folder contents or find more files.
+     *
+     *  This supports URI prefixes like "file://" or "trash://" as far as Gio::File
+     *  recognizes them.
+     *
+     *  This is thread-safe. This throws FSException if the path is invalid.
+     */
+    static PFSModelBase FindPath(const string &strPath);
 
     /**
      *  Looks up the given full path and returns it as a directory, or nullptr

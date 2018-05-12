@@ -726,7 +726,8 @@ ElissoFolderView::goBack()
     {
         ++_uPathHistoryOffset;
         std::string strPrevious = _aPathHistory[_aPathHistory.size() - _uPathHistoryOffset - 1];
-        auto pDir = FSModelBase::FindDirectory(strPrevious);
+        // Use FindPath, not FindDirectory, because this might be a symlink.
+        auto pDir = FSModelBase::FindPath(strPrevious);
         if (pDir)
             if (this->setDirectory(pDir,
                                    SetDirectoryFlag::SELECT_PREVIOUS))     // but do not push to history
@@ -750,7 +751,8 @@ ElissoFolderView::goForward()
         Debug::Log(FOLDER_STACK, string(__func__) + "(): _aPathHistory.size()=" + to_string(_aPathHistory.size()) + ", _uPathHistoryOffset=" + to_string(_uPathHistoryOffset));
         std::string strPrevious = _aPathHistory[_aPathHistory.size() - _uPathHistoryOffset--];
         Debug::Log(FOLDER_STACK, " --> " + strPrevious);
-        auto pDir = FSModelBase::FindDirectory(strPrevious);
+        // Use FindPath, not FindDirectory, because this might be a symlink.
+        auto pDir = FSModelBase::FindPath(strPrevious);
         if (pDir)
             if (this->setDirectory(pDir, {}))     // do not push to history
                 return true;

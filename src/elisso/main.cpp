@@ -274,8 +274,8 @@ ElissoApplication::on_open(const type_vec_files &files,
         try
         {
             Debug::Log(CMD_TOP, std::string(__FUNCTION__) + ": handling " + strPath);
-            auto pDir = FSModelBase::FindDirectory(strPath);
-            if (!pDir)
+            auto pDir = FSModelBase::FindPath(strPath);
+            if (!pDir->isDirectoryOrSymlinkToDirectory())
                 throw FSException(quote(strPath) + " is not a directory");
             pWindow->addFolderTab(pDir);
         }
