@@ -859,7 +859,7 @@ FSContainer::createEmptyDocument(const string &strName)
     // If this is a symlink, then create the directory in the symlink's target instead.
     PFSDirectory pDirParent = resolveDirectory();
 
-    g_pFsImpl->createEmptyDocument(pDirParent->getPathImpl(), strName);
+    pFileReturn = g_pFsImpl->createEmptyDocument(pDirParent->getPathImpl(), strName);
 
     ContentsLock cLock(*this);
     this->addChild(cLock, pFileReturn);

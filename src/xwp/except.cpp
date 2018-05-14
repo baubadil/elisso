@@ -20,7 +20,7 @@ FSException::FSException(const std::string &str)
     : _str(str)
 {
 //     assert(false);
-    Debug::Log(FSEXCEPTION, str);
+    Debug::Log(CMD_TOP, "EXCEPTION: " + str);
 }
 
 /* virtual */
