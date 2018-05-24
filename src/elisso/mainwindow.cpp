@@ -1049,7 +1049,8 @@ ElissoApplicationWindow::openFile(PFSModelBase pFS,        //!< in: file or fold
                 }
 
                 if (pAppInfo2)
-                    pAppInfo2->launch(g_pFsGioImpl->getGioFile(*pFile));
+                    // Note, pass the symlink (pFS), not the resolved symlink
+                    pAppInfo2->launch(g_pFsGioImpl->getGioFile(*pFS));
                 else
                     this->errorBox("Cannot determine default application for file \"" + pFS->getPath() + "\"");
             }

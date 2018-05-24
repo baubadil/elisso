@@ -202,7 +202,7 @@ FsGioImpl::makeAwake(const string &strParentPath,
     }
     catch (Gio::Error &e)
     {
-        Debug::Log(FILE_HIGH, "FsGioImpl::makeAwake(): got Gio::Error: " + e.what());
+        Debug::Log(CMD_TOP, "FsGioImpl::makeAwake(): got Gio::Error: " + e.what());
         throw FSException(e.what());
     }
 
@@ -273,10 +273,17 @@ FsGioImpl::getNextChild(PFsDirEnumeratorBase pEnum, string &strBasename) /* over
 /* virtual */
 string FsGioImpl::getSymlinkContents(FSSymlink &ln) /* override */
 {
-    auto pGioFile = this->getGioFile(ln);
-    Glib::RefPtr<Gio::FileInfo> pInfo = pGioFile->query_info(G_FILE_ATTRIBUTE_STANDARD_SYMLINK_TARGET,
-                                                             Gio::FileQueryInfoFlags::FILE_QUERY_INFO_NOFOLLOW_SYMLINKS);
-    return pInfo->get_symlink_target();
+    try
+    {
+        auto pGioFile = this->getGioFile(ln);
+        Glib::RefPtr<Gio::FileInfo> pInfo = pGioFile->query_info(G_FILE_ATTRIBUTE_STANDARD_SYMLINK_TARGET,
+                                                                 Gio::FileQueryInfoFlags::FILE_QUERY_INFO_NOFOLLOW_SYMLINKS);
+        return pInfo->get_symlink_target();
+    }
+    catch (Gio::Error &e)
+    {
+        throw FSException(e.what());
+    }
 }
 
 /* virtual */
@@ -434,8 +441,15 @@ FsGioImpl::getGioFile(FSModelBase &fs)
 Glib::ustring
 FsGioImpl::getIcon(FSModelBase &fs)
 {
-    auto pIcon = getGioFile(fs)->query_info()->get_icon();
-    return pIcon->to_string();
+    Glib::ustring str;
+    try
+    {
+        auto pIcon = getGioFile(fs)->query_info()->get_icon();
+        str = pIcon->to_string();
+    }
+    catch (Gio::Error &e) { }
+
+    return str;
 }
 
 PFsGioFile

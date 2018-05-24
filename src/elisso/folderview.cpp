@@ -61,6 +61,7 @@ public:
     FolderContentsModelColumns()
     {
         add(_colFilename);
+        add(_colType);
         add(_colFIsDirectoryOrSymlinkToDirectory);
         add(_colSize);
         add(_colIconSmall);
@@ -69,6 +70,7 @@ public:
     }
 
     Gtk::TreeModelColumn<Glib::ustring>     _colFilename;
+    Gtk::TreeModelColumn<FSType>            _colType;
     Gtk::TreeModelColumn<bool>              _colFIsDirectoryOrSymlinkToDirectory;
     Gtk::TreeModelColumn<u_int64_t>         _colSize;
     Gtk::TreeModelColumn<PPixbuf>           _colIconSmall;
@@ -423,7 +425,7 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
         ;
     else
     {
-        Debug::Log(FOLDER_POPULATE_LOW, "ElissoFolderView::onPopulateDone(\"" + _pDir->getPath() + "\", id=" + to_string(pResult->idPopulateThread) + ")");
+        Debug d(FOLDER_POPULATE_LOW, "ElissoFolderView::onPopulateDone(\"" + _pDir->getPath() + "\", id=" + to_string(pResult->idPopulateThread) + ")");
 
         Gtk::ListStore::iterator itSelect;
 
@@ -575,9 +577,15 @@ ElissoFolderView::getFileFromRow(Gtk::TreeModel::Row &row)
 {
     const FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
     const Glib::ustring &str = row[cols._colFilename];
-    FSContainer *pCnr = this->_pDir->getContainer();
-    if (pCnr)
-        return pCnr->find(str);
+
+    // FSContainer::find may throw, and we don't want that
+    try
+    {
+        FSContainer *pCnr = this->_pDir->getContainer();
+        if (pCnr)
+            return pCnr->find(str);
+    }
+    catch(...) { }
 
     return nullptr;
 }
@@ -585,7 +593,7 @@ ElissoFolderView::getFileFromRow(Gtk::TreeModel::Row &row)
 Gtk::ListStore::iterator
 ElissoFolderView::insertFile(PFSModelBase pFS)
 {
-    Debug::Log(FOLDER_POPULATE_LOW, "ElissoFolderView::insertFile(" + quote(pFS->getPath()) + ")");
+    Debug d(FOLDER_POPULATE_LOW, "ElissoFolderView::insertFile(" + quote(pFS->getPath()) + ")");
 
     Gtk::ListStore::iterator it;
 
@@ -596,10 +604,11 @@ ElissoFolderView::insertFile(PFSModelBase pFS)
         it = _pImpl->pListStore->append();
         auto row = *it;
 
-        // pFile must always be set first because the sort function relies on it;
+        // basename must always be set first because the sort function relies on it;
         // the sort function gets triggered AS SOON AS cols._colFilename is set.
         const std::string &strBasename = pFS->getBasename();
         row[cols._colFIsDirectoryOrSymlinkToDirectory] = pFS->isDirectoryOrSymlinkToDirectory();
+        row[cols._colType] = pFS->getType();
         row[cols._colFilename] = strBasename;
         row[cols._colSize] = pFS->getFileSize();
         bool fThumbnailing = false;
@@ -1891,13 +1900,12 @@ ElissoFolderView::setListViewColumns()
         pColumn->set_resizable(true);
         pColumn->set_sort_column(cols._colSize);
         pColumn->set_cell_data_func(_cellRendererSize,
-                                    [this, &cols](Gtk::CellRenderer* pRend,
-                                                  const Gtk::TreeModel::iterator& it)
+                                    [&cols](Gtk::CellRenderer* pRend,
+                                            const Gtk::TreeModel::iterator& it)
         {
-            Gtk::TreeModel::Row row = *it;
             Glib::ustring str;
-            auto pFS = this->getFileFromRow(row);
-            if ((pFS) && (pFS->getType() == FSType::FILE))
+            Gtk::TreeModel::Row row = *it;
+            if (row[cols._colType] == FSType::FILE)
             {
                 str = formatBytes(row[cols._colSize]);
                 (static_cast<Gtk::CellRendererText*>(pRend))->property_xalign() = 1.0;

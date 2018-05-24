@@ -946,6 +946,7 @@ FSSymlink::getResolvedType() /* override */
         case State::RESOLVING:
         break;
     }
+
     throw FSException("shouldn't happen");
 }
 
@@ -1002,29 +1003,31 @@ FSSymlink::follow()
         string strParentDir = _pParent->getPathImpl();
         Debug::Log(FILE_LOW, "parent = \"" + strParentDir + "\"");
 
-        string strContents = g_pFsImpl->getSymlinkContents(*this);
+        string strThisPath = quote(this->getPath());
 
-        if (strContents.empty())
+        try
         {
-            Debug::Log(FILE_MID, "readlink(\"" + getPath() + "\") returned empty string -> BROKEN_SYMLINK");
-            lock.lock();
-            _state = State::BROKEN;
-        }
-        else
-        {
-            string strTarget = "";
-            if (strContents[0] == '/')
-                strTarget = strContents;
+            string strContents = g_pFsImpl->getSymlinkContents(*this);
+
+            if (strContents.empty())
+            {
+                Debug::Log(FILE_MID, "readlink(" + strThisPath + ") returned empty string -> BROKEN_SYMLINK");
+                lock.lock();
+                _state = State::BROKEN;
+            }
             else
             {
-                // Make it relative to the symlink's directory.
-                if (!strParentDir.empty())
-                    strTarget = strParentDir + "/";
-                strTarget += strContents;
-            }
+                string strTarget = "";
+                if (strContents[0] == '/')
+                    strTarget = strContents;
+                else
+                {
+                    // Make it relative to the symlink's directory.
+                    if (!strParentDir.empty())
+                        strTarget = strParentDir + "/";
+                    strTarget += strContents;
+                }
 
-            try
-            {
                 auto pTarget = g_pFsImpl->findPath(strTarget);
                 if (pTarget)
                 {
@@ -1052,12 +1055,12 @@ FSSymlink::follow()
                     Debug::Log(FILE_MID, "Woke up symlink target \"" + strTarget + "\", state: " + to_string((int)_state));
                 }
             }
-            catch (...)
-            {
-                Debug::Log(FILE_HIGH, "Could not find symlink target " + strTarget + " (from \"" + strContents + "\") --> BROKEN");
-                lock.lock();
-                _state = State::BROKEN;
-            }
+        }
+        catch (...)
+        {
+            Debug::Log(FILE_HIGH, "Could not find symlink target of " + strThisPath + " --> BROKEN");
+            lock.lock();
+            _state = State::BROKEN;
         }
 
         // Post the condition variable so that other threads who may be blocked in this function

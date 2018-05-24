@@ -129,6 +129,9 @@ public:
      *  Instantiates the given file system object from the given path and returns it,
      *  but does NOT add it to the parent container. This gets called if no object
      *  for this path has been instantiated yet.
+     *
+     *  This never returns NULL, but throws FSExceptions instead, even for file-system
+     *  errors.
      */
     virtual PFSModelBase makeAwake(const string &strParentPath,
                                    const string &strBasename,
@@ -671,7 +674,8 @@ public:
      *  instantiated in memory; if not, we try to find it on disk and instantiate it.
      *  Returns nullptr if the file definitely doesn't exist or cannot be accessed.
      *
-     *  This calls into the backend and may throw.
+     *  This calls into the backend and may throw FSException. It may return nullptr if
+     *  no such file exists.
      */
     PFSModelBase find(const std::string &strParticle);
 
