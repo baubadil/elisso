@@ -97,6 +97,10 @@ FolderContentsModelColumns* FolderContentsModelColumns::s_p = nullptr;
  *
  **************************************************************************/
 
+/**
+ *  Private implementation struct of ElissoFolderView. This holds state information
+ *  for populate and thumbnailer threads.
+ */
 struct ElissoFolderView::Impl : public ProhibitCopy
 {
     PPopulateThread                 pPopulateThread;      // only set while state == POPULATING or REFRESHING
@@ -791,9 +795,6 @@ void ElissoFolderView::setNotebookTabTitle()
     }
 }
 
-/**
- *  Sets a new state for the view.
- */
 void
 ElissoFolderView::setState(ViewState s)
 {

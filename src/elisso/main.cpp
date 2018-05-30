@@ -132,7 +132,10 @@ ElissoApplication::ElissoApplication(int argc,
                          "org.baubadil.elisso",
                          Gio::APPLICATION_HANDLES_OPEN)
 {
-    // This is a bit of an elabore setup to load our settings schema without
+    /*
+     * Settings instance
+     */
+    // This is a bit of an elaborate setup to load our settings schema without
     // having to install it as root under /usr/share/. It is complicated by
     // the fact that we have to use the raw C API since gtkmm has no complete
     // bindings for SettingsSchemaSource, it seems.
@@ -155,12 +158,6 @@ ElissoApplication::ElissoApplication(int argc,
     _pSettings = Glib::wrap(pSettings_c);
 }
 
-/**
- *  Handler for the "startup" signal, which gets fired when the first instance of a
- *  Gtk::Application is being created. Subsequent invocations of a single-instance
- *  Gtk::Application will instead send additional "activate" or "open" signals
- *  to the first instance.
- */
 void
 ElissoApplication::on_startup() /* override */
 {
@@ -234,14 +231,6 @@ ElissoApplication::on_startup() /* override */
     this->set_menubar(pMenuBar);
 }
 
-/**
- *  Handler for the "activate" signal, which gets sent whenever an instance
- *  of Gtk::Application is created. If a second instance of a single-instance
- *  Gtk::Application is created, this is sent to the first instance.
- *
- *  "Activate" is emitted if an application is started without command line arguments.
- *  Otherwise (since we have specified APPLICATION_HANDLES_OPEN), "open" gets emitted.
- */
 void
 ElissoApplication::on_activate() /* override */
 {
@@ -252,12 +241,6 @@ ElissoApplication::on_activate() /* override */
     p->show();
 }
 
-/**
- *
- *  Since we have specified APPLICATION_HANDLES_OPEN, "open" gets emitted on the
- *  primary instance if an application was started with file command line arguments.
- *  Otherwise (no arguments), "activate" gets emitted.
- */
 void
 ElissoApplication::on_open(const type_vec_files &files,
                            const Glib::ustring &hint) /* override */

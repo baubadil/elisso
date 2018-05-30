@@ -120,7 +120,8 @@ typedef FlagSet<SetDirectoryFlag> SetDirectoryFlagSet;
  **************************************************************************/
 
 /**
- *  The ElissoFolderView is the right two thirds of a folder window and derives from
+ *  The ElissoFolderView is always created as a tab under the main window's notebook
+ *  and thus consumes the right two thirds of a folder window. The class derives from
  *  Overlay to be able to overlay a "loading" spinner. Most importantly though,
  *  it contains a ScrolledWindow, which in turn contains either a TreeView or
  *  IconView child, depending on which view is selected. Both views are
@@ -131,7 +132,8 @@ class ElissoFolderView : public Gtk::Overlay
 {
 public:
     /**
-     *  The constructor.
+     *  The constructor. This looks up the main window's notebook, creates the
+     *  folder view and inserts it as a notebook tab.
      */
     ElissoFolderView(ElissoApplicationWindow &mainWindow, int &iPageInserted);
 
@@ -188,15 +190,38 @@ public:
     bool setDirectory(PFSModelBase pDirOrSymlinkToDir,
                       SetDirectoryFlagSet fl);
 
+    /**
+     *  Handler for FolderAction::VIEW_REFRESH.
+     */
     void refresh();
 
+    /**
+     *  Returns true if the "back" action should be enabled.
+     */
     bool canGoBack();
+
+    /**
+     *  Handler for FolderAction::GO_BACK.
+     */
     bool goBack();
+
+    /**
+     *  Returns true if the "forward" action should be enabled.
+     */
     bool canGoForward();
+
+    /**
+     *  Handler for FolderAction::GO_FORWARD.
+     */
     bool goForward();
 
+    /**
+     *  Sets a new state for the view.
+     */
     void setState(ViewState s);
+
     void setViewMode(FolderViewMode m);
+
     void setError(Glib::ustring strError);
 
     void updateStatusbar(FileSelection *pSel);

@@ -58,10 +58,36 @@ protected:
     ElissoApplication(int argc,
                       char *argv[]);
 
+    /**
+     *  Handler for the "startup" signal, which gets fired when the first instance of a
+     *  Gtk::Application is being created. Subsequent invocations of a single-instance
+     *  Gtk::Application will instead send additional "activate" or "open" signals
+     *  to the first instance.
+     *
+     *  We use this to initialize the one and only instance, namely, the main menu.
+     *  Doing that in the constructor doesn't work.
+     */
     void on_startup() override;
 
+    /**
+     *  Handler for the "activate" signal, which gets sent whenever an instance
+     *  of Gtk::Application is created. If a second instance of a single-instance
+     *  Gtk::Application is created, this is sent to the first instance. "Activate"
+     *  is emitted if an application is started without command line arguments; otherwise,
+     *  since we have specified APPLICATION_HANDLES_OPEN, "open" gets emitted.
+     *
+     *  We create another elisso window with the user's home directory.
+     */
     void on_activate() override;
 
+    /**
+     *
+     *  Since we have specified APPLICATION_HANDLES_OPEN, "open" gets emitted on the
+     *  primary instance if an application was started with file command line arguments.
+     *  Otherwise (no arguments), "activate" gets emitted.
+     *
+     *  We open additional tabs with the given directories.
+     */
     void on_open(const type_vec_files &files, const Glib::ustring &hint) override;
 
     PPixbuf                     _pIcon;

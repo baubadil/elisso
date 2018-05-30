@@ -15,6 +15,13 @@
 #include "elisso/contenttype.h"
 #include "xwp/except.h"
 
+
+/***************************************************************************
+ *
+ *  ElissoApplicationWindow::Impl
+ *
+ **************************************************************************/
+
 struct ElissoApplicationWindow::Impl
 {
     PSimpleAction                   pActionEditOpenSelected;
@@ -54,6 +61,13 @@ struct ElissoApplicationWindow::Impl
     FileOperationsList              llFileOperations;
     PProgressDialog                 pProgressDialog;
 };
+
+
+/***************************************************************************
+ *
+ *  Public ElissoApplicationWindow methods
+ *
+ **************************************************************************/
 
 ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app)      //!< in: initial directory or nullptr for "home"
     : _app(app),
@@ -175,7 +189,7 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app)      //
      */
 
     _notebook.signal_switch_page().connect([this](Gtk::Widget *pw,
-                                                  guint page_number)
+                                                  guint /* page_number */)
     {
         auto p = static_cast<ElissoFolderView*>(pw);
         if (p)
@@ -201,16 +215,30 @@ ElissoApplicationWindow::~ElissoApplicationWindow()
     delete _pImpl;
 }
 
-/**
- *  Adds a new tab to the GTK notebook in the right pane with an ElissoFolderView
- *  for the given directory inside.
- *
- *  If pDir is nullptr, we retrieve the user's home directory from the FS backend.
- */
+int ElissoApplicationWindow::errorBox(Glib::ustring strMessage)
+{
+    Gtk::MessageDialog dialog(*this,
+                              strMessage,
+                              false /* use_markup */,
+                              Gtk::MESSAGE_QUESTION,
+                              Gtk::BUTTONS_CANCEL);
+    return dialog.run();
+}
+
+ElissoFolderView*
+ElissoApplicationWindow::getActiveFolderView()
+{
+    auto i = _notebook.get_current_page();
+    if (i != -1)
+        return static_cast<ElissoFolderView*>(_notebook.get_nth_page(i));
+
+    return nullptr;
+}
+
 void
 ElissoApplicationWindow::addFolderTab(PFSModelBase pDirOrSymlink)       //!< in: directory to open, or nullptr for "home"
 {
-    // Add the first page in an idle loop so we have no delay in showing the window.
+    // Add the page in an idle loop so we have no delay in showing the window.
     Glib::signal_idle().connect([this, pDirOrSymlink]() -> bool
     {
         Debug d(CMD_TOP, "addFolderTab lambda");
@@ -233,18 +261,6 @@ ElissoApplicationWindow::addFolderTab(const std::string &strError)
     Debug d(CMD_TOP, "addFolderTab with error: " + strError);
     auto pView = this->doAddTab();
     pView->setError(strError);
-}
-
-/* protected */
-ElissoFolderView*
-ElissoApplicationWindow::doAddTab()
-{
-    int iPageInserted;
-    auto pView = new ElissoFolderView(*this, iPageInserted);
-    pView->show();
-    _notebook.set_current_page(iPageInserted);
-    _notebook.set_tab_reorderable(*pView, true);
-    return pView;
 }
 
 void
@@ -295,321 +311,6 @@ ElissoApplicationWindow::setWaitCursor(Glib::RefPtr<Gdk::Window> pWindow,
 }
 
 void
-ElissoApplicationWindow::initActionHandlers()
-{
-    /*
-     *  File menu
-     */
-    this->addActiveViewActionHandler(ACTION_FILE_NEW_TAB);
-    this->addActiveViewActionHandler(ACTION_FILE_NEW_WINDOW);
-    this->addActiveViewActionHandler(ACTION_FILE_OPEN_IN_TERMINAL);
-    this->addActiveViewActionHandler(ACTION_FILE_CREATE_FOLDER);
-    this->addActiveViewActionHandler(ACTION_FILE_CREATE_DOCUMENT);
-
-    this->add_action(ACTION_FILE_QUIT, [this]()
-    {
-        getApplication().quit();
-    });
-
-    this->addActiveViewActionHandler(ACTION_FILE_CLOSE_TAB);
-
-    /*
-     *  Edit menu
-     */
-
-    _pImpl->pActionEditOpenSelected = this->addActiveViewActionHandler(ACTION_EDIT_OPEN_SELECTED);
-    _pImpl->pActionEditOpenSelectedInTab = this->addActiveViewActionHandler(ACTION_EDIT_OPEN_SELECTED_IN_TAB);
-    _pImpl->pActionEditOpenSelectedInTerminal = this->addActiveViewActionHandler(ACTION_EDIT_OPEN_SELECTED_IN_TERMINAL);
-    _pImpl->pActionEditCopy = this->addActiveViewActionHandler(ACTION_EDIT_COPY);
-    _pImpl->pActionEditCut = this->addActiveViewActionHandler(ACTION_EDIT_CUT);
-    _pImpl->pActionEditPaste = this->addActiveViewActionHandler(ACTION_EDIT_PASTE);
-    _pImpl->pActionEditSelectAll = this->addActiveViewActionHandler(ACTION_EDIT_SELECT_ALL);
-    _pImpl->pActionEditRename = this->addActiveViewActionHandler(ACTION_EDIT_RENAME);
-    _pImpl->pActionEditTrash = this->addActiveViewActionHandler(ACTION_EDIT_TRASH);
-
-#ifdef USE_TESTFILEOPS
-    _pActionEditTestFileops = this->addOneActionHandler(ACTION_EDIT_TEST_FILEOPS);
-#endif
-
-    _pImpl->pActionEditProperties = this->addActiveViewActionHandler(ACTION_EDIT_PROPERTIES);
-
-    /*
-     *  Tree popup menu items
-     */
-    this->addTreeActionHandler(ACTION_TREE_OPEN_SELECTED);
-    this->addTreeActionHandler(ACTION_TREE_OPEN_SELECTED_IN_TAB);
-    this->addTreeActionHandler(ACTION_TREE_OPEN_SELECTED_IN_TERMINAL);
-    this->addTreeActionHandler(ACTION_TREE_TRASH_SELECTED);
-
-    /*
-     *  View menu
-     */
-    _pImpl->pActionViewNextTab = this->add_action(ACTION_VIEW_NEXT_TAB, [this]()
-    {
-        int i = _notebook.get_current_page();
-        if (i < _notebook.get_n_pages() - 1)
-            _notebook.set_current_page(i + 1);
-    });
-
-    _pImpl->pActionViewPreviousTab = this->add_action(ACTION_VIEW_PREVIOUS_TAB, [this]()
-    {
-        int i = _notebook.get_current_page();
-        if (i > 0)
-            _notebook.set_current_page(i - 1);
-    });
-
-    _pImpl->pActionViewIcons = this->addActiveViewActionHandler(ACTION_VIEW_ICONS);
-    _pImpl->pActionViewList = this->addActiveViewActionHandler(ACTION_VIEW_LIST);
-    _pImpl->pActionViewCompact = this->addActiveViewActionHandler(ACTION_VIEW_COMPACT);
-    _pImpl->pActionViewRefresh = this->addActiveViewActionHandler(ACTION_VIEW_REFRESH);
-
-    /*
-     *  Go menu
-     */
-    _pImpl->pActionGoBack = this->addActiveViewActionHandler(ACTION_GO_BACK);
-    _pImpl->pActionGoForward = this->addActiveViewActionHandler(ACTION_GO_FORWARD);
-    _pImpl->pActionGoParent = this->addActiveViewActionHandler(ACTION_GO_PARENT);
-    _pImpl->pActionGoHome = this->addActiveViewActionHandler(ACTION_GO_HOME);
-    this->addActiveViewActionHandler(ACTION_GO_COMPUTER);
-    this->addActiveViewActionHandler(ACTION_GO_TRASH);
-
-    /*
-     *  Help menu
-     */
-    this->add_action(ACTION_ABOUT, [this]()
-    {
-        auto w = Gtk::AboutDialog();
-        w.set_version(ELISSO_VERSION);
-        w.set_copyright("(C) 2017 Baubadil GmbH");
-        w.set_website("http://www.baubadil.de");
-        Glib::ustring strComments("Soon to be the best file manager for Linux.");
-#ifdef USE_XICONVIEW
-        strComments += "\nCompiled with XIconView.";
-#endif
-        w.set_comments(strComments);
-        w.set_license_type(Gtk::License::LICENSE_CUSTOM);
-        w.set_license("All rights reserved");
-        w.set_logo(_app.getIcon());
-        w.set_transient_for(*this);
-        w.run();
-    });
-}
-
-PSimpleAction
-ElissoApplicationWindow::addActiveViewActionHandler(const string &strAction)
-{
-    PSimpleAction p = this->add_action(strAction, [this, &strAction]()
-    {
-        this->handleActiveViewAction(strAction);
-    });
-
-    return p;
-}
-
-PSimpleAction
-ElissoApplicationWindow::addTreeActionHandler(const string &strAction)
-{
-    PSimpleAction p = this->add_action(strAction, [this, &strAction]()
-    {
-        auto &tmgr = this->getTreeMgr();
-        tmgr.handleAction(strAction);
-    });
-
-    return p;
-};
-
-void
-ElissoApplicationWindow::setSizeAndPosition()
-{
-    auto strPos = _app.getSettingsString(SETTINGS_WINDOWPOS);     // x,x,1000,600
-    auto v = explodeVector(strPos, ",");
-    if (v.size() == 6)
-    {
-        _width = stoi(v[2]);
-        _height = stoi(v[3]);
-
-        bool fCenterX = (v[0] == "x");
-        bool fCenterY = (v[1] == "x");
-
-        Gdk::Rectangle rectCurrentMonitor;
-        if (fCenterX ||  fCenterY)
-        {
-            // It's not enough to get the total screen size since there may be multiple monitors.
-            auto pScreen = this->get_screen();
-            int m = pScreen->get_monitor_at_window(pScreen->get_active_window());
-            pScreen->get_monitor_geometry(m, rectCurrentMonitor);
-        }
-
-        if (fCenterX)
-            _x = rectCurrentMonitor.get_x() + (rectCurrentMonitor.get_width() - _width) / 2;
-        else
-            _x = stoi(v[0]);
-        if (fCenterY)
-            _y = rectCurrentMonitor.get_y() + (rectCurrentMonitor.get_height() - _height) / 2;
-        else
-            _y = stoi(v[1]);
-
-        _fIsMaximized = !!(stoi(v[4]));
-        _fIsFullscreen = !!(stoi(v[5]));
-    }
-
-    this->set_default_size(_width, _height);
-    this->move(_x, _y);
-
-    if (_fIsMaximized)
-        this->maximize();
-    if (_fIsFullscreen)
-        this->fullscreen();
-}
-
-void
-ElissoApplicationWindow::setWindowTitle(Glib::ustring str)
-{
-    Glib::ustring strTitle(str);
-    strTitle += " — " + APPLICATION_NAME;
-    this->set_title(strTitle);
-
-}
-
-Gtk::ToolButton*
-ElissoApplicationWindow::makeToolButton(const Glib::ustring &strIconName,
-                                        PSimpleAction pAction,
-                                        bool fAlignRight /* = false*/ )
-{
-    Gtk::ToolButton *pButton = nullptr;
-    if (pAction)
-    {
-        auto pImage = new Gtk::Image();
-        pImage->set_from_icon_name(strIconName,
-                                Gtk::BuiltinIconSize::ICON_SIZE_SMALL_TOOLBAR);
-        pButton = Gtk::manage(new Gtk::ToolButton(*pImage));
-        if (fAlignRight)
-            pButton->set_halign(Gtk::ALIGN_START);
-        // Connect to "clicked" signal on button.
-        pButton->signal_clicked().connect([this, pAction]()
-        {
-            this->activate_action(pAction->get_name());
-        });
-    }
-    return pButton;
-}
-
-/* virtual */
-void
-ElissoApplicationWindow::on_size_allocate(Gtk::Allocation& allocation) /* override */
-{
-    ApplicationWindow::on_size_allocate(allocation);
-
-    if (!_fIsMaximized && !_fIsFullscreen)
-    {
-        this->get_position(_x, _y);
-        this->get_size(_width, _height);
-    }
-}
-
-/* virtual */
-bool
-ElissoApplicationWindow::on_window_state_event(GdkEventWindowState *ev) /* override */
-{
-    ApplicationWindow::on_window_state_event(ev);
-
-    _fIsMaximized = (ev->new_window_state & GDK_WINDOW_STATE_MAXIMIZED) != 0;
-    _fIsFullscreen = (ev->new_window_state & GDK_WINDOW_STATE_FULLSCREEN) != 0;
-
-    return false; // propagate
-}
-
-/* virtual */
-bool
-ElissoApplicationWindow::on_delete_event(GdkEventAny *ev) /* override */
-{
-    ApplicationWindow::on_delete_event(ev);
-
-    StringVector v;
-    v.push_back(to_string(_x));
-    v.push_back(to_string(_y));
-    v.push_back(to_string(_width));
-    v.push_back(to_string(_height));
-    v.push_back((_fIsMaximized) ? "1" : "0");
-    v.push_back((_fIsFullscreen) ? "1" : "0");
-    if (v.size() == 6)
-        _app.setSettingsString(SETTINGS_WINDOWPOS, implode(",", v));
-
-    return false; // propagate
-}
-
-/**
- *  Called once on window creation and then via a signal callback whenever the
- *  clipboard contents change. This updates whether the "paste" action is available.
- */
-void ElissoApplicationWindow::onClipboardChanged()
-{
-    Glib::RefPtr<Gtk::Clipboard> pClip = Gtk::Clipboard::get();
-    pClip->request_targets([this](const vector<Glib::ustring> &vTargets)
-    {
-        bool fPaste = false;
-        for (auto &s : vTargets)
-            if (s == CLIPBOARD_TARGET_GNOME_COPIED_FILES)
-            {
-                fPaste = true;
-                break;
-            }
-
-        _pImpl->pActionEditPaste->set_enabled(fPaste);
-    });
-}
-
-/**
- *  Closes the notebook tab for the given ElissoFolderView. If this is the last
- *  tab, it closes the entire ElissoApplicationWindow.
- */
-void
-ElissoApplicationWindow::closeFolderTab(ElissoFolderView &viewClose)
-{
-    int cPages = _notebook.get_n_pages();
-    if (cPages > 1)
-    {
-        for (int i = 0; i < cPages; ++i)
-        {
-            auto pPageWidget = _notebook.get_nth_page(i);
-            ElissoFolderView *pViewThis = static_cast<ElissoFolderView *>(pPageWidget);
-            if (pViewThis->getID() == viewClose.getID())
-            {
-                Debug::Log(DEBUG_ALWAYS, "removing notebook page");
-                _notebook.remove_page(*pPageWidget);
-                delete pViewThis;
-                break;
-            }
-        }
-    }
-    else
-        this->close();
-}
-
-int ElissoApplicationWindow::errorBox(Glib::ustring strMessage)
-{
-    Gtk::MessageDialog dialog(*this,
-                              strMessage,
-                              false /* use_markup */,
-                              Gtk::MESSAGE_QUESTION,
-                              Gtk::BUTTONS_CANCEL);
-    return dialog.run();
-}
-
-/**
- *  Returns the ElissoFolderView that is on the currently active notebook page.
- */
-ElissoFolderView*
-ElissoApplicationWindow::getActiveFolderView()
-{
-    auto i = _notebook.get_current_page();
-    if (i != -1)
-        return static_cast<ElissoFolderView*>(_notebook.get_nth_page(i));
-
-    return nullptr;
-}
-
-void
 ElissoApplicationWindow::enableEditActions(size_t cFolders, size_t cOtherFiles)
 {
 //     Debug::Log(DEBUG_ALWAYS, "cFolders: " + to_string(cFolders) + ", cOtherFiles: " + to_string(cOtherFiles));
@@ -655,16 +356,6 @@ ElissoApplicationWindow::onLoadingFolderView(ElissoFolderView &view)
     }
 }
 
-/**
- *  Gets called when the main window needs updating as a result of the folder view changing. In particular:
- *
- *   -- when the notebook page changes;
- *
- *   -- when the state of the current notebook page changes.
- *
- *  In both cases we want to update the title bar, and we want to update the tree to point to the
- *  folder that's displaying on the right.
- */
 void
 ElissoApplicationWindow::onFolderViewLoaded(ElissoFolderView &view)
 {
@@ -680,12 +371,6 @@ ElissoApplicationWindow::onNotebookTabChanged(ElissoFolderView &view)
     this->enableViewTabActions();
 }
 
-/**
- *  Sets the main window title to the full path of the current folder view.
- *  This is in a separate method because it needs to be called both from
- *  onLoadingFolderView() and onNotebookTabChanged(). Returns the full path
- *  so the caller can use it elsewhere.
- */
 Glib::ustring
 ElissoApplicationWindow::updateWindowTitle(ElissoFolderView &view)
 {
@@ -700,11 +385,6 @@ ElissoApplicationWindow::updateWindowTitle(ElissoFolderView &view)
     return strTitle;
 }
 
-/**
- *  Updates the left status bar with the "current" text.
- *  This is shared between all folder views, so the folder view calls
- *  this after having composed a meaningful text.
- */
 void
 ElissoApplicationWindow::setStatusbarCurrent(const Glib::ustring &str)
 {
@@ -742,11 +422,6 @@ ElissoApplicationWindow::setThumbnailerProgress(uint current, uint max, ShowHide
     }
 }
 
-/**
- *  Updates the left status bar with the "current" text.
- *  This is shared between all folder views, so the folder view calls
- *  this after having composed a meaningful text.
- */
 void
 ElissoApplicationWindow::setStatusbarFree(const Glib::ustring &str)
 {
@@ -763,18 +438,6 @@ ElissoApplicationWindow::selectInFolderTree(PFSModelBase pDir)
     }
 }
 
-/**
- *  Handler for the "button press event" signal for
- *
- *   -- the IconView when the folder contents is in icon mode;
- *
- *   -- the TreeViewPlus of the folder contents when in list mode;
- *
- *   -- the TreeViewPlus of the folder tree on the left.
- *
- *  If this returns true, then the event has been handled, and the parent handler should NOT
- *  be called.
- */
 bool
 ElissoApplicationWindow::onButtonPressedEvent(GdkEventButton *pEvent,
                                               TreeViewPlusMode mode)
@@ -843,20 +506,6 @@ ElissoApplicationWindow::onButtonPressedEvent(GdkEventButton *pEvent,
     return false;
 }
 
-/**
- *  This is called by our subclass of the GTK TreeView, TreeViewPlus, which
- *  emulates the right-click and selection behavior of Nautilus/Nemo.
- *
- *  Types of context menus to be created:
- *
- *   -- One file selected.              Open, Copy/Cut/Paste, Rename, Delete
- *
- *   -- One folder selected, closed.    Open, Copy/Cut/Paste, Rename, Delete
- *
- *   -- One folder selected, opened.    Open, Copy/Cut/Paste, Rename, Delete
- *
- *   -- Multiple objects selected.      Copy/Cut/Paste, Delete
- */
 void
 ElissoApplicationWindow::onMouseButton3Pressed(GdkEventButton *pEvent,
                                                MouseButton3ClickType clickType)
@@ -993,14 +642,6 @@ ElissoApplicationWindow::onMouseButton3Pressed(GdkEventButton *pEvent,
     _pImpl->pPopupMenu->popup(pEvent->button, pEvent->time);
 }
 
-/**
- *  Opens the given file-system object.
- *  As a special case, if pFS == nullptr, we try to get the current selection,
- *  but will take it only if exactly one object is selected.
- *
- *  If the object is a directory or a symlink to one, we call setDirectory().
- *  Otherwise we open the file with the
- */
 void
 ElissoApplicationWindow::openFile(PFSModelBase pFS,        //!< in: file or folder to open; if nullptr, get single file from selection
                                   PAppInfo pAppInfo)       //!< in: application to open file with; if nullptr, use file type's default
@@ -1124,6 +765,195 @@ ElissoApplicationWindow::areFileOperationsRunning() const
     return !!_pImpl->llFileOperations.size();
 }
 
+
+/***************************************************************************
+ *
+ *  Protected ElissoApplicationWindow methods
+ *
+ **************************************************************************/
+
+void
+ElissoApplicationWindow::initActionHandlers()
+{
+    /*
+     *  File menu
+     */
+
+    this->addActiveViewActionHandler(ACTION_FILE_NEW_TAB);
+    this->addActiveViewActionHandler(ACTION_FILE_NEW_WINDOW);
+    this->addActiveViewActionHandler(ACTION_FILE_OPEN_IN_TERMINAL);
+    this->addActiveViewActionHandler(ACTION_FILE_CREATE_FOLDER);
+    this->addActiveViewActionHandler(ACTION_FILE_CREATE_DOCUMENT);
+
+    this->add_action(ACTION_FILE_QUIT, [this]()
+    {
+        getApplication().quit();
+    });
+
+    this->addActiveViewActionHandler(ACTION_FILE_CLOSE_TAB);
+
+
+    /*
+     *  Edit menu
+     */
+
+    _pImpl->pActionEditOpenSelected = this->addActiveViewActionHandler(ACTION_EDIT_OPEN_SELECTED);
+    _pImpl->pActionEditOpenSelectedInTab = this->addActiveViewActionHandler(ACTION_EDIT_OPEN_SELECTED_IN_TAB);
+    _pImpl->pActionEditOpenSelectedInTerminal = this->addActiveViewActionHandler(ACTION_EDIT_OPEN_SELECTED_IN_TERMINAL);
+    _pImpl->pActionEditCopy = this->addActiveViewActionHandler(ACTION_EDIT_COPY);
+    _pImpl->pActionEditCut = this->addActiveViewActionHandler(ACTION_EDIT_CUT);
+    _pImpl->pActionEditPaste = this->addActiveViewActionHandler(ACTION_EDIT_PASTE);
+    _pImpl->pActionEditSelectAll = this->addActiveViewActionHandler(ACTION_EDIT_SELECT_ALL);
+    _pImpl->pActionEditRename = this->addActiveViewActionHandler(ACTION_EDIT_RENAME);
+    _pImpl->pActionEditTrash = this->addActiveViewActionHandler(ACTION_EDIT_TRASH);
+
+#ifdef USE_TESTFILEOPS
+    _pActionEditTestFileops = this->addOneActionHandler(ACTION_EDIT_TEST_FILEOPS);
+#endif
+
+    _pImpl->pActionEditProperties = this->addActiveViewActionHandler(ACTION_EDIT_PROPERTIES);
+
+
+    /*
+     *  Tree popup menu items
+     */
+    this->addTreeActionHandler(ACTION_TREE_OPEN_SELECTED);
+    this->addTreeActionHandler(ACTION_TREE_OPEN_SELECTED_IN_TAB);
+    this->addTreeActionHandler(ACTION_TREE_OPEN_SELECTED_IN_TERMINAL);
+    this->addTreeActionHandler(ACTION_TREE_TRASH_SELECTED);
+
+
+    /*
+     *  View menu
+     */
+    _pImpl->pActionViewNextTab = this->add_action(ACTION_VIEW_NEXT_TAB, [this]()
+    {
+        int i = _notebook.get_current_page();
+        if (i < _notebook.get_n_pages() - 1)
+            _notebook.set_current_page(i + 1);
+    });
+
+    _pImpl->pActionViewPreviousTab = this->add_action(ACTION_VIEW_PREVIOUS_TAB, [this]()
+    {
+        int i = _notebook.get_current_page();
+        if (i > 0)
+            _notebook.set_current_page(i - 1);
+    });
+
+    _pImpl->pActionViewIcons = this->addActiveViewActionHandler(ACTION_VIEW_ICONS);
+    _pImpl->pActionViewList = this->addActiveViewActionHandler(ACTION_VIEW_LIST);
+    _pImpl->pActionViewCompact = this->addActiveViewActionHandler(ACTION_VIEW_COMPACT);
+    _pImpl->pActionViewRefresh = this->addActiveViewActionHandler(ACTION_VIEW_REFRESH);
+
+
+    /*
+     *  Go menu
+     */
+    _pImpl->pActionGoBack = this->addActiveViewActionHandler(ACTION_GO_BACK);
+    _pImpl->pActionGoForward = this->addActiveViewActionHandler(ACTION_GO_FORWARD);
+    _pImpl->pActionGoParent = this->addActiveViewActionHandler(ACTION_GO_PARENT);
+    _pImpl->pActionGoHome = this->addActiveViewActionHandler(ACTION_GO_HOME);
+    this->addActiveViewActionHandler(ACTION_GO_COMPUTER);
+    this->addActiveViewActionHandler(ACTION_GO_TRASH);
+
+
+    /*
+     *  Help menu
+     */
+    this->add_action(ACTION_ABOUT, [this]()
+    {
+        auto w = Gtk::AboutDialog();
+        w.set_version(ELISSO_VERSION);
+        w.set_copyright("(C) 2017 Baubadil GmbH");
+        w.set_website("http://www.baubadil.de");
+        Glib::ustring strComments("Soon to be the best file manager for Linux.");
+#ifdef USE_XICONVIEW
+        strComments += "\nCompiled with XIconView.";
+#endif
+        w.set_comments(strComments);
+        w.set_license_type(Gtk::License::LICENSE_CUSTOM);
+        w.set_license("All rights reserved");
+        w.set_logo(_app.getIcon());
+        w.set_transient_for(*this);
+        w.run();
+    });
+}
+
+PSimpleAction
+ElissoApplicationWindow::addActiveViewActionHandler(const string &strAction)
+{
+    PSimpleAction p = this->add_action(strAction, [this, &strAction]()
+    {
+        this->handleActiveViewAction(strAction);
+    });
+
+    return p;
+}
+
+PSimpleAction
+ElissoApplicationWindow::addTreeActionHandler(const string &strAction)
+{
+    PSimpleAction p = this->add_action(strAction, [this, &strAction]()
+    {
+        auto &tmgr = this->getTreeMgr();
+        tmgr.handleAction(strAction);
+    });
+
+    return p;
+};
+
+void
+ElissoApplicationWindow::setSizeAndPosition()
+{
+    auto strPos = _app.getSettingsString(SETTINGS_WINDOWPOS);     // x,x,1000,600
+    auto v = explodeVector(strPos, ",");
+    if (v.size() == 6)
+    {
+        _width = stoi(v[2]);
+        _height = stoi(v[3]);
+
+        bool fCenterX = (v[0] == "x");
+        bool fCenterY = (v[1] == "x");
+
+        Gdk::Rectangle rectCurrentMonitor;
+        if (fCenterX ||  fCenterY)
+        {
+            // It's not enough to get the total screen size since there may be multiple monitors.
+            auto pScreen = this->get_screen();
+            int m = pScreen->get_monitor_at_window(pScreen->get_active_window());
+            pScreen->get_monitor_geometry(m, rectCurrentMonitor);
+        }
+
+        if (fCenterX)
+            _x = rectCurrentMonitor.get_x() + (rectCurrentMonitor.get_width() - _width) / 2;
+        else
+            _x = stoi(v[0]);
+        if (fCenterY)
+            _y = rectCurrentMonitor.get_y() + (rectCurrentMonitor.get_height() - _height) / 2;
+        else
+            _y = stoi(v[1]);
+
+        _fIsMaximized = !!(stoi(v[4]));
+        _fIsFullscreen = !!(stoi(v[5]));
+    }
+
+    this->set_default_size(_width, _height);
+    this->move(_x, _y);
+
+    if (_fIsMaximized)
+        this->maximize();
+    if (_fIsFullscreen)
+        this->fullscreen();
+}
+
+void
+ElissoApplicationWindow::setWindowTitle(Glib::ustring str)
+{
+    Glib::ustring strTitle(str);
+    strTitle += " — " + APPLICATION_NAME;
+    this->set_title(strTitle);
+}
+
 void
 ElissoApplicationWindow::enableViewTabActions()
 {
@@ -1212,3 +1042,123 @@ ElissoApplicationWindow::handleActiveViewAction(const std::string &strAction)
         }
     }
 }
+
+/* protected */
+ElissoFolderView*
+ElissoApplicationWindow::doAddTab()
+{
+    int iPageInserted;
+    auto pView = new ElissoFolderView(*this, iPageInserted);
+    pView->show();
+    _notebook.set_current_page(iPageInserted);
+    _notebook.set_tab_reorderable(*pView, true);
+    return pView;
+}
+
+void
+ElissoApplicationWindow::closeFolderTab(ElissoFolderView &viewClose)
+{
+    int cPages = _notebook.get_n_pages();
+    if (cPages > 1)
+    {
+        for (int i = 0; i < cPages; ++i)
+        {
+            auto pPageWidget = _notebook.get_nth_page(i);
+            ElissoFolderView *pViewThis = static_cast<ElissoFolderView *>(pPageWidget);
+            if (pViewThis->getID() == viewClose.getID())
+            {
+                Debug::Log(DEBUG_ALWAYS, "removing notebook page");
+                _notebook.remove_page(*pPageWidget);
+                delete pViewThis;
+                break;
+            }
+        }
+    }
+    else
+        this->close();
+}
+
+Gtk::ToolButton*
+ElissoApplicationWindow::makeToolButton(const Glib::ustring &strIconName,
+                                        PSimpleAction pAction,
+                                        bool fAlignRight /* = false*/ )
+{
+    Gtk::ToolButton *pButton = nullptr;
+    if (pAction)
+    {
+        auto pImage = new Gtk::Image();
+        pImage->set_from_icon_name(strIconName,
+                                   Gtk::BuiltinIconSize::ICON_SIZE_SMALL_TOOLBAR);
+        pButton = Gtk::manage(new Gtk::ToolButton(*pImage));
+        if (fAlignRight)
+            pButton->set_halign(Gtk::ALIGN_START);
+        // Connect to "clicked" signal on button.
+        pButton->signal_clicked().connect([this, pAction]()
+        {
+            this->activate_action(pAction->get_name());
+        });
+    }
+    return pButton;
+}
+
+void ElissoApplicationWindow::onClipboardChanged()
+{
+    Glib::RefPtr<Gtk::Clipboard> pClip = Gtk::Clipboard::get();
+    pClip->request_targets([this](const vector<Glib::ustring> &vTargets)
+    {
+        bool fPaste = false;
+        for (auto &s : vTargets)
+            if (s == CLIPBOARD_TARGET_GNOME_COPIED_FILES)
+            {
+                fPaste = true;
+                break;
+            }
+
+        _pImpl->pActionEditPaste->set_enabled(fPaste);
+    });
+}
+
+/* virtual */
+void
+ElissoApplicationWindow::on_size_allocate(Gtk::Allocation& allocation) /* override */
+{
+    ApplicationWindow::on_size_allocate(allocation);
+
+    if (!_fIsMaximized && !_fIsFullscreen)
+    {
+        this->get_position(_x, _y);
+        this->get_size(_width, _height);
+    }
+}
+
+/* virtual */
+bool
+ElissoApplicationWindow::on_window_state_event(GdkEventWindowState *ev) /* override */
+{
+    ApplicationWindow::on_window_state_event(ev);
+
+    _fIsMaximized = (ev->new_window_state & GDK_WINDOW_STATE_MAXIMIZED) != 0;
+    _fIsFullscreen = (ev->new_window_state & GDK_WINDOW_STATE_FULLSCREEN) != 0;
+
+    return false; // propagate
+}
+
+/* virtual */
+bool
+ElissoApplicationWindow::on_delete_event(GdkEventAny *ev) /* override */
+{
+    ApplicationWindow::on_delete_event(ev);
+
+    StringVector v;
+    v.push_back(to_string(_x));
+    v.push_back(to_string(_y));
+    v.push_back(to_string(_width));
+    v.push_back(to_string(_height));
+    v.push_back((_fIsMaximized) ? "1" : "0");
+    v.push_back((_fIsFullscreen) ? "1" : "0");
+    if (v.size() == 6)
+        _app.setSettingsString(SETTINGS_WINDOWPOS, implode(",", v));
+
+    return false; // propagate
+}
+
