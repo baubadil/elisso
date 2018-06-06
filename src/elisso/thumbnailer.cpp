@@ -156,10 +156,6 @@ struct Thumbnailer::Impl : WorkerResultQueue<PThumbnail>
  *
  **************************************************************************/
 
-/**
- *  Constructor. Each ElissoFolderView has an instance in the implementation,
- *  so this gets called once for each folder view that is created.
- */
 Thumbnailer::Thumbnailer()
     : _pImpl(new Impl)
 {
@@ -200,7 +196,7 @@ Thumbnailer::~Thumbnailer()
     Debug::Message("~Thumbnailer");
     this->clearQueues();
 
-    // Stop the threads.
+    // Stop the threads by posting nullptr to each queue.
     _pImpl->qFileReader_.post(nullptr);
     std::vector<WorkerInputQueue<PThumbnailTemp>*> vQueues;
     for (uint u = 0;  u < _pImpl->cPixbufLoaders;  ++u)
@@ -218,24 +214,12 @@ Thumbnailer::~Thumbnailer()
     delete _pImpl;
 }
 
-/**
- *  To be called once on the GUI thread after creation with
- *  a lambda that should be called every time a thumbnail is
- *  ready. That lambda should call fetchResult().
- */
 sigc::connection
 Thumbnailer::connect(std::function<void ()> fn)
 {
     return _pImpl->connect(fn);
 }
 
-/**
- *  Tests by file extension whether the file is of one of the types
- *  supported by the thumbnailer (which is all the types supported by
- *  GdkPixBuf internally).
- *
- *  Returns nullptr if not.
- */
 const Gdk::PixbufFormat*
 Thumbnailer::isImageFile(PFSModelBase pFile)
 {
@@ -248,11 +232,6 @@ Thumbnailer::isImageFile(PFSModelBase pFile)
     return nullptr;
 }
 
-/**
- *  Adds an FSFile to the queues to be thumbnailed. With pFormat, pass in
- *  the pixbuf format pointer returned by isImageFile(), which you should
- *  call first.
- */
 void
 Thumbnailer::enqueue(PFsGioFile pFile,
                      const Gdk::PixbufFormat *pFormat)
@@ -261,19 +240,12 @@ Thumbnailer::enqueue(PFsGioFile pFile,
     _pImpl->qFileReader_.post(make_shared<Thumbnail>(pFile, pFormat));
 }
 
-/**
- *  Forwarder method to WorkerResult::fetchResult(). To be called
- *  by the lambda that was passed to connect().
- */
 PThumbnail
 Thumbnailer::fetchResult()
 {
     return _pImpl->fetchResult();
 }
 
-/**
- *  Returns true if the queues are not empty.
- */
 bool
 Thumbnailer::isBusy()
 {
@@ -291,12 +263,6 @@ Thumbnailer::isBusy()
     return false;
 }
 
-/**
- *  Clears the queues for all background threads. This is useful whenever a
- *  folder view gets populated to make sure we don't keep the system busy
- *  with a thousand thumbnails that will never be seen, since the new populate
- *  will trigger another queue fill.
- */
 void
 Thumbnailer::clearQueues()
 {
@@ -335,7 +301,8 @@ Thumbnailer::clearQueues()
  *  every such file. It then passes the file contents on to the least
  *  busy pixbuf loader thread.
  */
-void Thumbnailer::fileReaderThread()
+void
+Thumbnailer::fileReaderThread()
 {
     Debug::Log(THUMBNAILER, string(__func__) + " started, blocking");
 
@@ -394,7 +361,8 @@ void Thumbnailer::fileReaderThread()
  *  The aqPixbufLoaders queues get fed by the single fileReaderThread; the results are
  *  then passed on to the two scaler threads.
  */
-void Thumbnailer::pixbufLoaderThread(uint threadno)
+void
+Thumbnailer::pixbufLoaderThread(uint threadno)
 {
     Debug::Log(THUMBNAILER, string(__func__) + " started, blocking");
 

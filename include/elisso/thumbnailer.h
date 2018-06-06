@@ -85,19 +85,59 @@ typedef std::shared_ptr<ThumbnailTemp> PThumbnailTemp;
 class Thumbnailer
 {
 public:
+    /**
+     *  Constructor. Each ElissoFolderView has an instance in the implementation,
+     *  so this gets called once for each folder view that is created.
+     */
     Thumbnailer();
+
+    /**
+     *  Destructor. This calls clearQueues() in turn and then stops all threads.
+     */
     ~Thumbnailer();
 
+    /**
+     *  To be called once on the GUI thread after creation with
+     *  a lambda that should be called every time a thumbnail is
+     *  ready. That lambda should call fetchResult().
+     */
     sigc::connection connect(std::function<void ()> fn);
 
+    /**
+     *  Tests by file extension whether the file is of one of the types
+     *  supported by the thumbnailer (which is all the types supported by
+     *  GdkPixBuf internally).
+     *
+     *  Returns nullptr if not.
+     */
     const Gdk::PixbufFormat* isImageFile(PFSModelBase pFile);
 
+    /**
+     *  Adds a file to the queues to be thumbnailed. Call this on the GUI
+     *  thread with pFormat as the pixbuf format pointer returned by isImageFile(),
+     *  which you should call first. The given file then gets passed through the
+     *  various background threads until it arrives back at the GUI thread in the
+     *  lambda passed to connect().
+     */
     void enqueue(PFsGioFile pFile, const Gdk::PixbufFormat *pFormat);
 
+    /**
+     *  Forwarder method to WorkerResult::fetchResult(). To be called
+     *  by the lambda that was passed to connect().
+     */
     PThumbnail fetchResult();
 
+    /**
+     *  Returns true if the queues are not empty.
+     */
     bool isBusy();
 
+    /**
+     *  Clears the queues for all background threads. This is useful whenever a
+     *  new folder view gets populated to make sure we don't keep the system busy
+     *  with a thousand thumbnails from a previous populate that will never be seen,
+     *  since the new populate will trigger another queue fill.
+     */
     void clearQueues();
 
 private:
