@@ -656,24 +656,68 @@ FsGioSpecial::Create(const string &strBasename)
 
 /* static */
 void
-FsGioMountable::GetMountables()
+FsGioMountable::GetMountables(FsGioMountablesVector &llMountables)
 {
+    Debug d(MOUNTS, "FsGioMountable::GetMountables()");
     Glib::RefPtr<Gio::VolumeMonitor> pVolm = Gio::VolumeMonitor::get();
     if (pVolm)
     {
+        /* The GIO docs say GDrive represent a piece of hardware connected to the machine. It's "generally" only created
+         * for removable  hardware or hardware with removable media. GDrive is a container class for GVolume objects that
+         * stem from the same piece of media. As such, GDrive abstracts a drive with (or without) removable media and
+         * provides operations for querying whether media is available, determining whether media change is automatically
+         * detected and ejecting the media.
+         *
+         * I get one for each of the physical drives in my system (an SSD containing several partitions, plus the 2TB
+         * spinning hard disk), plus one for the CD/DVD writer, plus one each for the five SD card readers.
+         */
+        d.Log(MOUNTS, "Getting drives");
+        std::list<Glib::RefPtr<Gio::Drive>> llDrives = pVolm->get_connected_drives();
+        for (auto pDrive : llDrives)
+        {
+            Debug::Log(MOUNTS, "Drive: " + quote(pDrive->get_name()) + ", has volumes: " + string(pDrive->has_volumes() ? "yes" : "no"));
+
+            for (auto strKind : pDrive->enumerate_identifiers())
+            {
+                string strId = pDrive->get_identifier(strKind);
+                Debug::Log(MOUNTS, "  Identifier " + quote(strKind) + ": " + quote(strId));
+            }
+        }
+
+        /* "Get volumes" returns a strange list of what GIO considers a volume.
+         * From my testing:
+         *
+         *    Name            Type                             Returned by get_volumes()     Drive
+         *     /              Root file system                 No
+         *     /dev/sda3      My unmounted Windows NTFS C:     Yes                           Points to the SSD
+         *     name@sld.tld   My OwnCloud "online account"     Yes                           No
+         *     Windows shares                                  No, not even when mounted in Nautilus
+         */
+        d.Log(MOUNTS, "Getting volumes");
         std::list<Glib::RefPtr<Gio::Volume>> llVolumes = pVolm->get_volumes();
         for (auto pVolume : llVolumes)
         {
-            Debug::Log(MOUNTS, "Volume: " + pVolume->get_name());
+            Glib::ustring strDrive;
+            Glib::RefPtr<Gio::Drive> pDrive = pVolume->get_drive();
+            if (pDrive)
+                strDrive = pDrive->get_name();
+
+            Debug::Log(MOUNTS, "Volume: " + pVolume->get_name() + ", drive name: " + quote(strDrive));
+
+            // This returns nullptr if the volume is not mounted.
             auto pMount = pVolume->get_mount();
             if (pMount)
             {
-                Debug::Log(MOUNTS, "  Mount: " + pMount->get_name());
+                string strMountedAt;
                 auto pGioFile = pMount->get_root();
                 if (pGioFile)
                 {
-                    Debug::Log(MOUNTS, "  => file: " + pGioFile->get_path());
+                    strMountedAt = pGioFile->get_path();
+
+                    llMountables.push_back(Create(strMountedAt));
                 }
+
+                Debug::Log(MOUNTS, "  Mount: " + quote(pMount->get_name()) + " mounted at: " + quote(strMountedAt));
             }
         }
     }

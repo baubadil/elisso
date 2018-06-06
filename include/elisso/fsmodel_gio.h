@@ -33,6 +33,9 @@ typedef std::shared_ptr<FsGioSpecial> PFsGioSpecial;
 class FsGioMountable;
 typedef std::shared_ptr<FsGioMountable> PFsGioMountable;
 
+typedef std::vector<PFsGioMountable> FsGioMountablesVector;
+typedef std::shared_ptr<FsGioMountablesVector> PFsGioMountablesVector;
+
 class CurrentDirectory;
 typedef std::shared_ptr<CurrentDirectory> PCurrentDirectory;
 
@@ -317,8 +320,7 @@ public:
      *************************************/
 
 public:
-    static void GetMountables();
-
+    static void GetMountables(FsGioMountablesVector &llMountables);
 };
 
 

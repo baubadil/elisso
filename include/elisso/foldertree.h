@@ -97,8 +97,11 @@ private:
 
     /**
      *  Spawns a thread to add or refresh mounts (volumes) to the tree view.
+     *  Gets called by the constructor.
      */
-    void spawnAddMounts();
+    void spawnGetMountables();
+
+    void onGetMountablesDone();
 
     /**
      *  Returns the currently selected folder (or symlink to one) from the
