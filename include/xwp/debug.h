@@ -59,6 +59,7 @@ const DebugFlag FOLDER_POPULATE_HIGH    = (1 << 21);
 const DebugFlag FOLDER_POPULATE_LOW     = (1 << 22);
 const DebugFlag FILEMONITORS            = (1 << 23);
 const DebugFlag CMD_ARGS        = (1 << 24);
+const DebugFlag FOLDER_INSERT   = (1 << 25);
 
 // #define DFL(a) (a)
 // const DebugFlag g_dflLevel1 =   DFL(CMD_TOP);

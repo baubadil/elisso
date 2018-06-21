@@ -61,7 +61,7 @@ public:
     FolderContentsModelColumns()
     {
         add(_colFilename);
-        add(_colType);
+        add(_colTypeResolved);
         add(_colFIsDirectoryOrSymlinkToDirectory);
         add(_colSize);
         add(_colIconSmall);
@@ -70,7 +70,7 @@ public:
     }
 
     Gtk::TreeModelColumn<Glib::ustring>     _colFilename;
-    Gtk::TreeModelColumn<FSType>            _colType;
+    Gtk::TreeModelColumn<FSTypeResolved>    _colTypeResolved;
     Gtk::TreeModelColumn<bool>              _colFIsDirectoryOrSymlinkToDirectory;
     Gtk::TreeModelColumn<u_int64_t>         _colSize;
     Gtk::TreeModelColumn<PPixbuf>           _colIconSmall;
@@ -378,6 +378,7 @@ ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
         _pImpl->pPopulateThread = PopulateThread::Create(this->_pDir,
                                                          this->_pImpl->pWorkerPopulated,
                                                          fl.test(SetDirectoryFlag::CLICK_FROM_TREE),
+                                                         true /* fFollowSymlinklinks */,
                                                          pDirSelectPrevious);
         _pImpl->idCurrentPopulateThread = _pImpl->pPopulateThread->getID();
 
@@ -429,7 +430,7 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
         ;
     else
     {
-        Debug d(FOLDER_POPULATE_LOW, "ElissoFolderView::onPopulateDone(\"" + _pDir->getPath() + "\", id=" + to_string(pResult->idPopulateThread) + ")");
+        Debug d(FOLDER_POPULATE_LOW, "ElissoFolderView::onPopulateDone(" + quote(_pDir->getPath()) + ", id=" + to_string(pResult->idPopulateThread) + ")");
 
         Gtk::ListStore::iterator itSelect;
 
@@ -439,6 +440,11 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
 
         // This sets the wait cursor.
         this->setState(ViewState::INSERTING);
+
+        // Disable the monitor if there is one already.
+        auto pOther = _pImpl->pMonitor->isWatching();
+        if (pOther)
+            _pImpl->pMonitor->stopWatching(*pOther);
 
         // Reset the thumbnailer count for the progress bar. insertFile() increments it for each image file.
         _pImpl->cToThumbnail = 0;
@@ -542,9 +548,6 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
         if (pCnr)
         {
             // Make sure we have a monitor.
-            auto pOther = _pImpl->pMonitor->isWatching();
-            if (pOther)
-                _pImpl->pMonitor->stopWatching(*pOther);
             _pImpl->pMonitor->startWatching(*pCnr);
 
             // Notify this and other monitors (tree view) of the items that have been removed
@@ -571,7 +574,7 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
 
                 _mainWindow.setThumbnailerProgress(_pImpl->cThumbnailed, _pImpl->cToThumbnail, ShowHideOrNothing::DO_NOTHING);
                 return true; // keep going
-            }, 300);
+            }, 100);
         }
     }
 }
@@ -579,6 +582,7 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
 PFSModelBase
 ElissoFolderView::getFileFromRow(Gtk::TreeModel::Row &row)
 {
+    Debug d(DEBUG_ALWAYS, __func__);
     const FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
     const Glib::ustring &str = row[cols._colFilename];
 
@@ -597,7 +601,8 @@ ElissoFolderView::getFileFromRow(Gtk::TreeModel::Row &row)
 Gtk::ListStore::iterator
 ElissoFolderView::insertFile(PFSModelBase pFS)
 {
-    Debug d(FOLDER_POPULATE_LOW, "ElissoFolderView::insertFile(" + quote(pFS->getPath()) + ")");
+    const std::string &strBasename = pFS->getBasename();
+// //     Debug d(FOLDER_INSERT, "ElissoFolderView::insertFile(" + quote(strBasename) + ")");
 
     Gtk::ListStore::iterator it;
 
@@ -608,44 +613,43 @@ ElissoFolderView::insertFile(PFSModelBase pFS)
         it = _pImpl->pListStore->append();
         auto row = *it;
 
+        // This call can block so cache it.
+        FSTypeResolved tr;
+
         // basename must always be set first because the sort function relies on it;
         // the sort function gets triggered AS SOON AS cols._colFilename is set.
-        const std::string &strBasename = pFS->getBasename();
-        row[cols._colFIsDirectoryOrSymlinkToDirectory] = pFS->isDirectoryOrSymlinkToDirectory();
-        row[cols._colType] = pFS->getType();
+        row[cols._colFIsDirectoryOrSymlinkToDirectory] = pFS->isDirectoryOrSymlinkToDirectory(tr);
+        row[cols._colTypeResolved] = tr;
         row[cols._colFilename] = strBasename;
         row[cols._colSize] = pFS->getFileSize();
         bool fThumbnailing = false;
-        row[cols._colIconSmall] = loadIcon(it, pFS, ICON_SIZE_SMALL, &fThumbnailing);
-        row[cols._colIconBig] = loadIcon(it, pFS, ICON_SIZE_BIG, nullptr);
+        row[cols._colIconSmall] = loadIcon(pFS, tr, ICON_SIZE_SMALL, &fThumbnailing);
+        row[cols._colIconBig] = loadIcon(pFS, tr, ICON_SIZE_BIG, nullptr);
 
         if (fThumbnailing)
             ++_pImpl->cToThumbnail;
 
-        auto t = pFS->getResolvedType();
-//                 row[cols._colTypeResolved] = t;
-
         std::string strType = "Error";
         const std::string *pstrType = &strType;
-        switch (t)
+        switch (tr)
         {
             case FSTypeResolved::FILE:
             case FSTypeResolved::SYMLINK_TO_FILE:
             {
-                const ContentType *pType = nullptr;
-                PFsGioFile pFile = g_pFsGioImpl->getFile(pFS);
+                const ContentType *pContentType = nullptr;
+                PFsGioFile pFile = g_pFsGioImpl->getFile(pFS, tr);
                 if (pFile)
-                    pType = ContentType::Guess(pFile);
+                    pContentType = ContentType::Guess(pFile);
 
-                if (pType)
+                if (pContentType)
                 {
-                    if (t == FSTypeResolved::SYMLINK_TO_FILE)
-                        strType = TYPE_LINK_TO + pType->getDescription();
+                    if (tr == FSTypeResolved::SYMLINK_TO_FILE)
+                        strType = TYPE_LINK_TO + pContentType->getDescription();
                     else
-                        strType = pType->getDescription();
+                        strType = pContentType->getDescription();
                 }
                 else
-                    pstrType = (t == FSTypeResolved::SYMLINK_TO_FILE) ? &TYPE_LINK_TO_FILE : &TYPE_FILE;
+                    pstrType = (tr == FSTypeResolved::SYMLINK_TO_FILE) ? &TYPE_LINK_TO_FILE : &TYPE_FILE;
             }
             break;
 
@@ -1017,7 +1021,7 @@ ElissoFolderView::updateStatusbar(FileSelection *pSel)
         {
             str = formatNumber(_pImpl->cTotal) + " items in folder";
             uint64_t z = 0;
-            FSVector *pList = nullptr;
+            FSVector *pllSelected = nullptr;
 
             if (pSel && pSel->vAll.size())
             {
@@ -1027,17 +1031,18 @@ ElissoFolderView::updateStatusbar(FileSelection *pSel)
                     str += ", " + formatNumber(pSel->vAll.size()) + " selected";
 
                 if (pSel->vOthers.size())
-                    pList = &pSel->vOthers;
+                    pllSelected = &pSel->vOthers;
             }
             else if (_pImpl->pllFolderContents)
-                pList = &(*_pImpl->pllFolderContents);
+                pllSelected = &(*_pImpl->pllFolderContents);
 
-            if (pList)
+            if (pllSelected)
             {
                 PFSFile pFile;
-                for (auto &pFS : *pList)
+                for (auto &pFS : *pllSelected)
                 {
-                    if ((pFile = g_pFsGioImpl->getFile(pFS)))
+                    auto t = pFS->getResolvedType();
+                    if ((pFile = g_pFsGioImpl->getFile(pFS, t)))
                         z += pFile->getFileSize();
                 }
                 str += " (" + formatBytes(z) + ")";
@@ -1128,7 +1133,8 @@ ElissoFolderView::getSelection(FileSelection &sel)
                 if (pFS)
                 {
                     sel.vAll.push_back(pFS);
-                    if (pFS->isDirectoryOrSymlinkToDirectory())
+                    FSTypeResolved t;
+                    if (pFS->isDirectoryOrSymlinkToDirectory(t))
                         sel.vFolders.push_back(pFS);
                     else
                         sel.vOthers.push_back(pFS);
@@ -1623,15 +1629,15 @@ ElissoFolderView::connectModel(bool fConnect)
  *  thumbnail is done.
  */
 PPixbuf
-ElissoFolderView::loadIcon(const Gtk::TreeModel::iterator& it,
-                           PFSModelBase pFS,
+ElissoFolderView::loadIcon(PFSModelBase pFS,
+                           FSTypeResolved tr,
                            int size,
                            bool *pfThumbnailing)
 {
     Glib::RefPtr<Gdk::Pixbuf> pReturn;
 
     // If this is a file for which we have previously set a thumbnail, then we're done.
-    PFsGioFile pFile = g_pFsGioImpl->getFile(pFS);
+    PFsGioFile pFile = g_pFsGioImpl->getFile(pFS, tr);
     if (pFile)
         pReturn = pFile->getThumbnail(size);
 
@@ -1906,7 +1912,10 @@ ElissoFolderView::setListViewColumns()
         {
             Glib::ustring str;
             Gtk::TreeModel::Row row = *it;
-            if (row[cols._colType] == FSType::FILE)
+            FSTypeResolved t = row[cols._colTypeResolved];
+            if (    (t == FSTypeResolved::FILE)
+                 || (t == FSTypeResolved::SYMLINK_TO_FILE)
+               )
             {
                 str = formatBytes(row[cols._colSize]);
                 (static_cast<Gtk::CellRendererText*>(pRend))->property_xalign() = 1.0;

@@ -12,9 +12,13 @@
 #include "xwp/debug.h"
 
 #include <cassert>
+#include <string>
+#include <string.h>
 
 namespace XWP
 {
+
+const std::string g_strColon(": ");
 
 FSException::FSException(const std::string &str)
     : _str(str)
@@ -30,4 +34,12 @@ FSException::what() const throw()
     return _str.c_str();
 }
 
+ErrnoException::ErrnoException(const std::string &context)
+    : FSException(context + g_strColon)
+{
+    char szTemp[200];
+    this->_str += strerror_r(errno, szTemp, sizeof(szTemp));
 }
+
+}
+

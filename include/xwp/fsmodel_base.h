@@ -390,9 +390,10 @@ public:
      *  Returns true if this is a directory or a symlink to one. Can cause I/O if this
      *  is a symlink as this calls the virtual getResolvedType() method.
      */
-    bool isDirectoryOrSymlinkToDirectory()
+    bool isDirectoryOrSymlinkToDirectory(FSTypeResolved &t)
     {
-        return (_type == FSType::DIRECTORY) || (getResolvedType() == FSTypeResolved::SYMLINK_TO_DIRECTORY);
+        t = getResolvedType();
+        return (t == FSTypeResolved::DIRECTORY) || (t == FSTypeResolved::SYMLINK_TO_DIRECTORY);
     }
 
     /**
@@ -746,7 +747,8 @@ public:
                        Get getContents,
                        FSVector *pvFilesAdded,
                        FSVector *pvFilesRemoved,
-                       StopFlag *pStopFlag);
+                       StopFlag *pStopFlag,
+                       bool fFollowSymlinks = false);       //!< in: whether to call follow() on each symlink
 
     /**
      *  Creates a new physical directory in this container (physical directory or symlink

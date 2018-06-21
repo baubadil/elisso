@@ -83,7 +83,7 @@ public:
 
     Glib::ustring getIcon(FSModelBase &fs);
 
-    PFsGioFile getFile(PFSModelBase pFS);
+    PFsGioFile getFile(PFSModelBase pFS, FSTypeResolved t);
 
     static void Init();
 };

@@ -277,6 +277,9 @@ private:
     /**
      *  Gets called when the populate thread within setDirectory() has finished. We must now
      *  inspect the PopulateThread in the implementation struct for the results.
+     *
+     *  This also calls selectInFolderTree(), which causes the folder tree to follow the
+     *  newly selected folder and populate sub-folders, if necessary.
      */
     void onPopulateDone(PViewPopulatedResult p);
 
@@ -293,8 +296,8 @@ private:
 
     void setNotebookTabTitle();
 
-    PPixbuf loadIcon(const Gtk::TreeModel::iterator& it,
-                     PFSModelBase pFS,
+    PPixbuf loadIcon(PFSModelBase pFS,
+                     FSTypeResolved tr,
                      int size,
                      bool *pfThumbnailing);
     void onThumbnailReady();

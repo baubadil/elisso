@@ -80,6 +80,7 @@ public:
     static PPopulateThread Create(PFSModelBase &pDir,
                                   PViewPopulatedWorker pWorkerResult,
                                   bool fClickFromTree,
+                                  bool fFollowSymlinks,
                                   PFSModelBase pDirSelectPrevious);
 
     /**
@@ -108,7 +109,9 @@ private:
                    PViewPopulatedWorker pWorkerResult,
                    PFSModelBase pDirSelectPrevious);
 
-    void threadFunc(uint idPopulateThread, bool fClickFromTree);
+    void threadFunc(uint idPopulateThread,
+                    bool fClickFromTree,
+                    bool fFollowSymlinks);
 
     uint                _id;
     PFSModelBase        _pDir;

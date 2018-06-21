@@ -453,13 +453,13 @@ FsGioImpl::getIcon(FSModelBase &fs)
 }
 
 PFsGioFile
-FsGioImpl::getFile(PFSModelBase pFS)
+FsGioImpl::getFile(PFSModelBase pFS, FSTypeResolved t)
 {
     if (pFS)
     {
-        if (pFS->getType() == FSType::FILE)
+        if (t == FSTypeResolved::FILE)
             return static_pointer_cast<FsGioFile>(pFS);
-        if (pFS->getResolvedType() == FSTypeResolved::SYMLINK_TO_FILE)
+        if (t == FSTypeResolved::SYMLINK_TO_FILE)
             return static_pointer_cast<FsGioFile>((static_cast<FSSymlink*>(&*pFS))->getTarget());
     }
 

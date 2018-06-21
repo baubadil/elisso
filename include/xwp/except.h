@@ -27,12 +27,13 @@ namespace XWP
 
 class FSException : public exception
 {
+protected:
     string _str;
 public:
     FSException(const std::string &str);
     FSException(const char *pcsz)
         : FSException(std::string(pcsz)) {}
-    ~FSException() {};
+    virtual ~FSException() {};
     virtual const char* what() const throw();
 };
 
@@ -41,6 +42,22 @@ class FSCancelledException : public FSException
 public:
     FSCancelledException() : FSException("Cancelled")
     { };
+};
+
+
+/***************************************************************************
+ *
+ *  ErrnoException
+ *
+ **************************************************************************/
+
+/**
+ *  A subclass of FSException that adds an errno message.
+ */
+class ErrnoException : public FSException
+{
+public:
+    ErrnoException(const std::string &context);
 };
 
 } // namespace XWP

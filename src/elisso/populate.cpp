@@ -37,6 +37,7 @@ PPopulateThread
 PopulateThread::Create(PFSModelBase &pDir,               //!< in: directory or symlink to directory to populate
                        PViewPopulatedWorker pWorkerResult,
                        bool fClickFromTree,              //!< in: stored in instance data for dispatcher handler
+                       bool fFollowSymlinks,             //!< in: whether to call follow() on each symlink in the thread
                        PFSModelBase pDirSelectPrevious)  //!< in: if set, select this item after populating
 {
     /* This nasty trickery is necessary to make std::make_shared work with a protected constructor. */
@@ -51,12 +52,14 @@ PopulateThread::Create(PFSModelBase &pDir,               //!< in: directory or s
 
     // We capture the shared_ptr "p" without &, meaning we create a copy, which increases the refcount
     // while the thread is running.
-    XWP::Thread::Create([p, fClickFromTree]()
+    XWP::Thread::Create([p, fClickFromTree, fFollowSymlinks]()
     {
         /*
          *  Thread function!
          */
-        p->threadFunc(p->_id, fClickFromTree);
+        p->threadFunc(p->_id,
+                      fClickFromTree,
+                      fFollowSymlinks);
     });
 
     return p;
@@ -77,7 +80,8 @@ PopulateThread::PopulateThread(PFSModelBase &pDir,
 
 void
 PopulateThread::threadFunc(uint idPopulateThread,
-                           bool fClickFromTree)
+                           bool fClickFromTree,
+                           bool fFollowSymlinks)
 {
     PViewPopulatedResult pResult = std::make_shared<ViewPopulatedResult>(idPopulateThread,
                                                                          fClickFromTree,
@@ -90,7 +94,8 @@ PopulateThread::threadFunc(uint idPopulateThread,
                               FSDirectory::Get::ALL,
                               &pResult->vAdded,
                               &pResult->vRemoved,
-                              &_stopFlag);
+                              &_stopFlag,
+                              fFollowSymlinks);
     }
     catch (exception &e)
     {

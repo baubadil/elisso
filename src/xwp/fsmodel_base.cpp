@@ -598,7 +598,8 @@ FSContainer::getContents(FSVector &vFiles,
                          Get getContents,
                          FSVector *pvFilesAdded,
                          FSVector *pvFilesRemoved,        //!< out: list of file-system object that have been removed, or nullptr (optional)
-                         StopFlag *pStopFlag)
+                         StopFlag *pStopFlag,
+                         bool fFollowSymlinks /* = false */)
 {
     Debug d(FILE_HIGH, "FSContainer::getContents(\"" + _refBase.getPath() + "\")");
 
@@ -676,8 +677,8 @@ FSContainer::getContents(FSVector &vFiles,
                      && (pAwake->getType() == pTemp->getType())
                    )
                 {
+                    // Cached item valid: clear the dirty flag.
                     FSLock lock2Temp;
-                    // Clear the dirty flag.
                     pAwake->_fl.clear(FSFlag::DIRTY);
                 }
                 else
@@ -690,6 +691,8 @@ FSContainer::getContents(FSVector &vFiles,
                         if (pvFilesRemoved)
                             pvFilesRemoved->push_back(pAwake);
                         _pImpl->removeImpl(cLock, it);
+
+                        pAwake = nullptr;
                     }
 
                     auto t = pTemp->getType();
@@ -727,6 +730,11 @@ FSContainer::getContents(FSVector &vFiles,
                         if (pvFilesAdded)
                             pvFilesAdded->push_back(pAddToContents);
 
+                        FSTypeResolved tr;
+
+                        if (t == FSType::SYMLINK)
+                            if (fFollowSymlinks)
+                                tr = pAddToContents->getResolvedType();   // This calls follow() and we don't have to typecast here.
 
                         if (    (getContents == Get::FIRST_FOLDER_ONLY)
                              && (!pAddToContents->isHidden())
@@ -734,10 +742,14 @@ FSContainer::getContents(FSVector &vFiles,
                         {
                             if (t == FSType::DIRECTORY)
                                 break;      // we're done
-                            else if (    (t == FSType::SYMLINK)
-                                      && (pAddToContents->getResolvedType() == FSTypeResolved::SYMLINK_TO_DIRECTORY)
-                                    )
-                                break;
+                            else if (t == FSType::SYMLINK)
+                            {
+                                if (!fFollowSymlinks)
+                                    // Not yet followed above:
+                                    tr = pAddToContents->getResolvedType();
+                                if (tr == FSTypeResolved::SYMLINK_TO_DIRECTORY)
+                                    break;
+                            }
                         }
                     }
                 }
@@ -924,7 +936,7 @@ PFSDirectory FSDirectory::GetCwdOrThrow()
 FSTypeResolved
 FSSymlink::getResolvedType() /* override */
 {
-    Debug::Log(FILE_LOW, "Symlink::getResolvedTypeImpl()");
+//     Debug::Log(FILE_LOW, "FSSymlink::getResolvedType()");
 
     auto state = follow();
 
@@ -976,8 +988,6 @@ condition_variable_any g_condSymlinkResolved;
 FSSymlink::State
 FSSymlink::follow()
 {
-    Debug d(FILE_LOW, "FSSymlink::follow(\"" + getPath() + "\"");
-
     // Make sure that only one thread resolves this link at a time. We
     // set the link's state to State::RESOLVING below while we're following,
     // so if the link's state is State::RESOLVING now, it means another
@@ -994,6 +1004,8 @@ FSSymlink::follow()
 
     if (_state == State::NOT_FOLLOWED_YET)
     {
+        Debug d(FILE_MID, "FSSymlink::follow(" + quote(getPath()) + "): not followed yet, resolving");
+
         if (!_pParent)
             throw FSException("symlink with no parent no good");
 

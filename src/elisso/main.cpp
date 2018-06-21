@@ -258,7 +258,8 @@ ElissoApplication::on_open(const type_vec_files &files,
         {
             Debug::Log(CMD_TOP, std::string(__FUNCTION__) + ": handling " + strPath);
             auto pDir = FSModelBase::FindPath(strPath);
-            if (!pDir->isDirectoryOrSymlinkToDirectory())
+            FSTypeResolved t;
+            if (!pDir->isDirectoryOrSymlinkToDirectory(t))
                 throw FSException(quote(strPath) + " is not a directory");
             pWindow->addFolderTab(pDir);
         }
@@ -283,12 +284,13 @@ main(int argc, char *argv[])
 {
     g_flDebugSet =  0
                   | CMD_TOP
-//                   | FOLDER_POPULATE_HIGH
-//                   | FOLDER_POPULATE_LOW
+                  | FOLDER_POPULATE_HIGH
+                  | FOLDER_POPULATE_LOW
 //                   | FSEXCEPTION
-//                   | FILE_LOW
-//                   | FILE_MID
-//                   | FILE_HIGH
+                  | FOLDER_INSERT
+                  | FILE_LOW
+                  | FILE_MID
+                  | FILE_HIGH
 //                   | THUMBNAILER
 // //                   | XICONVIEW
 //                   | WINDOWHIERARCHY
@@ -297,7 +299,7 @@ main(int argc, char *argv[])
 //                   | CLIPBOARD
 //                   | PROGRESSDIALOG
 //                   | TREEMODEL
-                   | MOUNTS
+//                    | MOUNTS
                   ;
 
     FsGioImpl::Init();

@@ -549,7 +549,8 @@ ElissoApplicationWindow::onMouseButton3Pressed(GdkEventButton *pEvent,
                     PFSModelBase pFS = sel.vOthers.front();
                     if (pFS)
                     {
-                        PFsGioFile pFile = g_pFsGioImpl->getFile(pFS);
+                        auto t = pFS->getResolvedType();
+                        PFsGioFile pFile = g_pFsGioImpl->getFile(pFS, t);
                         if (pFile)
                         {
                             auto pContentType = ContentType::Guess(pFile);
@@ -678,7 +679,8 @@ ElissoApplicationWindow::openFile(PFSModelBase pFS,        //!< in: file or fold
         case FSTypeResolved::FILE:
         case FSTypeResolved::SYMLINK_TO_FILE:
         {
-            PFsGioFile pFile = g_pFsGioImpl->getFile(pFS);
+            auto t = pFS->getResolvedType();
+            PFsGioFile pFile = g_pFsGioImpl->getFile(pFS, t);
             if (pFile)
             {
                 PAppInfo pAppInfo2(pAppInfo);
