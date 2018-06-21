@@ -309,46 +309,53 @@ Thumbnailer::fileReaderThread()
     PThumbnail pThumbnailIn;
     while(1)
     {
-        // Block until someone has queued a file.
-        if (!(pThumbnailIn = _pImpl->qFileReader_.fetch()))
-            // NULL means terminate thread.
-            break;
-
-        using namespace std::chrono;
-        steady_clock::time_point t1 = steady_clock::now();
-
-        if (pThumbnailIn->pFormat)
+        try
         {
-            std::shared_ptr<FileContents> pFileContents = make_shared<FileContents>(g_pFsGioImpl->getGioFile(*pThumbnailIn->pFile));
+            // Block until someone has queued a file.
+            if (!(pThumbnailIn = _pImpl->qFileReader_.fetch()))
+                // NULL means terminate thread.
+                break;
 
-            auto pThumbnailTemp = make_shared<ThumbnailTemp>(pThumbnailIn,
-                                                             pFileContents);
+            using namespace std::chrono;
+            steady_clock::time_point t1 = steady_clock::now();
 
-            milliseconds time_span = duration_cast<milliseconds>(steady_clock::now() - t1);
-            Debug::Log(THUMBNAILER, string(__func__) + ": reading file \"" + pThumbnailIn->pFile->getBasename() + "\" took " + to_string(time_span.count()) + "ms");
-
-            // Find the queue that's least busy. There is a race between
-            // our size() query and the post() call later, but it's still
-            // a good indicator which of the threads to bother.
-            size_t uLeastBusyThread = 0;
-            size_t uLeastBusyQueueSize = 99999999;
-            for (uint u = 0;
-                 u < _pImpl->cPixbufLoaders;
-                 ++u)
+            if (pThumbnailIn->pFormat)
             {
-                size_t sz = _pImpl->paqPixbufLoaders[u].size();
-                if (sz < uLeastBusyQueueSize)
+                std::shared_ptr<FileContents> pFileContents = make_shared<FileContents>(g_pFsGioImpl->getGioFile(*pThumbnailIn->pFile));
+
+                auto pThumbnailTemp = make_shared<ThumbnailTemp>(pThumbnailIn,
+                                                                 pFileContents);
+
+                milliseconds time_span = duration_cast<milliseconds>(steady_clock::now() - t1);
+                Debug::Log(THUMBNAILER, string(__func__) + ": reading file \"" + pThumbnailIn->pFile->getBasename() + "\" took " + to_string(time_span.count()) + "ms");
+
+                // Find the queue that's least busy. There is a race between
+                // our size() query and the post() call later, but it's still
+                // a good indicator which of the threads to bother.
+                size_t uLeastBusyThread = 0;
+                size_t uLeastBusyQueueSize = 99999999;
+                for (uint u = 0;
+                     u < _pImpl->cPixbufLoaders;
+                     ++u)
                 {
-                    uLeastBusyThread = u;
-                    uLeastBusyQueueSize = sz;
+                    size_t sz = _pImpl->paqPixbufLoaders[u].size();
+                    if (sz < uLeastBusyQueueSize)
+                    {
+                        uLeastBusyThread = u;
+                        uLeastBusyQueueSize = sz;
+                    }
                 }
+
+                Debug::Log(THUMBNAILER, string(__func__) + ": queue " + to_string(uLeastBusyThread) + " is least busy (" + to_string(uLeastBusyQueueSize) + "), queueing there");
+                _pImpl->paqPixbufLoaders[uLeastBusyThread].post(pThumbnailTemp);
+
+    //                 ppb = Gdk::Pixbuf::create_from_file(strPath);
+
             }
-
-            Debug::Log(THUMBNAILER, string(__func__) + ": queue " + to_string(uLeastBusyThread) + " is least busy (" + to_string(uLeastBusyQueueSize) + "), queueing there");
-            _pImpl->paqPixbufLoaders[uLeastBusyThread].post(pThumbnailTemp);
-
-//                 ppb = Gdk::Pixbuf::create_from_file(strPath);
-
+        }
+        catch (exception &e)
+        {
+            Debug::Log(CMD_TOP, string("Exception in Thumbnailer::fileReaderThread(): ") + e.what());
         }
     }
 }
