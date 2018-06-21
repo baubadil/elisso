@@ -453,38 +453,46 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
         // If we're refreshing, we only insert newly added files to avoid duplicates.
         FSVector &vFiles = (fRefreshing) ? pResult->vAdded : *_pImpl->pllFolderContents;
 
-        /*
-         *  Insert all the files and collect some statistics.
-         */
-        for (auto &pFS : vFiles)
         {
-            auto it = this->insertFile(pFS);
-            if (it)
+            // auto pModel = _treeView.get_model();
+            // Tested, at this point the model is NOT set. So that's not why it's slow.
+
+            Debug d2(FOLDER_POPULATE_LOW, "Inserting files");
+
+            /*
+             *  Insert all the files and collect some statistics.
+             */
+            for (auto &pFS : vFiles)
             {
-                ++_pImpl->cTotal;
-
-                if (pFS == pResult->pDirSelectPrevious)
-                    itSelect = it;
-
-                switch (pFS->getResolvedType())
+                auto it = this->insertFile(pFS);
+                if (it)
                 {
-                    case FSTypeResolved::DIRECTORY:
-                    case FSTypeResolved::SYMLINK_TO_DIRECTORY:
-                        ++_pImpl->cFolders;
-                    break;
+                    ++_pImpl->cTotal;
 
-                    case FSTypeResolved::FILE:
-                    case FSTypeResolved::SYMLINK_TO_FILE:
-                        ++_pImpl->cFiles;
-                        if (_pImpl->thumbnailer.isImageFile(pFS))
-                            ++_pImpl->cImageFiles;
-                    break;
+                    if (pFS == pResult->pDirSelectPrevious)
+                        itSelect = it;
 
-                    default:
+                    switch (pFS->getResolvedType())
+                    {
+                        case FSTypeResolved::DIRECTORY:
+                        case FSTypeResolved::SYMLINK_TO_DIRECTORY:
+                            ++_pImpl->cFolders;
+                        break;
 
-                    break;
+                        case FSTypeResolved::FILE:
+                        case FSTypeResolved::SYMLINK_TO_FILE:
+                            ++_pImpl->cFiles;
+                            if (_pImpl->thumbnailer.isImageFile(pFS))
+                                ++_pImpl->cImageFiles;
+                        break;
+
+                        default:
+
+                        break;
+                    }
                 }
             }
+
         }
 
         if (!fRefreshing)
@@ -1614,6 +1622,30 @@ ElissoFolderView::connectModel(bool fConnect)
     }
 }
 
+PPixbuf
+ElissoFolderView::loadIconImpl(PFSModelBase pFS, int size)
+{
+    PPixbuf p;
+
+    Glib::ustring strIcons = g_pFsGioImpl->getIcon(*pFS);
+
+    std::vector<Glib::ustring> sv;
+    ForEachUString( strIcons,
+                    " ",
+                    [&sv](const Glib::ustring &strParticle)
+                    {
+                        if (!strParticle.empty())
+                            sv.push_back(strParticle);
+
+                    });
+
+    Gtk::IconInfo i = _pImpl->pIconTheme->choose_icon(sv, size, Gtk::IconLookupFlags::ICON_LOOKUP_FORCE_SIZE);
+    if (i)
+        p = i.load_icon();
+
+    return p;
+}
+
 /**
  *  Part of the lazy-loading implementation.
  *
@@ -1636,6 +1668,18 @@ ElissoFolderView::loadIcon(PFSModelBase pFS,
 {
     Glib::RefPtr<Gdk::Pixbuf> pReturn;
 
+    if (    (tr == FSTypeResolved::DIRECTORY)
+         || (tr == FSTypeResolved::SYMLINK_TO_DIRECTORY)
+       )
+    {
+        static std::map<int, Glib::RefPtr<Gdk::Pixbuf>> mapSharedFolderIcons;
+        if (!STL_EXISTS(mapSharedFolderIcons, size))
+            // first call for this size:
+            mapSharedFolderIcons[size] = loadIconImpl(pFS, size);
+
+        pReturn = mapSharedFolderIcons[size];
+    }
+
     // If this is a file for which we have previously set a thumbnail, then we're done.
     PFsGioFile pFile = g_pFsGioImpl->getFile(pFS, tr);
     if (pFile)
@@ -1644,21 +1688,7 @@ ElissoFolderView::loadIcon(PFSModelBase pFS,
     // Not a file, or no thumbnail yet, then load default icon first.
     if (!pReturn)
     {
-        Glib::ustring strIcons = g_pFsGioImpl->getIcon(*pFS);
-
-        std::vector<Glib::ustring> sv;
-        ForEachUString( strIcons,
-                        " ",
-                        [&sv](const Glib::ustring &strParticle)
-                        {
-                            if (!strParticle.empty())
-                                sv.push_back(strParticle);
-
-                        });
-
-        Gtk::IconInfo i = _pImpl->pIconTheme->choose_icon(sv, size, Gtk::IconLookupFlags::ICON_LOOKUP_FORCE_SIZE);
-        if (i)
-            pReturn = i.load_icon();
+        pReturn = loadIconImpl(pFS, size);
 
         // Again, if it's a file, and if it can be thumbnailed, then give it to
         // the thumbnailer to process in the background. This will create both sizes.

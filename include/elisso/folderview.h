@@ -296,6 +296,7 @@ private:
 
     void setNotebookTabTitle();
 
+    PPixbuf loadIconImpl(PFSModelBase pFS, int size);
     PPixbuf loadIcon(PFSModelBase pFS,
                      FSTypeResolved tr,
                      int size,
