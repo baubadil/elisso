@@ -359,6 +359,11 @@ public:
         return _strBasename;
     }
 
+    uint64_t getId() const
+    {
+        return _uID;
+    }
+
     uint64_t getFileSize() const
     {
         return _cbSize;
@@ -956,8 +961,8 @@ public:
     virtual FSTypeResolved getResolvedType() override;
 
     /**
-     *  Returns the symlink target, or nullptr if the symlink is broken. This is not const
-     *  as the target may need to be resolved on the first call.
+     *  Returns the symlink target, or nullptr if the symlink is broken.
+     *  This cannot be const as the target may need to be resolved on the first call.
      */
     PFSModelBase getTarget();
 
@@ -981,10 +986,11 @@ protected:
 
     State           _state;
     PFSModelBase    _pTarget;
+    Mutex           _mutexState;
 
     /**
      *  Atomically resolves the symlink and caches the result. This may need to
-     *  to blocking disk I/O and may therefore not be quick.
+     *  do blocking disk I/O and may therefore not be quick.
      */
     State follow();
 };

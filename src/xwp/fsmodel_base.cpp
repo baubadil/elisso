@@ -57,7 +57,8 @@ typedef list<PFSMonitorBase> FSMonitorsList;
 
 struct FSContainer::Impl
 {
-    Mutex           contentsMutex;
+    Mutex           mutexContents;
+    Mutex           mutexFind;
     FilesMap        mapContents;
     FSMonitorsList  llMonitors;
 
@@ -100,10 +101,10 @@ struct FSContainer::Impl
  *
  **************************************************************************/
 
-Mutex g_mutexFiles;
+Mutex g_mutexFiles2;
 
 FSLock::FSLock()
-    : Lock(g_mutexFiles)
+    : Lock(g_mutexFiles2)
 { }
 
 
@@ -137,7 +138,7 @@ class ContentsLock : public XWP::Lock
 {
 public:
     ContentsLock(FSContainer& cnr)
-        : Lock(cnr._pImpl->contentsMutex)
+        : Lock(cnr._pImpl->mutexContents)
     { }
 };
 
@@ -613,7 +614,7 @@ FSContainer::getContents(FSVector &vFiles,
 
         // If this container is being populated on another thread, block on the global
         // condition variable until the other thread posts it (when populate is done).
-        unique_lock<recursive_mutex> lock(g_mutexFiles);
+        unique_lock<recursive_mutex> lock(_pImpl->mutexFind);
         while (_refBase._fl.test(FSFlag::POPULATING))
             g_condFolderPopulated.wait(lock);
         // Lock is held again now. Folder state is now guaranteed to not be POPULATING
@@ -994,7 +995,7 @@ FSSymlink::follow()
     // thread is already in the process of resolving this link. In that
     // case, block on a condition variable which will get posted by the
     // other thread.
-    unique_lock<recursive_mutex> lock(g_mutexFiles);
+    unique_lock<recursive_mutex> lock(_mutexState);
     while (_state == State::RESOLVING)
         g_condSymlinkResolved.wait(lock);
 
