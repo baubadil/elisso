@@ -17,6 +17,8 @@
 #include "xwp/except.h"
 #include "xwp/exec.h"
 
+#include <malloc.h>
+
 
 Glib::ustring implode(const std::string &strGlue, const std::vector<Glib::ustring> v)
 {
@@ -285,12 +287,12 @@ main(int argc, char *argv[])
     g_flDebugSet =  0
                   | CMD_TOP
                   | FOLDER_POPULATE_HIGH
-                  | FOLDER_POPULATE_LOW
+//                   | FOLDER_POPULATE_LOW
 //                   | FSEXCEPTION
-                  | FOLDER_INSERT
-                  | FILE_LOW
-                  | FILE_MID
-                  | FILE_HIGH
+//                   | FOLDER_INSERT
+//                   | FILE_LOW
+//                   | FILE_MID
+//                   | FILE_HIGH
 //                   | THUMBNAILER
 // //                   | XICONVIEW
 //                   | WINDOWHIERARCHY
@@ -301,6 +303,8 @@ main(int argc, char *argv[])
 //                   | TREEMODEL
 //                    | MOUNTS
                   ;
+
+    mallopt(M_ARENA_MAX, 2);
 
     FsGioImpl::Init();
 

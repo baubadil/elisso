@@ -168,11 +168,12 @@ public:
     void setThumbnailerProgress(uint current, uint max, ShowHideOrNothing shn);
 
     /**
-     *  Updates the left status bar with the "current" text.
-     *  This is shared between all folder views, so the folder view calls
-     *  this after having composed a meaningful text.
+     *  Updates the right status bar with the free space on the file system
+     *  that the given directory belongs to (which is the one currently seen
+     *  in the folder).
+     *
      */
-    void setStatusbarFree(const Glib::ustring &str);
+    void setStatusbarFree(PFSModelBase pDir);
 
     void selectInFolderTree(PFSModelBase pDir);
 

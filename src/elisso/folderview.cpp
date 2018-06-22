@@ -290,6 +290,8 @@ ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
     if (fl.test(SetDirectoryFlag::SELECT_PREVIOUS))
         pDirSelectPrevious = _pDir;
 
+//     _mainWindow.setThumbnailerProgress(1, 1, ShowHideOrNothing::HIDE);
+
     switch (_state)
     {
         case ViewState::ERROR:
@@ -386,23 +388,7 @@ ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
 
         dumpStack();
 
-        Glib::ustring strFree;
-        PGioFile pGioFile;
-        if (    (_pDir)
-             && ((pGioFile = g_pFsGioImpl->getGioFile(*_pDir)))
-           )
-        {
-            try
-            {
-                Glib::RefPtr<Gio::FileInfo> pInfo = pGioFile->query_filesystem_info("*");
-                auto z = pInfo->get_attribute_uint64("filesystem::free");
-                strFree = formatBytes(z) + " free";
-            }
-            catch (...)
-            {
-            }
-        }
-        _mainWindow.setStatusbarFree(strFree);
+        _mainWindow.setStatusbarFree(_pDir);
     }
     else
     {
@@ -462,7 +448,7 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
             /*
              *  Insert all the files and collect some statistics.
              */
-            for (auto &pFS : vFiles)
+            for (auto pFS : vFiles)
             {
                 auto it = this->insertFile(pFS);
                 if (it)
@@ -577,6 +563,10 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
                 if (!_pImpl->thumbnailer.isBusy())
                 {
                     _mainWindow.setThumbnailerProgress(_pImpl->cToThumbnail, _pImpl->cToThumbnail, ShowHideOrNothing::HIDE);
+
+                    // Refresh the thumbnail stats too.
+                    _mainWindow.setStatusbarFree(_pDir);
+
                     return false; // disconnect
                 }
 

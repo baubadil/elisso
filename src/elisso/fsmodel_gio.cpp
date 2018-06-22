@@ -480,9 +480,39 @@ FsGioImpl::Init()
  *
  **************************************************************************/
 
+uint64_t g_cbTotalPixbufs = 0;
+Mutex    g_mutexPixbufsSize;
+
+struct PixbufWithStats
+{
+public:
+    PixbufWithStats(PPixbuf p)
+        : _pPixbuf(p)
+    {
+        Lock l(g_mutexPixbufsSize);
+        g_cbTotalPixbufs += _pPixbuf->get_byte_length();
+    }
+
+    ~PixbufWithStats()
+    {
+        Lock l(g_mutexPixbufsSize);
+        g_cbTotalPixbufs -= _pPixbuf->get_byte_length();
+    }
+
+    PPixbuf get()
+    {
+        return _pPixbuf;
+    }
+
+private:
+    PPixbuf _pPixbuf;
+};
+
+typedef shared_ptr<PixbufWithStats> PPixbufWithStats;
+
 struct FsGioFile::ThumbData
 {
-    map<uint32_t, PPixbuf> mapThumbnails;
+    map<uint32_t, PPixbufWithStats> mapThumbnails;
 };
 
 /* static */
@@ -517,7 +547,7 @@ FsGioFile::setThumbnail(uint32_t thumbsize, PPixbuf ppb)
         if (!_pThumbData)
             _pThumbData = new ThumbData;
 
-        _pThumbData->mapThumbnails[thumbsize] = ppb;
+        _pThumbData->mapThumbnails[thumbsize] = make_shared<PixbufWithStats>(ppb);
     }
     else
         // nullptr:
@@ -539,10 +569,18 @@ FsGioFile::getThumbnail(uint32_t thumbsize) const
     {
         auto it = _pThumbData->mapThumbnails.find(thumbsize);
         if (it != _pThumbData->mapThumbnails.end())
-            ppb = it->second;
+            ppb = it->second->get();
     }
 
     return ppb;
+}
+
+/* static */
+uint64_t
+FsGioFile::GetThumbnailCacheSize()
+{
+    Lock l(g_mutexPixbufsSize);
+    return g_cbTotalPixbufs;
 }
 
 

@@ -423,10 +423,32 @@ ElissoApplicationWindow::setThumbnailerProgress(uint current, uint max, ShowHide
 }
 
 void
-ElissoApplicationWindow::setStatusbarFree(const Glib::ustring &str)
+ElissoApplicationWindow::setStatusbarFree(PFSModelBase pDir)
 {
+    Glib::ustring strFree;
+    PGioFile pGioFile;
+    if (    (pDir)
+         && ((pGioFile = g_pFsGioImpl->getGioFile(*pDir)))
+       )
+    {
+        try
+        {
+            Glib::RefPtr<Gio::FileInfo> pInfo = pGioFile->query_filesystem_info("*");
+            auto z = pInfo->get_attribute_uint64("filesystem::free");
+            strFree = formatBytes(z) + " free";
+        }
+        catch (...)
+        {
+        }
+    }
+
+    /* Add thumbnail statistics. */
+    auto cbThumbs = FsGioFile::GetThumbnailCacheSize();
+    if (cbThumbs)
+        strFree += " — " + formatBytes(cbThumbs) + " thumbs";
+
     _statusbarFree.pop();       // Remove previous message, if any.
-    _statusbarFree.push(str);
+    _statusbarFree.push(strFree);
 }
 
 void
