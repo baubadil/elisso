@@ -149,6 +149,14 @@ public:
  *
  **************************************************************************/
 
+FSMonitorBase::~FSMonitorBase()
+{
+    // When the monitor is deleted (for example because the folder view is closed),
+    // it must be removed.
+    if (_pContainer)
+        stopWatching(*_pContainer);
+}
+
 void
 FSMonitorBase::startWatching(FSContainer &cnr)
 {

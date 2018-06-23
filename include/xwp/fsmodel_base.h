@@ -233,7 +233,7 @@ class FSMonitorBase : public ProhibitCopy, public enable_shared_from_this<FSMoni
      *************************************/
 
 protected:
-    virtual ~FSMonitorBase() {}
+    virtual ~FSMonitorBase();
 
 
     /**************************************
