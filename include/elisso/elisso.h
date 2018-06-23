@@ -68,6 +68,11 @@ DEF_STRING(APPLICATION_NAME, "elisso");
 DEF_STRING(CLIPBOARD_TARGET_UTF8_STRING, "UTF8_STRING");
 DEF_STRING(CLIPBOARD_TARGET_GNOME_COPIED_FILES, "x-special/gnome-copied-files");
 
+DEF_STRING(ICON_FILE_MANAGER, "system-file-manager");       // our application icon for now
+DEF_STRING(ICON_FOLDER_GENERIC, "folder");
+DEF_STRING(ICON_FILE_GENERIC, "text-x-generic");
+DEF_STRING(ICON_FILE_LOADING, "image-loading");
+
 DEF_STRING(MENUITEM_OPEN, "Open");
 DEF_STRING(MENUITEM_OPEN_IN_TAB, "Open in new tab");
 DEF_STRING(MENUITEM_OPEN_IN_TERMINAL, "Open in terminal");

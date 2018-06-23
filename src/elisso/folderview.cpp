@@ -114,8 +114,9 @@ struct ElissoFolderView::Impl : public ProhibitCopy
     // Clipboard buffer filled by copy/cut
     vector<Glib::ustring>           vURIs;
 
-    Impl()
-        : pWorkerPopulated(make_shared<ViewPopulatedWorker>())
+    Impl(ElissoApplication &app)
+        : pWorkerPopulated(make_shared<ViewPopulatedWorker>()),
+          thumbnailer(app)
     { }
 
     ~Impl()
@@ -152,7 +153,7 @@ ElissoFolderView::ElissoFolderView(ElissoApplicationWindow &mainWindow, int &iPa
     : Gtk::Overlay(),
       _id(g_uViewID++),
       _mainWindow(mainWindow),
-      _pImpl(new ElissoFolderView::Impl())
+      _pImpl(new ElissoFolderView::Impl(mainWindow.getApplication()))
 {
     auto &ntb = _mainWindow.getNotebook();
     iPageInserted = ntb.append_page(*this,
@@ -1613,43 +1614,33 @@ ElissoFolderView::loadIcon(PFSModelBase pFS,
 {
     Glib::RefPtr<Gdk::Pixbuf> pReturn;
 
-    if (    (tr == FSTypeResolved::DIRECTORY)
-         || (tr == FSTypeResolved::SYMLINK_TO_DIRECTORY)
-       )
+    if (pFS)
     {
-        static std::map<int, Glib::RefPtr<Gdk::Pixbuf>> mapSharedFolderIcons;
-        if (!STL_EXISTS(mapSharedFolderIcons, size))
-            // first call for this size:
-            mapSharedFolderIcons[size] = getApplicationWindow().getApplication().getDefaultIcon(pFS, size);
-
-        pReturn = mapSharedFolderIcons[size];
-    }
-
-    // If this is a file for which we have previously set a thumbnail, then we're done.
-    PFsGioFile pFile = g_pFsGioImpl->getFile(pFS, tr);
-    if (pFile)
-        pReturn = pFile->getThumbnail(size);
-
-    // Not a file, or no thumbnail yet, then load default icon first.
-    if (!pReturn)
-    {
-        pReturn = getApplicationWindow().getApplication().getDefaultIcon(pFS, size);
-
-        // Again, if it's a file, and if it can be thumbnailed, then give it to
-        // the thumbnailer to process in the background. This will create both sizes.
-        if (pFile)
-            if (!pFile->hasFlag(FSFlag::THUMBNAILING))
-            {
-                auto pFormat = _pImpl->thumbnailer.isImageFile(pFile);
-                if (pFormat)
+        if (    (tr == FSTypeResolved::DIRECTORY)
+             || (tr == FSTypeResolved::SYMLINK_TO_DIRECTORY)
+           )
+            pReturn = getApplication().getStockIcon(ICON_FOLDER_GENERIC, size);
+        else
+        {
+            // If this is a file for which we have previously set a thumbnail, then we're done.
+            PFsGioFile pFile = g_pFsGioImpl->getFile(pFS, tr);
+            if (pFile)
+                if (!(pReturn = pFile->getThumbnail(size)))
                 {
-                    pFile->setFlag(FSFlag::THUMBNAILING);
-                    _pImpl->thumbnailer.enqueue(pFile, pFormat);
+                    // No thumbnail yet: then use loading icon for now
+                    pReturn = getApplication().getStockIcon(ICON_FILE_LOADING, size);
 
-                    if (pfThumbnailing)
-                        *pfThumbnailing = true;
+                    // Have the thumbnailer work on it: this will do the testing for
+                    // whether it's an image file in the worker thread already.
+                    if (!pFile->hasFlag(FSFlag::THUMBNAILING))
+                    {
+                        _pImpl->thumbnailer.enqueue(pFile);
+
+                        if (pfThumbnailing)
+                            *pfThumbnailing = true;
+                    }
                 }
-            }
+        }
     }
 
     return pReturn;

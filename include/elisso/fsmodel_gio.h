@@ -81,8 +81,6 @@ public:
 
     PGioFile getGioFile(FSModelBase &fs);
 
-    Glib::ustring getIcon(FSModelBase &fs);
-
     PFsGioFile getFile(PFSModelBase pFS, FSTypeResolved t);
 
     static void Init();
@@ -141,6 +139,8 @@ public:
      */
     PPixbuf getThumbnail(uint32_t thumbsize) const;
 
+    StringVector& getIcons();
+
 
     /**************************************
      *
@@ -159,7 +159,8 @@ public:
 
 protected:
     struct ThumbData;
-    ThumbData   *_pThumbData = nullptr;
+    ThumbData       *_pThumbData = nullptr;
+    StringVector    *_psvIcons = nullptr;
 };
 
 

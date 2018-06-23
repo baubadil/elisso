@@ -438,20 +438,6 @@ FsGioImpl::getGioFile(FSModelBase &fs)
     return Gio::File::create_for_uri(strPath);
 }
 
-Glib::ustring
-FsGioImpl::getIcon(FSModelBase &fs)
-{
-    Glib::ustring str;
-    try
-    {
-        auto pIcon = getGioFile(fs)->query_info()->get_icon();
-        str = pIcon->to_string();
-    }
-    catch (Gio::Error &e) { }
-
-    return str;
-}
-
 PFsGioFile
 FsGioImpl::getFile(PFSModelBase pFS, FSTypeResolved t)
 {
@@ -535,6 +521,8 @@ FsGioFile::~FsGioFile()
     FSLock lock;
     if (_pThumbData)
         delete _pThumbData;
+    if (_psvIcons)
+        delete _psvIcons;
 }
 
 

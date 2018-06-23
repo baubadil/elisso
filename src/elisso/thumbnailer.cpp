@@ -11,6 +11,7 @@
 #include "elisso/thumbnailer.h"
 
 #include "elisso/worker.h"
+#include "elisso/application.h"
 #include "xwp/debug.h"
 #include "xwp/stringhelp.h"
 #include "xwp/except.h"
@@ -156,8 +157,9 @@ struct Thumbnailer::Impl : WorkerResultQueue<PThumbnail>
  *
  **************************************************************************/
 
-Thumbnailer::Thumbnailer()
-    : _pImpl(new Impl)
+Thumbnailer::Thumbnailer(ElissoApplication &app)
+    : _pImpl(new Impl),
+      _app(app)
 {
     Debug::Log(THUMBNAILER, "Thumbnailer constructed");
 
@@ -233,11 +235,10 @@ Thumbnailer::isImageFile(PFSModelBase pFile)
 }
 
 void
-Thumbnailer::enqueue(PFsGioFile pFile,
-                     const Gdk::PixbufFormat *pFormat)
+Thumbnailer::enqueue(PFsGioFile pFile)
 {
     Debug::Log(THUMBNAILER, string(__func__) + ":  " + pFile->getBasename());
-    _pImpl->qFileReader_.post(make_shared<Thumbnail>(pFile, pFormat));
+    _pImpl->qFileReader_.post(make_shared<Thumbnail>(pFile));
 }
 
 PThumbnail
@@ -298,8 +299,9 @@ Thumbnailer::clearQueues()
 /**
  *  First thread spawned by the constructor. This blocks on the primary
  *  queue that is fed by enqueue() and then creates a FileContents for
- *  every such file. It then passes the file contents on to the least
- *  busy pixbuf loader thread.
+ *  every such file. We then test for the file type; if it's an image
+ *  file, the data gets loaded and passed on to the pixbuf reader thread,
+ *  otherwise we determine a default icon here.
  */
 void
 Thumbnailer::fileReaderThread()
@@ -319,8 +321,18 @@ Thumbnailer::fileReaderThread()
             using namespace std::chrono;
             steady_clock::time_point t1 = steady_clock::now();
 
-            if (pThumbnailIn->pFormat)
+            if (!(pThumbnailIn->pFormat2 = isImageFile(pThumbnailIn->pFile)))
             {
+                // Is not an image file:
+                pThumbnailIn->ppbIconBig = _app.getFileTypeIcon(*pThumbnailIn->pFile, ICON_SIZE_BIG);
+                pThumbnailIn->ppbIconSmall = _app.getFileTypeIcon(*pThumbnailIn->pFile, ICON_SIZE_SMALL);
+
+                // In this case, post back to GUI immediately.
+                _pImpl->postResultToGui(pThumbnailIn);
+            }
+            else
+            {
+                // Is image file:
                 std::shared_ptr<FileContents> pFileContents = make_shared<FileContents>(g_pFsGioImpl->getGioFile(*pThumbnailIn->pFile));
 
                 auto pThumbnailTemp = make_shared<ThumbnailTemp>(pThumbnailIn,
@@ -387,7 +399,7 @@ Thumbnailer::pixbufLoaderThread(uint threadno)
         PPixbuf ppb;
         try
         {
-            auto pLoader = Gdk::PixbufLoader::create(pTemp->pThumb->pFormat->get_name());
+            auto pLoader = Gdk::PixbufLoader::create(pTemp->pThumb->pFormat2->get_name());
             if (pLoader)
             {
                 pLoader->write((const guint8*)pTemp->pFileContents->_pData, pTemp->pFileContents->_size);       // can throw

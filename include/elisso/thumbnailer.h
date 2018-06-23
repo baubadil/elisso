@@ -18,14 +18,12 @@
 struct Thumbnail
 {
     PFsGioFile              pFile;
-    const Gdk::PixbufFormat *pFormat;
+    const Gdk::PixbufFormat *pFormat2;
     PPixbuf                 ppbIconSmall;
     PPixbuf                 ppbIconBig;
 
-    Thumbnail(PFsGioFile pFile_,
-              const Gdk::PixbufFormat *pFormat_)
-        : pFile(pFile_),
-          pFormat(pFormat_)
+    Thumbnail(PFsGioFile pFile_)
+        : pFile(pFile_)
     {
     }
 };
@@ -33,6 +31,8 @@ typedef std::shared_ptr<Thumbnail> PThumbnail;
 
 struct ThumbnailTemp;
 typedef std::shared_ptr<ThumbnailTemp> PThumbnailTemp;
+
+class ElissoApplication;
 
 /**
  *  Thumbnailer with three types of background threads that communicate with the GUI thread.
@@ -89,7 +89,7 @@ public:
      *  Constructor. Each ElissoFolderView has an instance in the implementation,
      *  so this gets called once for each folder view that is created.
      */
-    Thumbnailer();
+    Thumbnailer(ElissoApplication &app);
 
     /**
      *  Destructor. This calls clearQueues() in turn and then stops all threads.
@@ -114,12 +114,12 @@ public:
 
     /**
      *  Adds a file to the queues to be thumbnailed. Call this on the GUI
-     *  thread with pFormat as the pixbuf format pointer returned by isImageFile(),
-     *  which you should call first. The given file then gets passed through the
-     *  various background threads until it arrives back at the GUI thread in the
-     *  lambda passed to connect().
+     *  thread. This will then pass the file to the first worker thread for
+     *  type testing; if it's an image file, it will get passed through
+     *  further background tests. In any case, the file will arrive back
+     *  at the GUI thread in the lambda passed to connect().
      */
-    void enqueue(PFsGioFile pFile, const Gdk::PixbufFormat *pFormat);
+    void enqueue(PFsGioFile pFile);
 
     /**
      *  Forwarder method to WorkerResult::fetchResult(). To be called
@@ -152,6 +152,8 @@ private:
 
     struct Impl;
     Impl    *_pImpl;
+
+    ElissoApplication &_app;
 };
 
 #endif // ELISSO_THUMBNAILER_H

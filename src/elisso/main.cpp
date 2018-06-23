@@ -41,6 +41,17 @@ Glib::ustring implode(const std::string &strGlue, const std::vector<Glib::ustrin
  *
  **************************************************************************/
 
+struct ElissoApplication::Impl
+{
+    PPixbuf                         pIcon;
+    Glib::RefPtr<Gio::Settings>     pSettings;
+    Glib::RefPtr<Gtk::IconTheme>    pIconTheme;
+
+    Impl()
+        : pIconTheme(Gtk::IconTheme::get_default())
+    {}
+};
+
 /**
  *  Public factory to create a refptr to a new ElissoApplication. The constructor is
  *  protected.
@@ -59,13 +70,10 @@ ElissoApplication::create(int argc,
 PPixbuf
 ElissoApplication::getIcon()
 {
-    if (!_pIcon)
-    {
-        auto pIconTheme = Gtk::IconTheme::get_default();
-        _pIcon = pIconTheme->load_icon("system-file-manager", 256);
-    }
+    if (!_pImpl->pIcon)
+        _pImpl->pIcon = _pImpl->pIconTheme->load_icon(ICON_FILE_MANAGER, 256);
 
-    return _pIcon;
+    return _pImpl->pIcon;
 }
 
 /**
@@ -74,7 +82,7 @@ ElissoApplication::getIcon()
 Glib::ustring
 ElissoApplication::getSettingsString(const std::string &strKey)
 {
-    return _pSettings->get_string(strKey);
+    return _pImpl->pSettings->get_string(strKey);
 }
 
 /**
@@ -83,7 +91,7 @@ ElissoApplication::getSettingsString(const std::string &strKey)
 int
 ElissoApplication::getSettingsInt(const std::string &strKey)
 {
-    return _pSettings->get_int(strKey);
+    return _pImpl->pSettings->get_int(strKey);
 }
 
 /**
@@ -91,7 +99,7 @@ ElissoApplication::getSettingsInt(const std::string &strKey)
  */
 void ElissoApplication::setSettingsString(const std::string &strKey, const Glib::ustring &strData)
 {
-    _pSettings->set_string(strKey, strData);
+    _pImpl->pSettings->set_string(strKey, strData);
 }
 
 PMenu
@@ -139,26 +147,61 @@ ForEachUString(const Glib::ustring &str,
 }
 
 PPixbuf
-ElissoApplication::getDefaultIcon(PFSModelBase pFS,
+ElissoApplication::getStockIcon(const string &strName,
+                                int size)
+{
+    PPixbuf p;
+
+//     static std::map<string, Glib::RefPtr<Gdk::Pixbuf>> mapStockIconsCache;
+//     if (!STL_EXISTS(mapSharedFolderIcons, size))
+//         // first call for this size:
+//         mapSharedFolderIcons[size] = getApplication().getFileTypeIcon(*pFS, size);
+//
+//     pReturn = mapSharedFolderIcons[size];
+    p = _pImpl->pIconTheme->load_icon(strName, size, Gtk::IconLookupFlags::ICON_LOOKUP_FORCE_SIZE);
+
+    return p;
+}
+
+PPixbuf
+ElissoApplication::getFileTypeIcon(FSModelBase &fs,
                                   int size)
 {
     PPixbuf p;
 
-    Glib::ustring strIcons = g_pFsGioImpl->getIcon(*pFS);
+    Glib::ustring strIcons;
+    try
+    {
+        auto pIcon = g_pFsGioImpl->getGioFile(fs)->query_info()->get_icon();
+        strIcons = pIcon->to_string();
+    }
+    catch (Gio::Error &e) { }
 
-    std::vector<Glib::ustring> sv;
-    ForEachUString( strIcons,
-                    " ",
-                    [&sv](const Glib::ustring &strParticle)
-                    {
-                        if (!strParticle.empty())
-                            sv.push_back(strParticle);
+    // The following doesn't work, we need to parse the string returned from the file.
+    // p = _pIconTheme->load_icon(strIcons, size, Gtk::IconLookupFlags::ICON_LOOKUP_FORCE_SIZE);
 
-                    });
+    if (!strIcons.empty())
+    {
+        std::vector<Glib::ustring> sv;
+        ForEachUString( strIcons,
+                        " ",
+                        [&sv](const Glib::ustring &strParticle)
+                        {
+                            if (!strParticle.empty())
+                                sv.push_back(strParticle);
 
-    Gtk::IconInfo i = _pIconTheme->choose_icon(sv, size, Gtk::IconLookupFlags::ICON_LOOKUP_FORCE_SIZE);
-    if (i)
-        p = i.load_icon();
+                        });
+
+        if (sv.size())
+        {
+            Gtk::IconInfo i = _pImpl->pIconTheme->choose_icon(sv, size, Gtk::IconLookupFlags::ICON_LOOKUP_FORCE_SIZE);
+            if (i)
+                p = i.load_icon();
+        }
+    }
+
+    if (!p)
+        p = getStockIcon(ICON_FILE_GENERIC, size);
 
     return p;
 }
@@ -176,7 +219,7 @@ ElissoApplication::ElissoApplication(int argc,
                          argv,
                          "org.baubadil.elisso",
                          Gio::APPLICATION_HANDLES_OPEN),
-        _pIconTheme(Gtk::IconTheme::get_default())
+        _pImpl(new Impl)
 {
     /*
      * Settings instance
@@ -201,7 +244,13 @@ ElissoApplication::ElissoApplication(int argc,
                                                  NULL,      // default backend
                                                  NULL);     // default path
 
-    _pSettings = Glib::wrap(pSettings_c);
+    _pImpl->pSettings = Glib::wrap(pSettings_c);
+}
+
+/* virtual */
+ElissoApplication::~ElissoApplication()
+{
+    delete _pImpl;
 }
 
 void

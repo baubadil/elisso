@@ -55,13 +55,22 @@ public:
                           const Glib::ustring &strAccelerator = "");
 
     /**
-     *  Loads a default icon for the given file (or folder) from the default icon theme.
+     *  Loads the given icon for the given size and caches them.
      */
-    PPixbuf getDefaultIcon(PFSModelBase pFS, int size);
+    PPixbuf getStockIcon(const string &strName, int size);
+
+    /**
+     *  Loads a default icon for the given file (or folder) from the default icon theme.
+     *  This does not use the thumbnailer but returns whatever GTK thinks is best depending
+     *  on the file's type. If no icon could be loaded for whatever reason, this returns
+     *  a stock icon.
+     */
+    PPixbuf getFileTypeIcon(FSModelBase &fs, int size);
 
 protected:
     ElissoApplication(int argc,
                       char *argv[]);
+    virtual ~ElissoApplication();
 
     /**
      *  Handler for the "startup" signal, which gets fired when the first instance of a
@@ -95,10 +104,8 @@ protected:
      */
     void on_open(const type_vec_files &files, const Glib::ustring &hint) override;
 
-    PPixbuf                         _pIcon;
-    Glib::RefPtr<Gio::Settings>     _pSettings;
-
-    Glib::RefPtr<Gtk::IconTheme>    _pIconTheme;
+    struct Impl;
+    Impl *_pImpl;
 };
 
 #endif
