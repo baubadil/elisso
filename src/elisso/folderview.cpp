@@ -30,24 +30,6 @@
 
 std::atomic<std::uint64_t>  g_uViewID(1);
 
-void
-ForEachUString(const Glib::ustring &str,
-               const Glib::ustring &strDelimiter,
-               std::function<void (const Glib::ustring&)> fnParticle)
-{
-    size_t p1 = 0;
-    size_t p2;
-    while ((p2 = str.find(strDelimiter, p1)) != string::npos)
-    {
-        int len = p2 - p1;
-        if (len > 0)
-            fnParticle(str.substr(p1, len));
-        p1 = p2 + 1;
-    }
-
-    fnParticle(str.substr(p1));
-}
-
 
 /***************************************************************************
  *
@@ -117,8 +99,6 @@ struct ElissoFolderView::Impl : public ProhibitCopy
                                     cImageFiles,
                                     cTotal;
 
-    Glib::RefPtr<Gtk::IconTheme>    pIconTheme;
-
     PFolderViewMonitor              pMonitor;
 
     Thumbnailer                     thumbnailer;
@@ -135,8 +115,7 @@ struct ElissoFolderView::Impl : public ProhibitCopy
     vector<Glib::ustring>           vURIs;
 
     Impl()
-        : pWorkerPopulated(make_shared<ViewPopulatedWorker>()),
-          pIconTheme(Gtk::IconTheme::get_default())
+        : pWorkerPopulated(make_shared<ViewPopulatedWorker>())
     { }
 
     ~Impl()
@@ -1612,30 +1591,6 @@ ElissoFolderView::connectModel(bool fConnect)
     }
 }
 
-PPixbuf
-ElissoFolderView::loadIconImpl(PFSModelBase pFS, int size)
-{
-    PPixbuf p;
-
-    Glib::ustring strIcons = g_pFsGioImpl->getIcon(*pFS);
-
-    std::vector<Glib::ustring> sv;
-    ForEachUString( strIcons,
-                    " ",
-                    [&sv](const Glib::ustring &strParticle)
-                    {
-                        if (!strParticle.empty())
-                            sv.push_back(strParticle);
-
-                    });
-
-    Gtk::IconInfo i = _pImpl->pIconTheme->choose_icon(sv, size, Gtk::IconLookupFlags::ICON_LOOKUP_FORCE_SIZE);
-    if (i)
-        p = i.load_icon();
-
-    return p;
-}
-
 /**
  *  Part of the lazy-loading implementation.
  *
@@ -1665,7 +1620,7 @@ ElissoFolderView::loadIcon(PFSModelBase pFS,
         static std::map<int, Glib::RefPtr<Gdk::Pixbuf>> mapSharedFolderIcons;
         if (!STL_EXISTS(mapSharedFolderIcons, size))
             // first call for this size:
-            mapSharedFolderIcons[size] = loadIconImpl(pFS, size);
+            mapSharedFolderIcons[size] = getApplicationWindow().getApplication().getDefaultIcon(pFS, size);
 
         pReturn = mapSharedFolderIcons[size];
     }
@@ -1678,7 +1633,7 @@ ElissoFolderView::loadIcon(PFSModelBase pFS,
     // Not a file, or no thumbnail yet, then load default icon first.
     if (!pReturn)
     {
-        pReturn = loadIconImpl(pFS, size);
+        pReturn = getApplicationWindow().getApplication().getDefaultIcon(pFS, size);
 
         // Again, if it's a file, and if it can be thumbnailed, then give it to
         // the thumbnailer to process in the background. This will create both sizes.
@@ -1989,6 +1944,12 @@ ElissoFolderView::onSelectionChanged()
 
         updateStatusbar(&sel);
     }
+}
+
+ElissoApplication&
+ElissoFolderView::getApplication()
+{
+    return getApplicationWindow().getApplication();
 }
 
 

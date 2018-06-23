@@ -54,6 +54,11 @@ public:
                           const Glib::ustring &strAction,
                           const Glib::ustring &strAccelerator = "");
 
+    /**
+     *  Loads a default icon for the given file (or folder) from the default icon theme.
+     */
+    PPixbuf getDefaultIcon(PFSModelBase pFS, int size);
+
 protected:
     ElissoApplication(int argc,
                       char *argv[]);
@@ -90,8 +95,10 @@ protected:
      */
     void on_open(const type_vec_files &files, const Glib::ustring &hint) override;
 
-    PPixbuf                     _pIcon;
-    Glib::RefPtr<Gio::Settings> _pSettings;
+    PPixbuf                         _pIcon;
+    Glib::RefPtr<Gio::Settings>     _pSettings;
+
+    Glib::RefPtr<Gtk::IconTheme>    _pIconTheme;
 };
 
 #endif

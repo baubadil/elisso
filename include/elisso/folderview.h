@@ -21,6 +21,7 @@
 #include "x-gtk/x-iconview_cpp.h"
 #endif
 
+class ElissoApplication;
 class ElissoFolderView;
 struct FileSelection;
 class Thumbnailer;
@@ -315,6 +316,8 @@ private:
 
     void onPathActivated(const Gtk::TreeModel::Path &path);
     void onSelectionChanged();
+
+    ElissoApplication& getApplication();
 
     size_t                      _id;
 

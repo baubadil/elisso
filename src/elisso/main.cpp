@@ -120,6 +120,49 @@ ElissoApplication::addMenuItem(PMenu pMenu,
     return pMenuItem;
 }
 
+void
+ForEachUString(const Glib::ustring &str,
+               const Glib::ustring &strDelimiter,
+               std::function<void (const Glib::ustring&)> fnParticle)
+{
+    size_t p1 = 0;
+    size_t p2;
+    while ((p2 = str.find(strDelimiter, p1)) != string::npos)
+    {
+        int len = p2 - p1;
+        if (len > 0)
+            fnParticle(str.substr(p1, len));
+        p1 = p2 + 1;
+    }
+
+    fnParticle(str.substr(p1));
+}
+
+PPixbuf
+ElissoApplication::getDefaultIcon(PFSModelBase pFS,
+                                  int size)
+{
+    PPixbuf p;
+
+    Glib::ustring strIcons = g_pFsGioImpl->getIcon(*pFS);
+
+    std::vector<Glib::ustring> sv;
+    ForEachUString( strIcons,
+                    " ",
+                    [&sv](const Glib::ustring &strParticle)
+                    {
+                        if (!strParticle.empty())
+                            sv.push_back(strParticle);
+
+                    });
+
+    Gtk::IconInfo i = _pIconTheme->choose_icon(sv, size, Gtk::IconLookupFlags::ICON_LOOKUP_FORCE_SIZE);
+    if (i)
+        p = i.load_icon();
+
+    return p;
+}
+
 
 /***************************************************************************
  *
@@ -132,7 +175,8 @@ ElissoApplication::ElissoApplication(int argc,
     :   Gtk::Application(argc,
                          argv,
                          "org.baubadil.elisso",
-                         Gio::APPLICATION_HANDLES_OPEN)
+                         Gio::APPLICATION_HANDLES_OPEN),
+        _pIconTheme(Gtk::IconTheme::get_default())
 {
     /*
      * Settings instance
