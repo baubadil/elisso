@@ -78,6 +78,7 @@ enum class FolderAction
     EDIT_PASTE,
     EDIT_SELECT_ALL,
     EDIT_OPEN_SELECTED,
+    EDIT_OPEN_SELECTED_IN_IMAGE_VIEWER,
     FILE_CREATE_FOLDER,
     FILE_CREATE_DOCUMENT,
     EDIT_RENAME,
@@ -127,7 +128,7 @@ typedef FlagSet<SetDirectoryFlag> SetDirectoryFlagSet;
  *  it contains a ScrolledWindow, which in turn contains either a TreeView or
  *  IconView child, depending on which view is selected. Both views are
  *  constructed in the ElissoFolderView constructor, but inserted and removed
- *  from the ScrolledWindow when the view is changed.
+ *  by setViewMode() when the view is changed.
  */
 class ElissoFolderView : public Gtk::Overlay
 {
@@ -247,22 +248,53 @@ public:
     MouseButton3ClickType handleClick(GdkEventButton *pEvent,       //!< in: mouse button event
                                       Gtk::TreeModel::Path &path);  //!< out: path of selected item
 
+    /**
+     *  Called from ElissoApplicationWindow::handleViewAction() to handle
+     *  those actions that operate on the current folder view or the
+     *  files therein.
+     *
+     *  Some of these are asynchronous, most are not.
+     */
     void handleAction(FolderAction action);
 
-    void clipboardCopyOrCutSelected(bool fCut);
-    void clipboardPaste();
-
-    PFSDirectory createSubfolderDialog();
-
-    PFSFile createEmptyFileDialog();
-
-    void renameSelected();
+    /**
+     *  Called from handleAction() to process clipboard copy and cut events.
+     */
+    void handleClipboardCopyOrCut(bool fCut);
 
     /**
-     *  Trashes all files which are currently selected in the folder contents.
-     *  This launches a FileOperation with FileOperationType::TRASH.
+     *  Called from handleAction() to process clipboard paste events.
+     *  This may launch a FileOperation with FileOperationType::COPY or MOVE.
      */
-    void trashSelected();
+    void handleClipboardPaste();
+
+    /**
+     *  Called from handleAction() to prompts for a name and then create a new subdirectory
+     *  in the folder that is currently showing. Returns the directory object.
+     *
+     *  This may throw FSException.
+     */
+    PFSDirectory handleCreateSubfolder();
+
+    /**
+     *  Called from handleAction to prompt for the name of a new empty file and then create it
+     *  in the folder that is currently showing. Returns the new file object.
+     *
+     *  This may throw FSException.
+     */
+    PFSFile handleCreateEmptyFile();
+
+    /**
+     *  Called from handleAction() to prompt for a new name for the selected file or folder and
+     *  then rename it.
+     */
+    void handleRenameSelected();
+
+    /**
+     *  Called from handleAction()  to trash all files which are currently selected in the folder contents.
+     *  This may launch a FileOperation with FileOperationType::TRASH.
+     */
+    void handleTrashSelected();
 
 #ifdef USE_TESTFILEOPS
     void testFileopsSelected();

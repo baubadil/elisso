@@ -27,6 +27,7 @@ struct ElissoApplicationWindow::Impl
     PSimpleAction                   pActionEditOpenSelected;
     PSimpleAction                   pActionEditOpenSelectedInTab;
     PSimpleAction                   pActionEditOpenSelectedInTerminal;
+    PSimpleAction                   pActionEditOpenSelectedInImageViewer;
     PSimpleAction                   pActionEditCopy;
     PSimpleAction                   pActionEditCut;
     PSimpleAction                   pActionEditPaste;
@@ -311,14 +312,31 @@ ElissoApplicationWindow::setWaitCursor(Glib::RefPtr<Gdk::Window> pWindow,
 }
 
 void
-ElissoApplicationWindow::enableEditActions(size_t cFolders, size_t cOtherFiles)
+ElissoApplicationWindow::enableEditActions(FileSelection *pSel)
 {
+    size_t cFolders = 0;
+    size_t cOtherFiles = 0;
+    if (pSel)
+    {
+        cFolders = pSel->vFolders.size();
+        cOtherFiles = pSel->vOthers.size();
+    }
+
 //     Debug::Log(DEBUG_ALWAYS, "cFolders: " + to_string(cFolders) + ", cOtherFiles: " + to_string(cOtherFiles));
     size_t cTotal = cFolders + cOtherFiles;
     bool fSingleFolder = (cTotal == 1) && (cFolders == 1);
     _pImpl->pActionEditOpenSelected->set_enabled(cTotal == 1);
     _pImpl->pActionEditOpenSelectedInTab->set_enabled(fSingleFolder);
     _pImpl->pActionEditOpenSelectedInTerminal->set_enabled(fSingleFolder);
+    bool fImageFile = false;
+    if (!cFolders && (cOtherFiles == 1))  // then pSel cannot be null
+    {
+        auto pFS = pSel->vOthers.at(0);
+        auto t = pFS->getResolvedType();
+        fImageFile = ContentType::IsImageFile(g_pFsGioImpl->getFile(pFS, t));
+    }
+    _pImpl->pActionEditOpenSelectedInImageViewer->set_enabled(fImageFile);
+
     _pImpl->pActionEditCopy->set_enabled(cTotal > 0);
     _pImpl->pActionEditCut->set_enabled(cTotal > 0);
     _pImpl->pActionEditRename->set_enabled(cTotal == 1);
@@ -352,7 +370,7 @@ ElissoApplicationWindow::onLoadingFolderView(ElissoFolderView &view)
 
         this->enableViewTypeActions(false);
         // Disable all edit actions; they will only get re-enabled when the "selected" signal comes in.
-        this->enableEditActions(0, 0);
+        this->enableEditActions(nullptr);
     }
 }
 
@@ -824,6 +842,7 @@ ElissoApplicationWindow::initActionHandlers()
     _pImpl->pActionEditOpenSelected = this->addActiveViewActionHandler(ACTION_EDIT_OPEN_SELECTED);
     _pImpl->pActionEditOpenSelectedInTab = this->addActiveViewActionHandler(ACTION_EDIT_OPEN_SELECTED_IN_TAB);
     _pImpl->pActionEditOpenSelectedInTerminal = this->addActiveViewActionHandler(ACTION_EDIT_OPEN_SELECTED_IN_TERMINAL);
+    _pImpl->pActionEditOpenSelectedInImageViewer = this->addActiveViewActionHandler(ACTION_EDIT_OPEN_SELECTED_IN_IMAGE_VIEWER);
     _pImpl->pActionEditCopy = this->addActiveViewActionHandler(ACTION_EDIT_COPY);
     _pImpl->pActionEditCut = this->addActiveViewActionHandler(ACTION_EDIT_CUT);
     _pImpl->pActionEditPaste = this->addActiveViewActionHandler(ACTION_EDIT_PASTE);
@@ -1038,6 +1057,7 @@ ElissoApplicationWindow::handleActiveViewAction(const std::string &strAction)
                 { ACTION_EDIT_PASTE, FolderAction::EDIT_PASTE },
                 { ACTION_EDIT_SELECT_ALL, FolderAction::EDIT_SELECT_ALL },
                 { ACTION_EDIT_OPEN_SELECTED, FolderAction::EDIT_OPEN_SELECTED },
+                { ACTION_EDIT_OPEN_SELECTED_IN_IMAGE_VIEWER, FolderAction::EDIT_OPEN_SELECTED_IN_IMAGE_VIEWER },
                 { ACTION_FILE_CREATE_FOLDER, FolderAction::FILE_CREATE_FOLDER },
                 { ACTION_FILE_CREATE_DOCUMENT, FolderAction::FILE_CREATE_DOCUMENT },
                 { ACTION_EDIT_RENAME, FolderAction::EDIT_RENAME },

@@ -12,6 +12,7 @@
 
 #include "elisso/worker.h"
 #include "elisso/application.h"
+#include "elisso/contenttype.h"
 #include "xwp/debug.h"
 #include "xwp/stringhelp.h"
 #include "xwp/except.h"
@@ -84,6 +85,7 @@ struct ThumbnailTemp
 typedef std::shared_ptr<ThumbnailTemp> PThumbnailTemp;
 
 
+
 /***************************************************************************
  *
  *  Thumbnailer::Impl (private)
@@ -121,19 +123,8 @@ struct Thumbnailer::Impl : WorkerResultQueue<PThumbnail>
     WorkerInputQueue<PThumbnailTemp>    qScalerIconSmall;
     WorkerInputQueue<PThumbnailTemp>    qScalerIconBig;
 
-    // List of formats supported by GTK's PixbufLoader.
-    std::vector<Gdk::PixbufFormat>      vFormats;
-    // Map of upper-cased file extensions with pointers into vFormats.
-    map<string, Gdk::PixbufFormat*>     mapFormats;
-
     Impl()
-        : vFormats(Gdk::Pixbuf::get_formats())
     {
-        // Build the map of supported image formats, sorted by extension in upper case.
-        for (auto &fmt : vFormats)
-            for (const auto &ext : fmt.get_extensions())
-                mapFormats[strToUpper(ext)] = &fmt;
-
         // This returns 8 on a four-core machine with 8 hyperthreads.
         // 3 pixbuf threads are good fit for that, so scale accordingly.
         unsigned int cHyperThreads = XWP::Thread::getHardwareConcurrency();
@@ -220,18 +211,6 @@ sigc::connection
 Thumbnailer::connect(std::function<void ()> fn)
 {
     return _pImpl->connect(fn);
-}
-
-const Gdk::PixbufFormat*
-Thumbnailer::isImageFile(PFSModelBase pFile)
-{
-    const string &strBasename = pFile->getBasename();
-    string strExtension = strToUpper(getExtensionString(strBasename));
-    auto it = _pImpl->mapFormats.find(strExtension);
-    if (it != _pImpl->mapFormats.end())
-        return it->second;
-
-    return nullptr;
 }
 
 void
@@ -321,7 +300,7 @@ Thumbnailer::fileReaderThread()
             using namespace std::chrono;
             steady_clock::time_point t1 = steady_clock::now();
 
-            if (!(pThumbnailIn->pFormat2 = isImageFile(pThumbnailIn->pFile)))
+            if (!(pThumbnailIn->pFormat2 = ContentType::IsImageFile(pThumbnailIn->pFile)))
             {
                 // Is not an image file:
                 pThumbnailIn->ppbIconBig = _app.getFileTypeIcon(*pThumbnailIn->pFile, ICON_SIZE_BIG);

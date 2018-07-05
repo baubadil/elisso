@@ -104,15 +104,6 @@ public:
     sigc::connection connect(std::function<void ()> fn);
 
     /**
-     *  Tests by file extension whether the file is of one of the types
-     *  supported by the thumbnailer (which is all the types supported by
-     *  GdkPixBuf internally).
-     *
-     *  Returns nullptr if not.
-     */
-    const Gdk::PixbufFormat* isImageFile(PFSModelBase pFile);
-
-    /**
      *  Adds a file to the queues to be thumbnailed. Call this on the GUI
      *  thread. This will then pass the file to the first worker thread for
      *  type testing; if it's an image file, it will get passed through

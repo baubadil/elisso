@@ -101,6 +101,7 @@ DEF_STRING(ACTION_FILE_CLOSE_TAB, "file-close-tab");
 DEF_STRING(ACTION_EDIT_OPEN_SELECTED, "edit-open-selected");
 DEF_STRING(ACTION_EDIT_OPEN_SELECTED_IN_TAB, "edit-open-selected-in-tab");
 DEF_STRING(ACTION_EDIT_OPEN_SELECTED_IN_TERMINAL, "edit-open-selected-in-terminal");
+DEF_STRING(ACTION_EDIT_OPEN_SELECTED_IN_IMAGE_VIEWER, "edit-open-selected-in-image-viewer");
 DEF_STRING(ACTION_EDIT_COPY, "edit-copy");
 DEF_STRING(ACTION_EDIT_CUT, "edit-cut");
 DEF_STRING(ACTION_EDIT_PASTE, "edit-paste");

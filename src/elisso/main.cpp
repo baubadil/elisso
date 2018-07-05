@@ -292,6 +292,7 @@ ElissoApplication::on_startup() /* override */
     addMenuItem(pSubSection, "_Open selected", ACTION_EDIT_OPEN_SELECTED);
     addMenuItem(pSubSection, "Open selected in new ta_b", ACTION_EDIT_OPEN_SELECTED_IN_TAB);
     addMenuItem(pSubSection, "Open selected in ter_minal", ACTION_EDIT_OPEN_SELECTED_IN_TERMINAL);
+    addMenuItem(pSubSection, "Open selected in image _viewer", ACTION_EDIT_OPEN_SELECTED_IN_IMAGE_VIEWER);
     pSubSection = addMenuSection(pSubmenu);
     addMenuItem(pSubSection, "_Rename selected", ACTION_EDIT_RENAME, "F2");
     addMenuItem(pSubSection, "Tras_h selected", ACTION_EDIT_RENAME);

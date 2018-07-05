@@ -125,8 +125,9 @@ public:
 
     /**
      *  Called from ElissoFolderView::onSelectionChanged() whenever the selection changes.
+     *  pSel can be nullptr to disable all items.
      */
-    void enableEditActions(size_t cFolders, size_t cOtherFiles);
+    void enableEditActions(FileSelection *pSel);
 
     /**
      *  Called from ElissoFolderView::setDirectory() to enable back/forward actions.

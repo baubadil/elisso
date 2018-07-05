@@ -438,7 +438,8 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
                     if (pFS == pResult->pDirSelectPrevious)
                         itSelect = it;
 
-                    switch (pFS->getResolvedType())
+                    auto t = pFS->getResolvedType();
+                    switch (t)
                     {
                         case FSTypeResolved::DIRECTORY:
                         case FSTypeResolved::SYMLINK_TO_DIRECTORY:
@@ -448,7 +449,7 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
                         case FSTypeResolved::FILE:
                         case FSTypeResolved::SYMLINK_TO_FILE:
                             ++_pImpl->cFiles;
-                            if (_pImpl->thumbnailer.isImageFile(pFS))
+                            if (ContentType::IsImageFile(g_pFsGioImpl->getFile(pFS, t)))
                                 ++_pImpl->cImageFiles;
                         break;
 
@@ -1164,13 +1165,6 @@ ElissoFolderView::handleClick(GdkEventButton *pEvent,
     return clickType;
 }
 
-/**
- *  Called from ElissoApplicationWindow::handleViewAction() to handle
- *  those actions that operate on the current folder view or the
- *  files therein.
- *
- *  Some of these are asynchronous, most are not.
- */
 void
 ElissoFolderView::handleAction(FolderAction action)
 {
@@ -1179,15 +1173,15 @@ ElissoFolderView::handleAction(FolderAction action)
         switch (action)
         {
             case FolderAction::EDIT_COPY:
-                clipboardCopyOrCutSelected(false);       // not cut
+                handleClipboardCopyOrCut(false);       // not cut
             break;
 
             case FolderAction::EDIT_CUT:
-                clipboardCopyOrCutSelected(true);        // cut
+                handleClipboardCopyOrCut(true);        // cut
             break;
 
             case FolderAction::EDIT_PASTE:
-                clipboardPaste();        // cut
+                handleClipboardPaste();        // cut
             break;
 
             case FolderAction::EDIT_SELECT_ALL:
@@ -1198,20 +1192,23 @@ ElissoFolderView::handleAction(FolderAction action)
                 _mainWindow.openFile(nullptr, {});
             break;
 
+            case FolderAction::EDIT_OPEN_SELECTED_IN_IMAGE_VIEWER:
+            break;
+
             case FolderAction::FILE_CREATE_FOLDER:
-                createSubfolderDialog();
+                handleCreateSubfolder();
             break;
 
             case FolderAction::FILE_CREATE_DOCUMENT:
-                createEmptyFileDialog();
+                handleCreateEmptyFile();
             break;
 
             case FolderAction::EDIT_RENAME:
-                renameSelected();
+                handleRenameSelected();
             break;
 
             case FolderAction::EDIT_TRASH:
-                trashSelected();
+                handleTrashSelected();
             break;
 
 #ifdef USE_TESTFILEOPS
@@ -1286,7 +1283,7 @@ ElissoFolderView::handleAction(FolderAction action)
 }
 
 void
-ElissoFolderView::clipboardCopyOrCutSelected(bool fCut)
+ElissoFolderView::handleClipboardCopyOrCut(bool fCut)
 {
     FileSelection sel;
     if (getSelection(sel))
@@ -1337,7 +1334,7 @@ ElissoFolderView::clipboardCopyOrCutSelected(bool fCut)
 /**
  *  Called from handleAction() to handle the "Paste" action.
  */
-void ElissoFolderView::clipboardPaste()
+void ElissoFolderView::handleClipboardPaste()
 {
     Debug d(CMD_TOP, __func__);
     Glib::RefPtr<Gtk::Clipboard> pClip = Gtk::Clipboard::get();
@@ -1395,14 +1392,8 @@ void ElissoFolderView::clipboardPaste()
 }
 
 
-/**
- *  Prompts for a name and then creates a new subdirectory in the folder that is currently showing.
- *  Returns the directory object.
- *
- *  This may throw FSException.
- */
 PFSDirectory
-ElissoFolderView::createSubfolderDialog()
+ElissoFolderView::handleCreateSubfolder()
 {
     PFSDirectory pNew;
 
@@ -1426,7 +1417,7 @@ ElissoFolderView::createSubfolderDialog()
 }
 
 PFSFile
-ElissoFolderView::createEmptyFileDialog()
+ElissoFolderView::handleCreateEmptyFile()
 {
     PFSFile pNew;
 
@@ -1449,7 +1440,7 @@ ElissoFolderView::createEmptyFileDialog()
 }
 
 void
-ElissoFolderView::renameSelected()
+ElissoFolderView::handleRenameSelected()
 {
     FileSelection sel;
     if (    (getSelection(sel))
@@ -1482,7 +1473,7 @@ ElissoFolderView::renameSelected()
 }
 
 void
-ElissoFolderView::trashSelected()
+ElissoFolderView::handleTrashSelected()
 {
     FileSelection sel;
     if (getSelection(sel))
@@ -1931,7 +1922,7 @@ ElissoFolderView::onSelectionChanged()
     {
         FileSelection sel;
         this->getSelection(sel);
-        _mainWindow.enableEditActions(sel.vFolders.size(), sel.vOthers.size());
+        _mainWindow.enableEditActions(&sel);
 
         updateStatusbar(&sel);
     }
