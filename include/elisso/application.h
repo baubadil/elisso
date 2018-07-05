@@ -65,7 +65,7 @@ public:
      *  on the file's type. If no icon could be loaded for whatever reason, this returns
      *  a stock icon.
      */
-    PPixbuf getFileTypeIcon(FSModelBase &fs, int size);
+    PPixbuf getFileTypeIcon(FsObject &fs, int size);
 
 protected:
     ElissoApplication(int argc,

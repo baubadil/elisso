@@ -119,7 +119,7 @@ ElissoApplication::addMenuItem(PMenu pMenu,
     Glib::ustring strActionLong = "win." + strAction;
     auto pMenuItem = Gio::MenuItem::create(strName, strActionLong);
     pMenu->append_item(pMenuItem);
-    if (strAccelerator.length())
+    if (!strAccelerator.empty())
     {
         std::vector<Glib::ustring> sv = { strAccelerator };
         this->set_accels_for_action(strActionLong, sv);
@@ -164,8 +164,8 @@ ElissoApplication::getStockIcon(const string &strName,
 }
 
 PPixbuf
-ElissoApplication::getFileTypeIcon(FSModelBase &fs,
-                                  int size)
+ElissoApplication::getFileTypeIcon(FsObject &fs,
+                                   int size)
 {
     PPixbuf p;
 
@@ -288,14 +288,15 @@ ElissoApplication::on_startup() /* override */
     addMenuItem(pSubSection, "_Paste", ACTION_EDIT_PASTE, "<Primary>v");
     pSubSection = addMenuSection(pSubmenu);
     addMenuItem(pSubSection, "Select _all", ACTION_EDIT_SELECT_ALL, "<Primary>a");
+    addMenuItem(pSubSection, "Select _next file for preview", ACTION_EDIT_SELECT_NEXT_PREVIEWABLE);
+    addMenuItem(pSubSection, "Select pre_vious file for preview", ACTION_EDIT_SELECT_PREVIOUS_PREVIEWABLE);
     pSubSection = addMenuSection(pSubmenu);
     addMenuItem(pSubSection, "_Open selected", ACTION_EDIT_OPEN_SELECTED);
     addMenuItem(pSubSection, "Open selected in new ta_b", ACTION_EDIT_OPEN_SELECTED_IN_TAB);
     addMenuItem(pSubSection, "Open selected in ter_minal", ACTION_EDIT_OPEN_SELECTED_IN_TERMINAL);
-    addMenuItem(pSubSection, "Open selected in image _viewer", ACTION_EDIT_OPEN_SELECTED_IN_IMAGE_VIEWER);
     pSubSection = addMenuSection(pSubmenu);
     addMenuItem(pSubSection, "_Rename selected", ACTION_EDIT_RENAME, "F2");
-    addMenuItem(pSubSection, "Tras_h selected", ACTION_EDIT_RENAME);
+    addMenuItem(pSubSection, "Tras_h selected", ACTION_EDIT_TRASH);
 
     pSubmenu = Gio::Menu::create();
     pMenuBar->append_submenu("_View", pSubmenu);
@@ -306,6 +307,8 @@ ElissoApplication::on_startup() /* override */
     addMenuItem(pSubSection, "Icons", ACTION_VIEW_ICONS, "<Primary>1");
     addMenuItem(pSubSection, "List", ACTION_VIEW_LIST, "<Primary>2");
     addMenuItem(pSubSection, "Compact", ACTION_VIEW_COMPACT, "<Primary>3");
+    pSubSection = addMenuSection(pSubmenu);
+    addMenuItem(pSubSection, "Show _preview pane", ACTION_VIEW_SHOW_PREVIEW);
     pSubSection = addMenuSection(pSubmenu);
     addMenuItem(pSubSection, "Refresh", ACTION_VIEW_REFRESH, "<Primary>r");
 
@@ -332,7 +335,7 @@ ElissoApplication::on_activate() /* override */
 {
     Debug d(CMD_TOP, __func__);
     auto p = new ElissoApplicationWindow(*this);
-    p->addFolderTab(FSModelBase::GetHome());
+    p->addFolderTab(FsObject::GetHome());
     this->add_window(*p);
     p->show();
 }
@@ -353,7 +356,7 @@ ElissoApplication::on_open(const type_vec_files &files,
         try
         {
             Debug::Log(CMD_TOP, std::string(__FUNCTION__) + ": handling " + strPath);
-            auto pDir = FSModelBase::FindPath(strPath);
+            auto pDir = FsObject::FindPath(strPath);
             FSTypeResolved t;
             if (!pDir->isDirectoryOrSymlinkToDirectory(t))
                 throw FSException(quote(strPath) + " is not a directory");

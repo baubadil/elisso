@@ -17,6 +17,7 @@
 #include "elisso/thumbnailer.h"
 #include "elisso/contenttype.h"
 #include "elisso/populate.h"
+#include "elisso/previewpane.h"
 #include "xwp/except.h"
 #include <iostream>
 #include <iomanip>
@@ -85,6 +86,37 @@ FolderContentsModelColumns* FolderContentsModelColumns::s_p = nullptr;
  */
 struct ElissoFolderView::Impl : public ProhibitCopy
 {
+    ViewState                       state = ViewState::UNDEFINED;
+    Glib::ustring                   strError;          // only with ViewState::ERROR, use setError() to set
+    FolderViewMode                  mode = FolderViewMode::UNDEFINED;
+    FolderViewMode                  modeBeforeError = FolderViewMode::UNDEFINED;
+    bool                            fShowingPreview = false;
+
+    Gtk::Label                      labelNotebookPage;
+    Gtk::Label                      labelNotebookMenu;
+
+    Gtk::Paned                      panedForPreview;
+    Gtk::ScrolledWindow                 scrolledWindow;        // Left half of view, parent of both icon and tree view.
+    ElissoPreviewPane                   previewPane;           // Right half of view.
+
+#ifdef USE_XICONVIEW
+    Gtk::XIconView                  iconView;
+#else
+    Gtk::IconView                   iconView;
+#endif
+    TreeViewPlus                    treeView;
+//     Gtk::FlowBox                 compactView;
+    Gtk::InfoBar                    infoBarError;
+    Gtk::Label                      infoBarLabel;
+    Gtk::CellRendererPixbuf         cellRendererIconSmall;
+    Gtk::CellRendererPixbuf         cellRendererIconBig;
+    Gtk::CellRendererText           cellRendererSize;
+
+    Gtk::EventBox                   *pLoading = nullptr;
+
+    std::vector<std::string>        aPathHistory;
+    uint32_t                        uPathHistoryOffset = 0;
+
     PPopulateThread                 pPopulateThread;      // only set while state == POPULATING or REFRESHING
     uint                            idCurrentPopulateThread = 0;
 
@@ -108,15 +140,19 @@ struct ElissoFolderView::Impl : public ProhibitCopy
 
     sigc::connection                connSelectionChanged;       // needs to be disconnected in destructor
 
+    Gtk::TreePath                   pathPreviewing;             // Temporary storage while preview pane is loading.
+
     // This is a map which allows us to look up rows quickly for efficient removal of items by name.
     std::map<std::string, Gtk::TreeRowReference> mapRowReferences;
 
     // Clipboard buffer filled by copy/cut
     vector<Glib::ustring>           vURIs;
 
-    Impl(ElissoApplication &app)
-        : pWorkerPopulated(make_shared<ViewPopulatedWorker>()),
-          thumbnailer(app)
+    Impl(ElissoFolderView &folderView)
+        : previewPane(folderView),
+          pWorkerPopulated(make_shared<ViewPopulatedWorker>()),
+          pMonitor(make_shared<FolderViewMonitor>(folderView)),
+          thumbnailer(folderView.getApplication())
     { }
 
     ~Impl()
@@ -153,21 +189,18 @@ ElissoFolderView::ElissoFolderView(ElissoApplicationWindow &mainWindow, int &iPa
     : Gtk::Overlay(),
       _id(g_uViewID++),
       _mainWindow(mainWindow),
-      _pImpl(new ElissoFolderView::Impl(mainWindow.getApplication()))
+      _pImpl(new ElissoFolderView::Impl(*this))
 {
     auto &ntb = _mainWindow.getNotebook();
     iPageInserted = ntb.append_page(*this,
-                                    _labelNotebookPage,
-                                    _labelNotebookMenu);
+                                    _pImpl->labelNotebookPage,
+                                    _pImpl->labelNotebookMenu);
 
-    _treeView.setParent(mainWindow, TreeViewPlusMode::IS_FOLDER_CONTENTS_RIGHT);
-
-    // Create the monitor. We need the this pointer so we can't do it in the Impl constructor.
-    _pImpl->pMonitor = make_shared<FolderViewMonitor>(*this);
+    _pImpl->treeView.setParent(mainWindow, TreeViewPlusMode::IS_FOLDER_CONTENTS_RIGHT);
 
     // Allow multiple selections.
-    _treeView.get_selection()->set_mode(Gtk::SELECTION_MULTIPLE);
-    _iconView.property_selection_mode() = Gtk::SELECTION_MULTIPLE;
+    _pImpl->treeView.get_selection()->set_mode(Gtk::SELECTION_MULTIPLE);
+    _pImpl->iconView.property_selection_mode() = Gtk::SELECTION_MULTIPLE;
 
     // Connect the GUI thread dispatcher for when a folder populate is done.
     _pImpl->connWorker = _pImpl->pWorkerPopulated->connect([this]()
@@ -218,23 +251,23 @@ ElissoFolderView::ElissoFolderView(ElissoApplicationWindow &mainWindow, int &iPa
     /*
      *  List and icon view signal handlers.
      */
-    _pImpl->connSelectionChanged = _iconView.signal_selection_changed().connect([this]()
+    _pImpl->connSelectionChanged = _pImpl->iconView.signal_selection_changed().connect([this]()
     {
         this->onSelectionChanged();
     });
 
-    _treeView.get_selection()->signal_changed().connect([this]()
+    _pImpl->treeView.get_selection()->signal_changed().connect([this]()
     {
         this->onSelectionChanged();
     });
 
-    _iconView.signal_item_activated().connect([this](const Gtk::TreeModel::Path &path)
+    _pImpl->iconView.signal_item_activated().connect([this](const Gtk::TreeModel::Path &path)
     {
         this->onPathActivated(path);
     });
 
-    _treeView.signal_row_activated().connect([this](const Gtk::TreeModel::Path &path,
-                                                    Gtk::TreeViewColumn *pColumn)
+    _pImpl->treeView.signal_row_activated().connect([this](const Gtk::TreeModel::Path &path,
+                                                    Gtk::TreeViewColumn * /* pColumn */)
     {
         this->onPathActivated(path);
     });
@@ -247,9 +280,13 @@ ElissoFolderView::ElissoFolderView(ElissoApplicationWindow &mainWindow, int &iPa
         this->onThumbnailReady();
     });
 
-    Debug::Log(WINDOWHIERARCHY, "this->add(_scrolledWindow);");
-    this->add(_scrolledWindow);
-    _scrolledWindow.show();
+    // Add the Gtk::Paned to *this, and the scrolled window as the left child.
+    // We only call pack2() when the preview gets activated.
+    _pImpl->panedForPreview.pack1(_pImpl->scrolledWindow);
+    _pImpl->scrolledWindow.show();
+    _pImpl->panedForPreview.show();
+
+    this->add(_pImpl->panedForPreview);
 }
 
 /* virtual */
@@ -260,19 +297,19 @@ ElissoFolderView::~ElissoFolderView()
 }
 
 bool
-ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
+ElissoFolderView::setDirectory(PFsObject pDirOrSymlinkToDir,
                                SetDirectoryFlagSet fl)
 {
     bool rc = false;
 
     // Remember previous directory so we can try scrolling to and selecting it.
-    PFSModelBase pDirSelectPrevious;
+    PFsObject pDirSelectPrevious;
     if (fl.test(SetDirectoryFlag::SELECT_PREVIOUS))
         pDirSelectPrevious = _pDir;
 
 //     _mainWindow.setThumbnailerProgress(1, 1, ShowHideOrNothing::HIDE);
 
-    switch (_state)
+    switch (_pImpl->state)
     {
         case ViewState::ERROR:
         case ViewState::UNDEFINED:
@@ -292,7 +329,7 @@ ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
     }
 
     // Container is only != NULL if this is a directory or a symlink to one.
-    FSContainer *pContainer;
+    FsContainer *pContainer;
     if ((pContainer = pDirOrSymlinkToDir->getContainer()))
     {
         if (fl.test(SetDirectoryFlag::IS_REFRESH))
@@ -311,25 +348,25 @@ ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
             {
                 auto strFull = _pDir->getPath();
                 // Do not push if this is the same as the last item on the stack.
-                if (    (!_aPathHistory.size())
-                     || (_aPathHistory.back() != strFull)
+                if (    (!_pImpl->aPathHistory.size())
+                     || (_pImpl->aPathHistory.back() != strFull)
                    )
                 {
                     // Before pushing back, cut off the stack if the user has pressed "back" at least once.
-                    if (_uPathHistoryOffset > 0)
+                    if (_pImpl->uPathHistoryOffset > 0)
                     {
                         Debug::Log(FOLDER_STACK, "  cutting off history before pushing new item, old:");
                         this->dumpStack();
-                        auto itFirstToDelete = _aPathHistory.begin() + (_aPathHistory.size() - _uPathHistoryOffset);
-                        _aPathHistory.erase(itFirstToDelete, _aPathHistory.end());
+                        auto itFirstToDelete = _pImpl->aPathHistory.begin() + (_pImpl->aPathHistory.size() - _pImpl->uPathHistoryOffset);
+                        _pImpl->aPathHistory.erase(itFirstToDelete, _pImpl->aPathHistory.end());
                         Debug::Log(FOLDER_STACK, "  new:");
                         this->dumpStack();
                     }
 
-                    _aPathHistory.push_back(strFull);
+                    _pImpl->aPathHistory.push_back(strFull);
                 }
 
-                _uPathHistoryOffset = 0;
+                _pImpl->uPathHistoryOffset = 0;
             }
         }
         else
@@ -342,8 +379,8 @@ ElissoFolderView::setDirectory(PFSModelBase pDirOrSymlinkToDir,
             this->setState(ViewState::POPULATING);
 
         // If we're currently displaying an error, remove it.
-        if (_mode == FolderViewMode::ERROR)
-            setViewMode(_modeBeforeError);
+        if (_pImpl->mode == FolderViewMode::ERROR)
+            setViewMode(_pImpl->modeBeforeError);
 
         // Remove all old data, if any.
         if (!(fl.test(SetDirectoryFlag::IS_REFRESH)))
@@ -402,7 +439,7 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
 
         _pImpl->pllFolderContents = pResult->pvContents;
 
-        bool fRefreshing = _state == ViewState::REFRESHING;
+        bool fRefreshing = _pImpl->state == ViewState::REFRESHING;
 
         // This sets the wait cursor.
         this->setState(ViewState::INSERTING);
@@ -420,7 +457,7 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
         FSVector &vFiles = (fRefreshing) ? pResult->vAdded : *_pImpl->pllFolderContents;
 
         {
-            // auto pModel = _treeView.get_model();
+            // auto pModel = _pImpl->treeView.get_model();
             // Tested, at this point the model is NOT set. So that's not why it's slow.
 
             Debug d2(FOLDER_POPULATE_LOW, "Inserting files");
@@ -474,8 +511,8 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
         // This connects the model and also calls onFolderViewLoaded().
         this->setState(ViewState::POPULATED);
 
-        _mainWindow.setWaitCursor(_iconView.get_window(), Cursor::DEFAULT);
-        _mainWindow.setWaitCursor(_treeView.get_window(), Cursor::DEFAULT);
+        _mainWindow.setWaitCursor(_pImpl->iconView.get_window(), Cursor::DEFAULT);
+        _mainWindow.setWaitCursor(_pImpl->treeView.get_window(), Cursor::DEFAULT);
 
         if (!pResult->fClickFromTree)
             _mainWindow.selectInFolderTree(_pDir);
@@ -483,31 +520,31 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
         // Focus the view (we may have switched views, and then the view
         // might still be hidden) and select and scroll an item in the
         // list if necessary.
-        switch (_mode)
+        switch (_pImpl->mode)
         {
             case FolderViewMode::ICONS:
             case FolderViewMode::COMPACT:
                 if (itSelect)
                 {
                     Gtk::TreeModel::Path path(itSelect);
-                    _iconView.scroll_to_path(path, true, 0.5, 0.5);
-                    _iconView.select_path(path);
+                    _pImpl->iconView.scroll_to_path(path, true, 0.5, 0.5);
+                    _pImpl->iconView.select_path(path);
                 }
                 // Grab focus (this is useful for "back" and "forward").
                 if (!pResult->fClickFromTree)
-                    _iconView.grab_focus();
+                    _pImpl->iconView.grab_focus();
             break;
 
             case FolderViewMode::LIST:
                 if (itSelect)
                 {
                     Gtk::TreeModel::Path path(itSelect);
-                    _treeView.scroll_to_row(path, 0.5);
-                    _treeView.get_selection()->select(path);
+                    _pImpl->treeView.scroll_to_row(path, 0.5);
+                    _pImpl->treeView.get_selection()->select(path);
                 }
                 // Grab focus (this is useful for "back" and "forward").
                 if (!pResult->fClickFromTree)
-                    _treeView.grab_focus();
+                    _pImpl->treeView.grab_focus();
             break;
 
             case FolderViewMode::UNDEFINED:
@@ -558,27 +595,27 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
     }
 }
 
-PFSModelBase
-ElissoFolderView::getFileFromRow(Gtk::TreeModel::Row &row)
+PFsObject
+ElissoFolderView::getFsObjFromRow(Gtk::TreeModel::Row &row)
 {
     Debug d(DEBUG_ALWAYS, __func__);
     const FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
     const Glib::ustring &str = row[cols._colFilename];
 
-    // FSContainer::find may throw, and we don't want that
+    // FsContainer::find may throw, and we don't want that
     try
     {
-        FSContainer *pCnr = this->_pDir->getContainer();
+        FsContainer *pCnr = this->_pDir->getContainer();
         if (pCnr)
             return pCnr->find(str);
     }
-    catch(...) { }
+    catch (...) { }
 
     return nullptr;
 }
 
 Gtk::ListStore::iterator
-ElissoFolderView::insertFile(PFSModelBase pFS)
+ElissoFolderView::insertFile(PFsObject pFS)
 {
     const std::string &strBasename = pFS->getBasename();
 // //     Debug d(FOLDER_INSERT, "ElissoFolderView::insertFile(" + quote(strBasename) + ")");
@@ -653,7 +690,7 @@ ElissoFolderView::insertFile(PFSModelBase pFS)
 }
 
 void
-ElissoFolderView::removeFile(PFSModelBase pFS)
+ElissoFolderView::removeFile(PFsObject pFS)
 {
     string strBasename = pFS->getBasename();
     // Look up the row reference in the map to quickly get to the row.
@@ -672,7 +709,7 @@ ElissoFolderView::removeFile(PFSModelBase pFS)
 }
 
 void
-ElissoFolderView::renameFile(PFSModelBase pFS, const std::string &strOldName, const std::string &strNewName)
+ElissoFolderView::renameFile(PFsObject pFS, const std::string &strOldName, const std::string &strNewName)
 {
     // Look up the row reference in the map to quickly get to the row.
     auto itSTL = _pImpl->mapRowReferences.find(strOldName);
@@ -696,11 +733,11 @@ ElissoFolderView::renameFile(PFSModelBase pFS, const std::string &strOldName, co
 void
 ElissoFolderView::refresh()
 {
-    if (    (_state == ViewState::POPULATED)
+    if (    (_pImpl->state == ViewState::POPULATED)
          && (_pDir)
        )
     {
-        FSContainer *pDir = _pDir->getContainer();
+        FsContainer *pDir = _pDir->getContainer();
         if (pDir)
         {
             pDir->unsetPopulated();
@@ -712,7 +749,7 @@ ElissoFolderView::refresh()
 bool
 ElissoFolderView::canGoBack()
 {
-    return (_uPathHistoryOffset + 1 < _aPathHistory.size());
+    return (_pImpl->uPathHistoryOffset + 1 < _pImpl->aPathHistory.size());
 }
 
 bool
@@ -720,10 +757,10 @@ ElissoFolderView::goBack()
 {
     if (this->canGoBack())
     {
-        ++_uPathHistoryOffset;
-        std::string strPrevious = _aPathHistory[_aPathHistory.size() - _uPathHistoryOffset - 1];
+        ++_pImpl->uPathHistoryOffset;
+        std::string strPrevious = _pImpl->aPathHistory[_pImpl->aPathHistory.size() - _pImpl->uPathHistoryOffset - 1];
         // Use FindPath, not FindDirectory, because this might be a symlink.
-        auto pDir = FSModelBase::FindPath(strPrevious);
+        auto pDir = FsObject::FindPath(strPrevious);
         if (pDir)
             if (this->setDirectory(pDir,
                                    SetDirectoryFlag::SELECT_PREVIOUS))     // but do not push to history
@@ -736,7 +773,7 @@ ElissoFolderView::goBack()
 bool
 ElissoFolderView::canGoForward()
 {
-    return (_uPathHistoryOffset > 0);
+    return (_pImpl->uPathHistoryOffset > 0);
 }
 
 bool
@@ -744,11 +781,11 @@ ElissoFolderView::goForward()
 {
     if (this->canGoForward())
     {
-        Debug::Log(FOLDER_STACK, string(__func__) + "(): _aPathHistory.size()=" + to_string(_aPathHistory.size()) + ", _uPathHistoryOffset=" + to_string(_uPathHistoryOffset));
-        std::string strPrevious = _aPathHistory[_aPathHistory.size() - _uPathHistoryOffset--];
+        Debug::Log(FOLDER_STACK, string(__func__) + "(): _aPathHistory.size()=" + to_string(_pImpl->aPathHistory.size()) + ", _uPathHistoryOffset=" + to_string(_pImpl->uPathHistoryOffset));
+        std::string strPrevious = _pImpl->aPathHistory[_pImpl->aPathHistory.size() - _pImpl->uPathHistoryOffset--];
         Debug::Log(FOLDER_STACK, " --> " + strPrevious);
         // Use FindPath, not FindDirectory, because this might be a symlink.
-        auto pDir = FSModelBase::FindPath(strPrevious);
+        auto pDir = FsObject::FindPath(strPrevious);
         if (pDir)
             if (this->setDirectory(pDir, {}))     // do not push to history
                 return true;
@@ -769,26 +806,26 @@ void ElissoFolderView::setNotebookTabTitle()
             maxChars = 5;
         else if (maxChars > 50)
             maxChars = 50;
-        _labelNotebookPage.set_width_chars(maxChars);
-        _labelNotebookPage.set_ellipsize(Pango::EllipsizeMode::ELLIPSIZE_MIDDLE);
-        _labelNotebookPage.set_text(strTitle);
+        _pImpl->labelNotebookPage.set_width_chars(maxChars);
+        _pImpl->labelNotebookPage.set_ellipsize(Pango::EllipsizeMode::ELLIPSIZE_MIDDLE);
+        _pImpl->labelNotebookPage.set_text(strTitle);
         _mainWindow.getNotebook().set_tab_label(*this,
-                                                _labelNotebookPage);
-        _labelNotebookMenu.set_text(strTitle);
+                                                _pImpl->labelNotebookPage);
+        _pImpl->labelNotebookMenu.set_text(strTitle);
     }
 }
 
 void
 ElissoFolderView::setState(ViewState s)
 {
-    if (s != _state)
+    if (s != _pImpl->state)
     {
-        if (    (_state == ViewState::POPULATING)
-             || (_state == ViewState::REFRESHING)
+        if (    (_pImpl->state == ViewState::POPULATING)
+             || (_pImpl->state == ViewState::REFRESHING)
            )
         {
-            delete _pLoading;
-            _pLoading = nullptr;
+            delete _pImpl->pLoading;
+            _pImpl->pLoading = nullptr;
         }
 
         switch (s)
@@ -802,7 +839,7 @@ ElissoFolderView::setState(ViewState s)
             {
                 this->setNotebookTabTitle();
 
-                _pLoading = Gtk::manage(new Gtk::EventBox);
+                _pImpl->pLoading = Gtk::manage(new Gtk::EventBox);
                 auto pLabel = Gtk::manage(new Gtk::Label());
                 pLabel->set_markup("<big><b>Loading" + HELLIP + "</b></big> ");
                 auto pSpinner = Gtk::manage(new Gtk::Spinner);
@@ -810,14 +847,14 @@ ElissoFolderView::setState(ViewState s)
                 auto pBox = Gtk::manage(new Gtk::Box());
                 pBox->pack_start(*pLabel);
                 pBox->pack_start(*pSpinner);
-                _pLoading->add(*pBox);
-                _pLoading->property_margin_left() = 30;
-                _pLoading->property_margin_top() = 40;
-                _pLoading->property_halign() = Gtk::Align::ALIGN_START;
-                _pLoading->property_valign() = Gtk::Align::ALIGN_START;
+                _pImpl->pLoading->add(*pBox);
+                _pImpl->pLoading->property_margin_left() = 30;
+                _pImpl->pLoading->property_margin_top() = 40;
+                _pImpl->pLoading->property_halign() = Gtk::Align::ALIGN_START;
+                _pImpl->pLoading->property_valign() = Gtk::Align::ALIGN_START;
 
-                this->add_overlay(*_pLoading);
-                _pLoading->show_all();
+                this->add_overlay(*_pImpl->pLoading);
+                _pImpl->pLoading->show_all();
                 pSpinner->start();
 
                 this->setWaitCursor(Cursor::WAIT_PROGRESS);
@@ -853,35 +890,32 @@ ElissoFolderView::setState(ViewState s)
             break;
         }
 
-        _state = s;
+        _pImpl->state = s;
         if (s != ViewState::ERROR)
-            _strError.clear();
+            _pImpl->strError.clear();
     }
 }
 
-/**
- *  If the view's state is ERROR, the mode is ignored, and an error is displayed instead.
- */
 void
 ElissoFolderView::setViewMode(FolderViewMode m)
 {
     Debug d(WINDOWHIERARCHY, string(__func__) + "(" + to_string((int)m) + ")");
 
-    if (m != _mode)
+    if (m != _pImpl->mode)
     {
-        Debug::Log(WINDOWHIERARCHY, "old mode=" + to_string((int)_mode));
+        Debug::Log(WINDOWHIERARCHY, "old mode=" + to_string((int)_pImpl->mode));
 
-        switch (_mode)
+        switch (_pImpl->mode)
         {
             case FolderViewMode::ICONS:
             case FolderViewMode::COMPACT:
-                _iconView.hide();
-                _scrolledWindow.remove();       // Remove the one contained widget.
+                _pImpl->iconView.hide();
+                _pImpl->scrolledWindow.remove();       // Remove the one contained widget.
             break;
 
             case FolderViewMode::LIST:
-                _treeView.hide();
-                _scrolledWindow.remove();       // Remove the one contained widget.
+                _pImpl->treeView.hide();
+                _pImpl->scrolledWindow.remove();       // Remove the one contained widget.
             break;
 
 //                 _compactView.hide();
@@ -889,8 +923,8 @@ ElissoFolderView::setViewMode(FolderViewMode m)
 //             break;
 //
             case FolderViewMode::ERROR:
-                _infoBarError.hide();
-                _scrolledWindow.remove();       // Remove the one contained widget.
+                _pImpl->infoBarError.hide();
+                _pImpl->scrolledWindow.remove();       // Remove the one contained widget.
             break;
 
             case FolderViewMode::UNDEFINED:
@@ -902,47 +936,47 @@ ElissoFolderView::setViewMode(FolderViewMode m)
             case FolderViewMode::ICONS:
             case FolderViewMode::COMPACT:
             {
-                _scrolledWindow.add(_iconView);
-                _iconView.show();
+                _pImpl->scrolledWindow.add(_pImpl->iconView);
+                _pImpl->iconView.show();
 
                 FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
                 if (m == FolderViewMode::ICONS)
                 {
                     // icon
-                    _iconView.set_item_orientation(Gtk::Orientation::ORIENTATION_VERTICAL);
-                    _iconView.set_pixbuf_column(cols._colIconBig);
-                    _iconView.set_text_column(cols._colFilename);
-                    _iconView.set_item_width(100);
+                    _pImpl->iconView.set_item_orientation(Gtk::Orientation::ORIENTATION_VERTICAL);
+                    _pImpl->iconView.set_pixbuf_column(cols._colIconBig);
+                    _pImpl->iconView.set_text_column(cols._colFilename);
+                    _pImpl->iconView.set_item_width(100);
 
                     // Margin around the entire view.
-                    _iconView.set_margin(5);
+                    _pImpl->iconView.set_margin(5);
 
                     // Spacings between items.
-                    _iconView.set_row_spacing(5);
-                    _iconView.set_column_spacing(5);
+                    _pImpl->iconView.set_row_spacing(5);
+                    _pImpl->iconView.set_column_spacing(5);
 
                     // Spacing between text and icon.
-                    _iconView.set_spacing(0);
-                    _iconView.set_item_padding(5);
+                    _pImpl->iconView.set_spacing(0);
+                    _pImpl->iconView.set_item_padding(5);
                 }
                 else
                 {
                     // compact
-                    _iconView.set_item_orientation(Gtk::Orientation::ORIENTATION_HORIZONTAL);
-                    _iconView.set_pixbuf_column(cols._colIconSmall);
-                    _iconView.set_text_column(cols._colFilename);
-                    _iconView.set_item_width(200);
-                    _iconView.set_margin(0);
-                    _iconView.set_row_spacing(1);
-                    _iconView.set_column_spacing(5);
-                    _iconView.set_item_padding(5);
+                    _pImpl->iconView.set_item_orientation(Gtk::Orientation::ORIENTATION_HORIZONTAL);
+                    _pImpl->iconView.set_pixbuf_column(cols._colIconSmall);
+                    _pImpl->iconView.set_text_column(cols._colFilename);
+                    _pImpl->iconView.set_item_width(200);
+                    _pImpl->iconView.set_margin(0);
+                    _pImpl->iconView.set_row_spacing(1);
+                    _pImpl->iconView.set_column_spacing(5);
+                    _pImpl->iconView.set_item_padding(5);
                 }
             }
             break;
 
             case FolderViewMode::LIST:
-                _scrolledWindow.add(_treeView);
-                _treeView.show();
+                _pImpl->scrolledWindow.add(_pImpl->treeView);
+                _pImpl->treeView.show();
             break;
 
 //             case FolderViewMode::COMPACT:
@@ -953,21 +987,21 @@ ElissoFolderView::setViewMode(FolderViewMode m)
             case FolderViewMode::ERROR:
             {
                 // Remember the old mode.
-                _modeBeforeError = _mode;
+                _pImpl->modeBeforeError = _pImpl->mode;
 
-                _infoBarLabel.set_markup("<span size=\"x-large\">" + Glib::Markup::escape_text(_strError) + "</span>");
-                _infoBarLabel.show();
-                _infoBarError.set_message_type(Gtk::MESSAGE_ERROR);
+                _pImpl->infoBarLabel.set_markup("<span size=\"x-large\">" + Glib::Markup::escape_text(_pImpl->strError) + "</span>");
+                _pImpl->infoBarLabel.show();
+                _pImpl->infoBarError.set_message_type(Gtk::MESSAGE_ERROR);
                 static bool fAdded = false;
                 if (!fAdded)
                 {
-                    auto pInfoBarContainer = dynamic_cast<Gtk::Container*>(_infoBarError.get_content_area());
+                    auto pInfoBarContainer = dynamic_cast<Gtk::Container*>(_pImpl->infoBarError.get_content_area());
                     if (pInfoBarContainer)
-                        pInfoBarContainer->add(_infoBarLabel);
+                        pInfoBarContainer->add(_pImpl->infoBarLabel);
                     fAdded = true;
                 }
-                _scrolledWindow.add(_infoBarError);
-                _infoBarError.show();
+                _pImpl->scrolledWindow.add(_pImpl->infoBarError);
+                _pImpl->infoBarError.show();
             }
             break;
 
@@ -975,9 +1009,31 @@ ElissoFolderView::setViewMode(FolderViewMode m)
             break;
         }
 
-        _mode = m;
+        _pImpl->mode = m;
 
-        this->connectModel(_state == ViewState::POPULATED);
+        this->connectModel(_pImpl->state == ViewState::POPULATED);
+    }
+}
+
+void
+ElissoFolderView::showPreviewPane(bool fShow)
+{
+    if (fShow != _pImpl->fShowingPreview)
+    {
+        if (fShow)
+        {
+            _pImpl->panedForPreview.set_position(ICON_SIZE_BIG * 1.45 * 2);
+            _pImpl->panedForPreview.set_wide_handle(true);
+            _pImpl->panedForPreview.pack2(_pImpl->previewPane);
+            _pImpl->previewPane.show();
+        }
+        else
+        {
+            _pImpl->panedForPreview.remove(_pImpl->previewPane);
+        }
+
+        _pImpl->fShowingPreview = fShow;
+        _mainWindow.setShowingPreview(fShow);
     }
 }
 
@@ -985,7 +1041,7 @@ void
 ElissoFolderView::setError(Glib::ustring strError)
 {
 //     Debug::Log(DEBUG_ALWAYS, std::string(__FUNCTION__) + "(): " + strError);
-    _strError = strError;
+    _pImpl->strError = strError;
     setState(ViewState::ERROR);
     setViewMode(FolderViewMode::ERROR);
 }
@@ -1037,15 +1093,15 @@ ElissoFolderView::updateStatusbar(FileSelection *pSel)
 void
 ElissoFolderView::selectAll()
 {
-    switch (this->_mode)
+    switch (this->_pImpl->mode)
     {
         case FolderViewMode::ICONS:
         case FolderViewMode::COMPACT:
-            _iconView.select_all();
+            _pImpl->iconView.select_all();
         break;
 
         case FolderViewMode::LIST:
-            _treeView.get_selection()->select_all();
+            _pImpl->treeView.get_selection()->select_all();
         break;
 
         case FolderViewMode::ERROR:
@@ -1054,12 +1110,92 @@ ElissoFolderView::selectAll()
     }
 }
 
-/**
- *  Returns the single selected folder (directory or symlink pointing to one),
- *  or nullptr if either nothing is selected or the selection is not a single
- *  such folder.
- */
-PFSModelBase
+void
+ElissoFolderView::selectPreviewable(bool fNext)
+{
+    Glib::RefPtr<Gtk::TreeSelection> pSelection;
+    std::vector<Gtk::TreePath> vPaths;
+
+    switch (_pImpl->mode)
+    {
+        case FolderViewMode::LIST:
+            pSelection = _pImpl->treeView.get_selection();
+            if (pSelection)
+                vPaths = pSelection->get_selected_rows();
+        break;
+
+        case FolderViewMode::ICONS:
+        case FolderViewMode::COMPACT:
+            vPaths = _pImpl->iconView.get_selected_items();
+        break;
+
+        case FolderViewMode::UNDEFINED:
+        case FolderViewMode::ERROR:
+        break;
+    }
+
+    if (vPaths.size() == 1)
+    {
+        Gtk::TreePath pathOld = vPaths.at(0);
+        _pImpl->pathPreviewing = pathOld;
+
+        // Slightly complicated loop. We want to skip files that exist
+        // but are not previewable, but not loop forever if there are no
+        // more files left at all.
+        while (1)
+        {
+            bool fTryAgain = false;
+
+            if (fNext)
+                _pImpl->pathPreviewing.next();
+            else
+                _pImpl->pathPreviewing.prev();
+
+            Gtk::TreeModel::iterator iter = _pImpl->pListStore->get_iter(_pImpl->pathPreviewing);
+            if (iter)
+            {
+                Gtk::TreeModel::Row row = *iter;
+                auto pFS = this->getFsObjFromRow(row);
+                if (pFS)
+                {
+                    auto t = pFS->getResolvedType();
+                    PFsGioFile pFile = g_pFsGioImpl->getFile(pFS, t);
+                    if (    (!pFile)        // maybe folder or broken symlink
+                         || (!ContentType::IsImageFile(pFile))
+                       )
+                        fTryAgain = true;
+                }
+            }
+
+            if (!fTryAgain)
+                break;
+        }
+
+        // Test if this node exists at all.
+        if (_pImpl->pListStore->get_iter(_pImpl->pathPreviewing))
+        {
+            switch (_pImpl->mode)
+            {
+                case FolderViewMode::LIST:
+                    pSelection->unselect(pathOld);
+                    pSelection->select(_pImpl->pathPreviewing);
+                break;
+
+                case FolderViewMode::ICONS:
+                case FolderViewMode::COMPACT:
+                    _pImpl->iconView.unselect_path(pathOld);
+                    _pImpl->iconView.select_path(_pImpl->pathPreviewing);
+                break;
+
+                case FolderViewMode::UNDEFINED:
+                case FolderViewMode::ERROR:
+                break;
+            }
+        }
+    }
+}
+
+PFsObject
 ElissoFolderView::getSelectedFolder()
 {
     FileSelection sel;
@@ -1071,20 +1207,16 @@ ElissoFolderView::getSelectedFolder()
     return nullptr;
 }
 
-/**
- *  Fills the given FileSelection object with the selected items from the
- *  active icon or tree view. Returns the total no. of item selected.
- */
 size_t
 ElissoFolderView::getSelection(FileSelection &sel)
 {
     std::vector<Gtk::TreePath> vPaths;
 
-    switch (_mode)
+    switch (_pImpl->mode)
     {
         case FolderViewMode::LIST:
         {
-            auto pSelection = _treeView.get_selection();
+            auto pSelection = _pImpl->treeView.get_selection();
             if (pSelection)
                 vPaths = pSelection->get_selected_rows();
         }
@@ -1092,7 +1224,7 @@ ElissoFolderView::getSelection(FileSelection &sel)
 
         case FolderViewMode::ICONS:
         case FolderViewMode::COMPACT:
-            vPaths = _iconView.get_selected_items();
+            vPaths = _pImpl->iconView.get_selected_items();
         break;
 
         case FolderViewMode::UNDEFINED:
@@ -1108,7 +1240,7 @@ ElissoFolderView::getSelection(FileSelection &sel)
             if (iter)
             {
                 Gtk::TreeModel::Row row = *iter;
-                auto pFS = this->getFileFromRow(row);
+                auto pFS = this->getFsObjFromRow(row);
                 if (pFS)
                 {
                     sel.vAll.push_back(pFS);
@@ -1152,8 +1284,8 @@ ElissoFolderView::handleClick(GdkEventButton *pEvent,
         else
         {
 //                             Debug::Log(DEBUG_ALWAYS, "row is NOT selected");
-            if (    (this->_mode != FolderViewMode::LIST)
-                 || (!_treeView.is_blank_at_pos((int)pEvent->x, (int)pEvent->y))
+            if (    (_pImpl->mode != FolderViewMode::LIST)
+                 || (!_pImpl->treeView.is_blank_at_pos((int)pEvent->x, (int)pEvent->y))
                )
             {
                 selectExactlyOne(path);
@@ -1188,11 +1320,16 @@ ElissoFolderView::handleAction(FolderAction action)
                 selectAll();
             break;
 
-            case FolderAction::EDIT_OPEN_SELECTED:
-                _mainWindow.openFile(nullptr, {});
+            case FolderAction::EDIT_SELECT_NEXT_PREVIEWABLE:
+                selectPreviewable(true);
             break;
 
-            case FolderAction::EDIT_OPEN_SELECTED_IN_IMAGE_VIEWER:
+            case FolderAction::EDIT_SELECT_PREVIOUS_PREVIEWABLE:
+                selectPreviewable(false);
+            break;
+
+            case FolderAction::EDIT_OPEN_SELECTED:
+                _mainWindow.openFile(nullptr, {});
             break;
 
             case FolderAction::FILE_CREATE_FOLDER:
@@ -1229,6 +1366,10 @@ ElissoFolderView::handleAction(FolderAction action)
                 setViewMode(FolderViewMode::COMPACT);
             break;
 
+            case FolderAction::VIEW_SHOW_PREVIEW:
+                showPreviewPane(!_pImpl->fShowingPreview);
+            break;
+
             case FolderAction::VIEW_REFRESH:
                 refresh();
             break;
@@ -1243,7 +1384,7 @@ ElissoFolderView::handleAction(FolderAction action)
 
             case FolderAction::GO_PARENT:
             {
-                PFSModelBase pDir = _pDir->getParent();
+                PFsObject pDir = _pDir->getParent();
                 if (pDir)
                 {
                     setDirectory(pDir,  SetDirectoryFlag::SELECT_PREVIOUS | SetDirectoryFlag::PUSH_TO_HISTORY);
@@ -1253,7 +1394,7 @@ ElissoFolderView::handleAction(FolderAction action)
 
             case FolderAction::GO_HOME:
             {
-                auto pHome = FSModelBase::GetHome();
+                auto pHome = FsObject::GetHome();
                 if (pHome)
                     setDirectory(pHome, SetDirectoryFlag::PUSH_TO_HISTORY);
             }
@@ -1376,7 +1517,7 @@ void ElissoFolderView::handleClipboardPaste()
             }
 
             if (!vFiles.size())
-                throw FSException("Did not find any files to copy in clipboard");
+                throw FSException("Nothing to paste in clipboard");
             if (fopType == FileOperationType::TEST)
                 throw FSException("Invalid file operation in clipboard");
 
@@ -1392,12 +1533,12 @@ void ElissoFolderView::handleClipboardPaste()
 }
 
 
-PFSDirectory
+PFsDirectory
 ElissoFolderView::handleCreateSubfolder()
 {
-    PFSDirectory pNew;
+    PFsDirectory pNew;
 
-    FSContainer *pContainer = this->_pDir->getContainer();
+    FsContainer *pContainer = this->_pDir->getContainer();
 
     if (pContainer)
     {
@@ -1421,7 +1562,7 @@ ElissoFolderView::handleCreateEmptyFile()
 {
     PFSFile pNew;
 
-    FSContainer *pContainer = this->_pDir->getContainer();
+    FsContainer *pContainer = this->_pDir->getContainer();
     if (pContainer)
     {
         TextEntryDialog dlg(this->_mainWindow,
@@ -1447,10 +1588,10 @@ ElissoFolderView::handleRenameSelected()
          && (sel.vAll.size() == 1)
        )
     {
-        FSContainer *pContainer = this->_pDir->getContainer();
+        FsContainer *pContainer = this->_pDir->getContainer();
         if (pContainer)
         {
-            PFSModelBase pFile = sel.vAll.front();
+            PFsObject pFile = sel.vAll.front();
             Glib::ustring strOld(pFile->getBasename());
             TextEntryDialog dlg(this->_mainWindow,
                                 "Rename file",
@@ -1503,16 +1644,16 @@ ElissoFolderView::testFileopsSelected()
 void
 ElissoFolderView::setWaitCursor(Cursor cursor)
 {
-    _mainWindow.setWaitCursor(_iconView.get_window(), cursor);
-    _mainWindow.setWaitCursor(_treeView.get_window(), cursor);
+    _mainWindow.setWaitCursor(_pImpl->iconView.get_window(), cursor);
+    _mainWindow.setWaitCursor(_pImpl->treeView.get_window(), cursor);
 }
 
 void
 ElissoFolderView::dumpStack()
 {
-    Debug::Log(FOLDER_STACK, string(__func__) + "(): size=" + to_string(_aPathHistory.size()) + ", offset=" + to_string(_uPathHistoryOffset));
+    Debug::Log(FOLDER_STACK, string(__func__) + "(): size=" + to_string(_pImpl->aPathHistory.size()) + ", offset=" + to_string(_pImpl->uPathHistoryOffset));
     uint i = 0;
-    for (auto &s : _aPathHistory)
+    for (auto &s : _pImpl->aPathHistory)
         Debug::Log(FOLDER_STACK, "  stack item " + to_string(i++) + ": " + s);
 }
 
@@ -1521,7 +1662,7 @@ ElissoFolderView::connectModel(bool fConnect)
 {
     FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
 
-    switch (_mode)
+    switch (_pImpl->mode)
     {
         case FolderViewMode::ICONS:
         case FolderViewMode::COMPACT:
@@ -1529,18 +1670,18 @@ ElissoFolderView::connectModel(bool fConnect)
             {
                 // Scroll to the top. Otherwise we end up at a random scroll position if the
                 // icon view has been used before.
-                Glib::RefPtr<Gtk::Adjustment> pVAdj = _iconView.get_vadjustment();
+                Glib::RefPtr<Gtk::Adjustment> pVAdj = _pImpl->iconView.get_vadjustment();
                 if (pVAdj)
                     pVAdj->set_value(0);
 //       gtk_adjustment_set_value (icon_view->priv->hadjustment,
 //                                 gtk_adjustment_get_value (icon_view->priv->hadjustment) + offset);
 
                  _pImpl->pListStore->set_sort_column(cols._colFilename, Gtk::SortType::SORT_ASCENDING);
-                _iconView.set_model(_pImpl->pListStore);
+                _pImpl->iconView.set_model(_pImpl->pListStore);
             }
             else
             {
-                _iconView.unset_model();
+                _pImpl->iconView.unset_model();
                  _pImpl->pListStore->set_sort_column(Gtk::TreeSortable::DEFAULT_UNSORTED_COLUMN_ID, Gtk::SortType::SORT_ASCENDING);
             }
         break;
@@ -1549,11 +1690,11 @@ ElissoFolderView::connectModel(bool fConnect)
             if (fConnect)
             {
                 _pImpl->pListStore->set_sort_column(cols._colFilename, Gtk::SortType::SORT_ASCENDING);
-                _treeView.set_model(_pImpl->pListStore);
+                _pImpl->treeView.set_model(_pImpl->pListStore);
             }
             else
             {
-                _treeView.unset_model();
+                _pImpl->treeView.unset_model();
                 _pImpl->pListStore->set_sort_column(Gtk::TreeSortable::DEFAULT_UNSORTED_COLUMN_ID, Gtk::SortType::SORT_ASCENDING);
             }
         break;
@@ -1598,7 +1739,7 @@ ElissoFolderView::connectModel(bool fConnect)
  *  thumbnail is done.
  */
 PPixbuf
-ElissoFolderView::loadIcon(PFSModelBase pFS,
+ElissoFolderView::loadIcon(PFsObject pFS,
                            FSTypeResolved tr,
                            int size,
                            bool *pfThumbnailing)
@@ -1674,19 +1815,19 @@ ElissoFolderView::getPathAtPos(int x,
                                int y,
                                Gtk::TreeModel::Path &path)
 {
-    switch (_mode)
+    switch (_pImpl->mode)
     {
         case FolderViewMode::LIST:
         {
-            auto pSel = _treeView.get_selection();
+            auto pSel = _pImpl->treeView.get_selection();
             if (pSel)
-                return _treeView.get_path_at_pos(x, y, path);
+                return _pImpl->treeView.get_path_at_pos(x, y, path);
         }
         break;
 
         case FolderViewMode::ICONS:
         case FolderViewMode::COMPACT:
-            return _iconView.get_item_at_pos(x, y, path);
+            return _pImpl->iconView.get_item_at_pos(x, y, path);
         break;
 
         case FolderViewMode::ERROR:
@@ -1700,11 +1841,11 @@ ElissoFolderView::getPathAtPos(int x,
 bool
 ElissoFolderView::isSelected(Gtk::TreeModel::Path &path)
 {
-    switch (_mode)
+    switch (_pImpl->mode)
     {
         case FolderViewMode::LIST:
         {
-            auto pSel = _treeView.get_selection();
+            auto pSel = _pImpl->treeView.get_selection();
             if (pSel)
                 return pSel->is_selected(path);
         }
@@ -1712,7 +1853,7 @@ ElissoFolderView::isSelected(Gtk::TreeModel::Path &path)
 
         case FolderViewMode::ICONS:
         case FolderViewMode::COMPACT:
-            return _iconView.path_is_selected(path);
+            return _pImpl->iconView.path_is_selected(path);
         break;
 
         case FolderViewMode::ERROR:
@@ -1725,11 +1866,11 @@ ElissoFolderView::isSelected(Gtk::TreeModel::Path &path)
 
 int ElissoFolderView::countSelectedItems()
 {
-    switch (_mode)
+    switch (_pImpl->mode)
     {
         case FolderViewMode::LIST:
         {
-            auto pSel = _treeView.get_selection();
+            auto pSel = _pImpl->treeView.get_selection();
             if (pSel)
                 return pSel->count_selected_rows();
         }
@@ -1738,7 +1879,7 @@ int ElissoFolderView::countSelectedItems()
         case FolderViewMode::ICONS:
         case FolderViewMode::COMPACT:
         {
-            auto v = _iconView.get_selected_items();
+            auto v = _pImpl->iconView.get_selected_items();
             return v.size();
         }
         break;
@@ -1753,11 +1894,11 @@ int ElissoFolderView::countSelectedItems()
 
 void ElissoFolderView::selectExactlyOne(Gtk::TreeModel::Path &path)
 {
-    switch (_mode)
+    switch (_pImpl->mode)
     {
         case FolderViewMode::LIST:
         {
-            auto pSel = _treeView.get_selection();
+            auto pSel = _pImpl->treeView.get_selection();
             if (pSel)
             {
                 pSel->unselect_all();
@@ -1768,8 +1909,8 @@ void ElissoFolderView::selectExactlyOne(Gtk::TreeModel::Path &path)
 
         case FolderViewMode::ICONS:
         case FolderViewMode::COMPACT:
-            _iconView.unselect_all();
-            _iconView.select_path(path);
+            _pImpl->iconView.unselect_all();
+            _pImpl->iconView.select_path(path);
         break;
 
         case FolderViewMode::ERROR:
@@ -1781,7 +1922,7 @@ void ElissoFolderView::selectExactlyOne(Gtk::TreeModel::Path &path)
 void
 ElissoFolderView::setIconViewColumns()
 {
-    _iconView.signal_button_press_event().connect([this](_GdkEventButton *pEvent) -> bool
+    _pImpl->iconView.signal_button_press_event().connect([this](_GdkEventButton *pEvent) -> bool
     {
         if (_mainWindow.onButtonPressedEvent(pEvent, TreeViewPlusMode::IS_FOLDER_CONTENTS_RIGHT))
             return true;
@@ -1791,13 +1932,13 @@ ElissoFolderView::setIconViewColumns()
 
 //     FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
 
-//     _iconView.set_cell_data_func(_cellRendererIconSmall,
+//     _pImpl->iconView.set_cell_data_func(_cellRendererIconSmall,
 //                                  [this, &cols](const Gtk::TreeModel::iterator& it)
 //     {
 //         this->cellDataFuncIcon(it, cols._colIconSmall, ICON_SIZE_SMALL);
 //     });
 //
-//     _iconView.set_cell_data_func(_cellRendererIconBig,
+//     _pImpl->iconView.set_cell_data_func(_cellRendererIconBig,
 //                                  [this, &cols](const Gtk::TreeModel::iterator& it)
 //     {
 //         this->cellDataFuncIcon(it, cols._colIconBig, ICON_SIZE_BIG);
@@ -1829,25 +1970,25 @@ ElissoFolderView::setListViewColumns()
 
     // "Icon" column with our own cell renderer. Do not use the overload with a column
     // number since that would create a cell renderer automatically.
-    i = _treeView.append_column("Icon", _cellRendererIconSmall);
-//     i = _treeView.append_column("Icon", cols._colIconSmall);
-    if ((pColumn = _treeView.get_column(i - 1)))
+    i = _pImpl->treeView.append_column("Icon", _pImpl->cellRendererIconSmall);
+//     i = _pImpl->treeView.append_column("Icon", cols._colIconSmall);
+    if ((pColumn = _pImpl->treeView.get_column(i - 1)))
     {
         pColumn->set_sizing(Gtk::TREE_VIEW_COLUMN_FIXED);
         pColumn->set_fixed_width(aSizes[i - 1]);
-        pColumn->set_cell_data_func(_cellRendererIconSmall,
+        pColumn->set_cell_data_func(_pImpl->cellRendererIconSmall,
                                     [this, &cols](Gtk::CellRenderer*,
                                                   const Gtk::TreeModel::iterator& it)
         {
             Gtk::TreeModel::Row row = *it;
             PPixbuf pb1 = row[cols._colIconSmall];
 //             auto pPixbuf = this->cellDataFuncIcon(it, cols._colIconSmall, ICON_SIZE_SMALL);
-            _cellRendererIconSmall.property_pixbuf() = pb1;
+            _pImpl->cellRendererIconSmall.property_pixbuf() = pb1;
         });
     }
 
-    i = _treeView.append_column("Name", cols._colFilename);
-    if ((pColumn = _treeView.get_column(i - 1)))
+    i = _pImpl->treeView.append_column("Name", cols._colFilename);
+    if ((pColumn = _pImpl->treeView.get_column(i - 1)))
     {
         pColumn->set_sizing(Gtk::TREE_VIEW_COLUMN_FIXED);
         pColumn->set_fixed_width(aSizes[i - 1]);
@@ -1856,14 +1997,14 @@ ElissoFolderView::setListViewColumns()
     }
 
     // "Size" column with our own cell renderer.
-    i = _treeView.append_column("Size", _cellRendererSize);
-    if ((pColumn = _treeView.get_column(i - 1)))
+    i = _pImpl->treeView.append_column("Size", _pImpl->cellRendererSize);
+    if ((pColumn = _pImpl->treeView.get_column(i - 1)))
     {
         pColumn->set_sizing(Gtk::TREE_VIEW_COLUMN_FIXED);
         pColumn->set_fixed_width(aSizes[i - 1]);
         pColumn->set_resizable(true);
         pColumn->set_sort_column(cols._colSize);
-        pColumn->set_cell_data_func(_cellRendererSize,
+        pColumn->set_cell_data_func(_pImpl->cellRendererSize,
                                     [&cols](Gtk::CellRenderer* pRend,
                                             const Gtk::TreeModel::iterator& it)
         {
@@ -1881,8 +2022,8 @@ ElissoFolderView::setListViewColumns()
         });
     }
 
-    i = _treeView.append_column("Type", cols._colTypeString);
-    if ((pColumn = _treeView.get_column(i - 1)))
+    i = _pImpl->treeView.append_column("Type", cols._colTypeString);
+    if ((pColumn = _pImpl->treeView.get_column(i - 1)))
     {
         pColumn->set_sizing(Gtk::TREE_VIEW_COLUMN_FIXED);
         pColumn->set_fixed_width(aSizes[i - 1]);
@@ -1890,7 +2031,7 @@ ElissoFolderView::setListViewColumns()
         pColumn->set_sort_column(cols._colTypeString);
     }
 
-    _treeView.set_fixed_height_mode(true);
+    _pImpl->treeView.set_fixed_height_mode(true);
 }
 
 /**
@@ -1903,8 +2044,8 @@ ElissoFolderView::onPathActivated(const Gtk::TreeModel::Path &path)
     Gtk::TreeModel::Row row = *iter;
 //     FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
 //     Glib::ustring &strFile =
-//     PFSModelBase pFS = row[cols._colPFile];
-    auto pFS = this->getFileFromRow(row);
+//     PFsObj pFS = row[cols._colPFile];
+    auto pFS = this->getFsObjFromRow(row);
     if (pFS)
     {
         Debug::Log(FOLDER_POPULATE_HIGH, string(__func__) + "(\"" + pFS->getPath() + "\")");
@@ -1916,7 +2057,7 @@ void
 ElissoFolderView::onSelectionChanged()
 {
     // Only get the folder selection if we're fully populated and no file operations are going on.
-    if (    (_state == ViewState::POPULATED)
+    if (    (_pImpl->state == ViewState::POPULATED)
          && (!_mainWindow.areFileOperationsRunning())
        )
     {
@@ -1925,6 +2066,33 @@ ElissoFolderView::onSelectionChanged()
         _mainWindow.enableEditActions(&sel);
 
         updateStatusbar(&sel);
+
+        bool fShowPreviewPane = false;
+
+        PFsGioFile pFile;
+        if ((pFile = sel.getTheOneSelectedFile()))
+            fShowPreviewPane = _pImpl->previewPane.setFile(pFile);
+
+        this->showPreviewPane(fShowPreviewPane);
+    }
+}
+
+void ElissoFolderView::onPreviewReady(PFsGioFile pFile)
+{
+    switch (_pImpl->mode)
+    {
+        case FolderViewMode::LIST:
+            _pImpl->treeView.scroll_to_row(_pImpl->pathPreviewing);
+        break;
+
+        case FolderViewMode::ICONS:
+        case FolderViewMode::COMPACT:
+            _pImpl->iconView.scroll_to_path(_pImpl->pathPreviewing, false, 0, 0);
+        break;
+
+        case FolderViewMode::UNDEFINED:
+        case FolderViewMode::ERROR:
+        break;
     }
 }
 
@@ -1943,7 +2111,7 @@ ElissoFolderView::getApplication()
 
 /* virtual */
 void
-FolderViewMonitor::onItemAdded(PFSModelBase &pFS) /* override */
+FolderViewMonitor::onItemAdded(PFsObject &pFS) /* override */
 {
     Debug d(FILEMONITORS, string(__func__) + "(" + pFS->getPath() + ")");
     _view.insertFile(pFS);
@@ -1951,7 +2119,7 @@ FolderViewMonitor::onItemAdded(PFSModelBase &pFS) /* override */
 
 /* virtual */
 void
-FolderViewMonitor::onItemRemoved(PFSModelBase &pFS) /* override */
+FolderViewMonitor::onItemRemoved(PFsObject &pFS) /* override */
 {
     Debug d(FILEMONITORS, string(__func__) + "(" + pFS->getPath() + ")");
     _view.removeFile(pFS);
@@ -1959,7 +2127,7 @@ FolderViewMonitor::onItemRemoved(PFSModelBase &pFS) /* override */
 
 /* virtual */
 void
-FolderViewMonitor::onItemRenamed(PFSModelBase &pFS, const std::string &strOldName, const std::string &strNewName) /* override */
+FolderViewMonitor::onItemRenamed(PFsObject &pFS, const std::string &strOldName, const std::string &strNewName) /* override */
 {
     Debug d(FILEMONITORS, string(__func__) + "(" + pFS->getPath() + ")");
     _view.renameFile(pFS, strOldName, strNewName);

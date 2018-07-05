@@ -120,8 +120,8 @@ struct WorkerInputQueue : public ProhibitCopy
  *  Something like this:
 
 
-            WorkerResult<PMyStruct> w;
-            workerResult.connect([&w]()
+            WorkerResultQueue<PMyStruct> w;
+            workerResultQueue.connect([&w]()
             {
                 // Getting the result on the GUI thread.
                 PMyStruct p = w.fetchResult();

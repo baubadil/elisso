@@ -55,7 +55,7 @@ public:
      *  additional items get inserted over time depending on what is selected.
      */
     void addTreeRoot(const Glib::ustring &strName,
-                     PFSDirectory pDir);
+                     PFsDirectory pDir);
 
     /**
      *  Called from ElissoApplicationWindow::selectInFolderTree() after the notebook page on the
@@ -73,7 +73,7 @@ public:
      *  Example: if $(HOME)/subdir is showing on the right, we expand the $(HOME) item in the tree
      *  and select the "subdir" node under it.
      */
-    void selectNode(PFSModelBase pDir);
+    void selectNode(PFsObject pDir);
 
     /**
      *  Can be called to temporarily suppress the "on select" handler which
@@ -108,7 +108,7 @@ private:
      *  folder tree. Returns nullptr if nothing is selected or the selection
      *  is not a folder.
      */
-    PFSModelBase getSelectedFolder();
+    PFsObject getSelectedFolder();
 
     /**
      *  Protected handler called from the lambda for the 'changed' signal. This gets called
@@ -178,30 +178,28 @@ private:
  **************************************************************************/
 
 /**
- *  FSMonitorBase subclass tailored to the folder tree on the left of the screen.
+ *  FsMonitorBase subclass tailored to the folder tree on the left of the screen.
  *
  *  Whenever we populate a folder in the tree, either completely with folders because
  *  it has been expanded or with a first folder to add the expander icon, we create
  *  a monitor for the directory that was populated so we can remove subfolders
  *  if necessary.
  */
-class FolderTreeMonitor : public FSMonitorBase
+class FolderTreeMonitor : public FsMonitorBase
 {
 public:
     FolderTreeMonitor(ElissoFolderTreeMgr &tree,
                       PFolderTreeModelRow &pRow)
-        : FSMonitorBase(),
+        : FsMonitorBase(),
           _tree(tree),
           _pRowWatching(pRow)
     { };
 
-    virtual void onItemAdded(PFSModelBase &pFS) override;
-    virtual void onItemRemoved(PFSModelBase &pFS) override;
-    virtual void onItemRenamed(PFSModelBase &pFS, const std::string &strOldName, const std::string &strNewName) override;
+    virtual void onItemAdded(PFsObject &pFS) override;
+    virtual void onItemRemoved(PFsObject &pFS) override;
+    virtual void onItemRenamed(PFsObject &pFS, const std::string &strOldName, const std::string &strNewName) override;
 
 private:
-//     Gtk::TreeModel::iterator findIterator(PFSModelBase &pFS);
-
     ElissoFolderTreeMgr &_tree;
     PFolderTreeModelRow _pRowWatching;
 };

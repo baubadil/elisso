@@ -29,10 +29,10 @@ struct ViewPopulatedResult
     FSVector        vRemoved;           // Files that were removed. Useful for refresh.
     uint            idPopulateThread;
     bool            fClickFromTree;     // true if SetDirectoryFlag::CLICK_FROM_TREE was set.
-    PFSModelBase    pDirSelectPrevious; // Item to select among populate results, or nullptr.
+    PFsObject       pDirSelectPrevious; // Item to select among populate results, or nullptr.
     Glib::ustring   strError;
 
-    ViewPopulatedResult(uint idPopulateThread_, bool fClickFromTree_, PFSModelBase pDirSelectPrevious_)
+    ViewPopulatedResult(uint idPopulateThread_, bool fClickFromTree_, PFsObject pDirSelectPrevious_)
         : pvContents(make_shared<FSVector>()),
           idPopulateThread(idPopulateThread_),
           fClickFromTree(fClickFromTree_),
@@ -64,7 +64,7 @@ typedef std::shared_ptr<PopulateThread> PPopulateThread;
  *   2) Create() takes a reference to a ViewPopulatedWorker with a Glib::Dispatcher
  *      which gets fired when the populate thread ends. That returns a
  *      ViewPopulatedResult with the results from the populate thread's
- *      FSContainer::getContents() call.
+ *      FsContainer::getContents() call.
  *
  *   3) When the dispatcher then fires on the GUI thread, it should check
  *      ViewPopulatedResult::strError if an exception occured on the populate thread.
@@ -72,16 +72,16 @@ typedef std::shared_ptr<PopulateThread> PPopulateThread;
  *
  *   4) If, for any reason, the populate needs to be stopped early, the caller
  *      can call stop() which will set the stop flag passed to
- *      FSContainer::getContents().
+ *      FsContainer::getContents().
  */
 class PopulateThread : public ProhibitCopy
 {
 public:
-    static PPopulateThread Create(PFSModelBase &pDir,
+    static PPopulateThread Create(PFsObject &pDir,
                                   PViewPopulatedWorker pWorkerResult,
                                   bool fClickFromTree,
                                   bool fFollowSymlinks,
-                                  PFSModelBase pDirSelectPrevious);
+                                  PFsObject pDirSelectPrevious);
 
     /**
      *  Returns the unique thread ID for this populate thread. This allows for identifying which
@@ -105,19 +105,19 @@ private:
     /**
      *  Constructor.
      */
-    PopulateThread(PFSModelBase &pDir,
+    PopulateThread(PFsObject &pDir,
                    PViewPopulatedWorker pWorkerResult,
-                   PFSModelBase pDirSelectPrevious);
+                   PFsObject pDirSelectPrevious);
 
     void threadFunc(uint idPopulateThread,
                     bool fClickFromTree,
                     bool fFollowSymlinks);
 
     uint                _id;
-    PFSModelBase        _pDir;
+    PFsObject           _pDir;
     PViewPopulatedWorker _pWorkerResult;
     StopFlag            _stopFlag;
-    PFSModelBase        _pDirSelectPrevious;
+    PFsObject           _pDirSelectPrevious;
 };
 
 #endif // ELISSO_POPULATE_H

@@ -28,7 +28,7 @@ FsGioImpl *g_pFsGioImpl = nullptr;
  **************************************************************************/
 
 /* virtual */
-PFSModelBase
+PFsObject
 FsGioImpl::findPath(const string &strPath0) /* override */
 {
     Debug d(FILE_LOW, __func__ + string("(" + quote(strPath0) + ")"));
@@ -52,7 +52,7 @@ FsGioImpl::findPath(const string &strPath0) /* override */
 
     string strPathSplit;
     bool fAbsolute;
-    PFSModelBase pCurrent;
+    PFsObject pCurrent;
     if ((fAbsolute = (strPath[0] == '/')))
     {
         strPathSplit = strPath.substr(1);
@@ -67,7 +67,7 @@ FsGioImpl::findPath(const string &strPath0) /* override */
     Debug::Log(FILE_LOW, to_string(aParticles.size()) + " particle(s) given");
 
     // Do not hold any locks in this method. We iterate over the path on the stack
-    // and call into FSContainer::find(), which has proper locking.
+    // and call into FsContainer::find(), which has proper locking.
 
     uint c = 0;
     for (auto const &strParticle : aParticles)
@@ -79,13 +79,13 @@ FsGioImpl::findPath(const string &strPath0) /* override */
                 Debug::Log(FILE_LOW, "Ignoring particle . in list");
             else
             {
-                pCurrent = FSDirectory::GetCwdOrThrow();
+                pCurrent = FsDirectory::GetCwdOrThrow();
                 break;
             }
         }
         else
         {
-            FSContainer *pDir = nullptr;
+            FsContainer *pDir = nullptr;
             bool fCollapsing = false;
             if (!pCurrent)
             {
@@ -98,7 +98,7 @@ FsGioImpl::findPath(const string &strPath0) /* override */
                 }
                 else
                     // First item on a relative path must be a child of the curdir.
-                    pDir = FSDirectory::GetCwdOrThrow()->getContainer();
+                    pDir = FsDirectory::GetCwdOrThrow()->getContainer();
             }
             else
             {
@@ -144,12 +144,12 @@ FsGioImpl::findPath(const string &strPath0) /* override */
 }
 
 /* virtual */
-PFSModelBase
+PFsObject
 FsGioImpl::makeAwake(const string &strParentPath,
                      const string &strBasename,
                      bool fIsLocal) /* override */
 {
-    PFSModelBase pReturn;
+    PFsObject pReturn;
 
     string strFullPath2 = strParentPath + "/" + strBasename;
     Debug d(FILE_LOW, "FsGioImpl::makeAwake(" + quote(strFullPath2) + ")");
@@ -183,7 +183,7 @@ FsGioImpl::makeAwake(const string &strParentPath,
 
             case Gio::FileType::FILE_TYPE_SYMBOLIC_LINK:   // File handle represents a symbolic link (Unix systems).
             case Gio::FileType::FILE_TYPE_SHORTCUT:        // File is a shortcut (Windows systems).
-                pReturn = FSSymlink::Create(strBasename);
+                pReturn = FsSymlink::Create(strBasename);
             break;
 
             case Gio::FileType::FILE_TYPE_SPECIAL:         // File is a "special" file, such as a socket, fifo, block device, or character device.
@@ -220,7 +220,7 @@ public:
 
 /* virtual */
 PFsDirEnumeratorBase
-FsGioImpl::beginEnumerateChildren(FSContainer &cnr)
+FsGioImpl::beginEnumerateChildren(FsContainer &cnr)
 {
     shared_ptr<FsDirEnumeratorGio> pEnum;
 
@@ -271,7 +271,7 @@ FsGioImpl::getNextChild(PFsDirEnumeratorBase pEnum, string &strBasename) /* over
 }
 
 /* virtual */
-string FsGioImpl::getSymlinkContents(FSSymlink &ln) /* override */
+string FsGioImpl::getSymlinkContents(FsSymlink &ln) /* override */
 {
     try
     {
@@ -288,7 +288,7 @@ string FsGioImpl::getSymlinkContents(FSSymlink &ln) /* override */
 
 /* virtual */
 void
-FsGioImpl::rename(FSModelBase &fs,
+FsGioImpl::rename(FsObject &fs,
                   const string &strNewName) /* override */
 {
     try
@@ -304,7 +304,7 @@ FsGioImpl::rename(FSModelBase &fs,
 
 /* virtual */
 void
-FsGioImpl::trash(FSModelBase &fs) /* override */
+FsGioImpl::trash(FsObject &fs) /* override */
 {
     try
     {
@@ -323,7 +323,7 @@ FsGioImpl::trash(FSModelBase &fs) /* override */
 /* virtual */
 void
 FsGioImpl::copy(Debug &d,
-                FSModelBase &fs,
+                FsObject &fs,
                 const string &strTargetPath) /* override */
 {
     try
@@ -347,7 +347,7 @@ FsGioImpl::copy(Debug &d,
 /* virtual */
 void
 FsGioImpl::move(Debug &d,
-                FSModelBase &fs,
+                FsObject &fs,
                 const string &strTargetPath) /* override */
 {
     try
@@ -368,11 +368,11 @@ FsGioImpl::move(Debug &d,
 }
 
 /* virtual */
-PFSDirectory
+PFsDirectory
 FsGioImpl::createSubdirectory(const string &strParentPath,
                               const string &strBasename) /* override */
 {
-    PFSDirectory pReturn;
+    PFsDirectory pReturn;
 
     try
     {
@@ -428,7 +428,7 @@ FsGioImpl::createEmptyDocument(const string &strParentPath,
 
 
 PGioFile
-FsGioImpl::getGioFile(FSModelBase &fs)
+FsGioImpl::getGioFile(FsObject &fs)
 {
     auto strPath = fs.getPath();
 
@@ -439,14 +439,14 @@ FsGioImpl::getGioFile(FSModelBase &fs)
 }
 
 PFsGioFile
-FsGioImpl::getFile(PFSModelBase pFS, FSTypeResolved t)
+FsGioImpl::getFile(PFsObject pFS, FSTypeResolved t)
 {
     if (pFS)
     {
         if (t == FSTypeResolved::FILE)
             return static_pointer_cast<FsGioFile>(pFS);
         if (t == FSTypeResolved::SYMLINK_TO_FILE)
-            return static_pointer_cast<FsGioFile>((static_cast<FSSymlink*>(&*pFS))->getTarget());
+            return static_pointer_cast<FsGioFile>((static_cast<FsSymlink*>(&*pFS))->getTarget());
     }
 
     return nullptr;
@@ -518,7 +518,7 @@ FsGioFile::Create(const string &strBasename, uint64_t cbSize)
 /* virtual */
 FsGioFile::~FsGioFile()
 {
-    FSLock lock;
+    FsLock lock;
     if (_pThumbData)
         delete _pThumbData;
     if (_psvIcons)
@@ -529,7 +529,7 @@ FsGioFile::~FsGioFile()
 void
 FsGioFile::setThumbnail(uint32_t thumbsize, PPixbuf ppb)
 {
-    FSLock lock;
+    FsLock lock;
     if (ppb)
     {
         if (!_pThumbData)
@@ -552,7 +552,7 @@ FsGioFile::getThumbnail(uint32_t thumbsize) const
 {
     PPixbuf ppb;
 
-    FSLock lock;
+    FsLock lock;
     if (_pThumbData)
     {
         auto it = _pThumbData->mapThumbnails.find(thumbsize);
@@ -600,7 +600,7 @@ FsGioDirectory::Create(const string &strBasename)
  **************************************************************************/
 
 RootDirectory::RootDirectory(const string &strScheme)
-    : FSDirectory(strScheme + "://"),
+    : FsDirectory(strScheme + "://"),
       _strScheme(strScheme)
 {
     _fl = FSFlag::IS_ROOT_DIRECTORY;
@@ -761,5 +761,39 @@ FsGioMountable::Create(const string &strBasename)
     };
 
     return make_shared<Derived>(strBasename);
+}
+
+/***************************************************************************
+ *
+ *  FileContents
+ *
+ **************************************************************************/
+
+FileContents::FileContents(FsGioFile &file)
+    : _pData(nullptr), _size(0)
+{
+    try
+    {
+        auto pGioFile = g_pFsGioImpl->getGioFile(file);
+        auto pStream = pGioFile->read();
+        Glib::RefPtr<Gio::FileInfo> pInfo = pStream->query_info(G_FILE_ATTRIBUTE_STANDARD_SIZE);
+        _size = pInfo->get_attribute_uint64(G_FILE_ATTRIBUTE_STANDARD_SIZE);
+
+        if (!(_pData = (char*)malloc(_size)))
+            throw FSException("Not enough memory");
+        gsize zRead;
+        pStream->read_all(_pData, _size, zRead);
+        pStream->close();
+    }
+    catch (Gio::Error &e)
+    {
+        throw FSException(e.what());
+    }
+}
+
+FileContents::~FileContents()
+{
+    if (_pData)
+        free(_pData);
 }
 

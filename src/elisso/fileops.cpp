@@ -28,6 +28,32 @@ uint g_lastOperationID = 0;
 
 /***************************************************************************
  *
+ *  FileSelection
+ *
+ **************************************************************************/
+
+PFsGioFile
+FileSelection::getTheOneSelectedFile()
+{
+    if (    (vFolders.size() == 0)
+         && (vOthers.size() == 1)
+       )
+    {
+        PFsObject pFS = vOthers.front();
+        if (pFS)
+        {
+            auto t = pFS->getResolvedType();
+            PFsGioFile pFile = g_pFsGioImpl->getFile(pFS, t);
+            return pFile;       // can be nullptr
+        }
+    }
+
+    return nullptr;
+}
+
+
+/***************************************************************************
+ *
  *  FileOperation::Impl
  *
  **************************************************************************/
@@ -40,12 +66,12 @@ struct FileOperation::Impl
     PProgressDialog         *_ppProgressDialog;
 
     // Shared source container of all objects, set & validated during init.
-    FSContainer             *pSourceContainer = nullptr;
+    FsContainer             *pSourceContainer = nullptr;
     // Target container for copy and move operations only.
-    FSContainer             *pTargetContainer = nullptr;
+    FsContainer             *pTargetContainer = nullptr;
 
     // Progress data. Protected by the parent WorkerResult mutex.
-    PFSModelBase            pFSCurrent;
+    PFsObject               pFSCurrent;
     double                  dProgress = 0;
 };
 
@@ -64,7 +90,7 @@ struct FileOperation::Impl
 PFileOperation
 FileOperation::Create(FileOperationType t,
                       const FSVector &vFiles,
-                      PFSModelBase pTarget,                 //!< in: target directory or symlink to directory (required for copy or move, otherwise nullptr)
+                      PFsObject pTarget,                 //!< in: target directory or symlink to directory (required for copy or move, otherwise nullptr)
                       FileOperationsList &refQueue,         //!< in: list to append new FileOperation instance to
                       PProgressDialog *ppProgressDialog,    //!< in: progress dialog to append file operation to
                       Gtk::Window *pParentWindow)           //!< in: parent window for (modal) progress dialog
@@ -114,7 +140,7 @@ FileOperation::Create(FileOperationType t,
         auto pParent = pFS->getParent();
         if (!pParent)
             throw FSException("File has no parent");
-        FSContainer *pContainerThis = pParent->getContainer();
+        FsContainer *pContainerThis = pParent->getContainer();
         if (!pOp->_pImpl->pSourceContainer)
             pOp->_pImpl->pSourceContainer = pContainerThis;
         else if (pContainerThis != pOp->_pImpl->pSourceContainer)
@@ -167,7 +193,7 @@ void FileOperation::cancel()
  *
  *  The semantics of the variables are:
  *
- *   -- FileOperationType::TEST: does nothing really. FSModelBase::testFileOps() only waits a little
+ *   -- FileOperationType::TEST: does nothing really. FsObject::testFileOps() only waits a little
  *      while for testing the progress dialog.
  *
  *   -- FileOperationType::TRASH: sends all files on the list to the desktop's trash can. This removes
@@ -201,7 +227,7 @@ FileOperation::threadFunc()
 
             // This is what gets posted to the GUI callback. This is in
             // a separate variable because it will be changed by COPY.
-            PFSModelBase pFSForGUI(pFS);
+            PFsObject pFSForGUI(pFS);
 
             switch (_t)
             {
@@ -263,7 +289,7 @@ FileOperation::onProgress()
  *  the file, since that's what's needed in the GUI.
  */
 void
-FileOperation::onProcessingNextItem(PFSModelBase pFS)
+FileOperation::onProcessingNextItem(PFsObject pFS)
 {
     if (pFS)
     {

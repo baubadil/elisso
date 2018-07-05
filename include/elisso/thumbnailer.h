@@ -131,6 +131,14 @@ public:
      */
     void clearQueues();
 
+    /**
+     *  Public static helper that can be called from anywhere to scale and rotate
+     *  the given pixbuf. Returns a new pixbuf or nullptr on errors.
+     */
+    static PPixbuf ScaleAndRotate(PPixbuf ppbIn,
+                                  size_t cxTarget,
+                                  size_t cyTarget);
+
 private:
     void fileReaderThread();
 

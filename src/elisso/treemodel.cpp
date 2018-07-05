@@ -35,7 +35,7 @@ FolderTreeModelColumns* FolderTreeModelColumns::s_p = nullptr;
 FolderTreeModelRow::FolderTreeModelRow(PFolderTreeModelRow pParent_,
                                        int uRowIndex_,
                                        unsigned overrideSort_,
-                                       PFSModelBase pDir_,
+                                       PFsObject pDir_,
                                        const Glib::ustring &strName)
     : name(strName),
       overrideSort(overrideSort_),
@@ -139,7 +139,7 @@ void dumpModel(RowsVector &v,
 PFolderTreeModelRow
 FolderTreeModel::append(PFolderTreeModelRow pParent,
                         unsigned overrideSort,
-                        PFSModelBase pDir,
+                        PFsObject pDir,
                         const Glib::ustring &strName)
 {
     // Prevent duplicates. If it exists, return the existing.

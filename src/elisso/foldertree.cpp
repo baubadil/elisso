@@ -69,7 +69,7 @@ typedef std::shared_ptr<SubtreePopulated> PSubtreePopulated;
 
 struct AddOneFirst : ResultBase
 {
-    PFSModelBase            _pFirstSubfolder;
+    PFsObject            _pFirstSubfolder;
 
     AddOneFirst(const PFolderTreeModelRow &pRow)
       : ResultBase(pRow)
@@ -78,7 +78,7 @@ struct AddOneFirst : ResultBase
 
 struct ElissoFolderTreeMgr::Impl : public ProhibitCopy
 {
-    std::vector<std::pair<PFSDirectory, PFolderTreeModelRow>>  vTreeRoots;
+    std::vector<std::pair<PFsDirectory, PFolderTreeModelRow>>  vTreeRoots;
 
     Glib::RefPtr<FolderTreeModel>           pModel;
 
@@ -186,8 +186,8 @@ ElissoFolderTreeMgr::ElissoFolderTreeMgr(ElissoApplicationWindow &mainWindow)
 
     this->show_all_children();
 
-    this->addTreeRoot("Home", FSModelBase::GetHome());
-    this->addTreeRoot("File system", FSModelBase::FindDirectory("/"));
+    this->addTreeRoot("Home", FsObject::GetHome());
+    this->addTreeRoot("File system", FsObject::FindDirectory("/"));
     this->spawnGetMountables();
 }
 
@@ -201,7 +201,7 @@ uint8_t g_cTreeRootItems = 0;
 
 void
 ElissoFolderTreeMgr::addTreeRoot(const Glib::ustring &strName,
-                                 PFSDirectory pDir)
+                                 PFsDirectory pDir)
 {
      // Add the first page in an idle loop so we have no delay in showing the window.
     Glib::signal_idle().connect([this, strName, pDir]() -> bool
@@ -223,13 +223,13 @@ ElissoFolderTreeMgr::addTreeRoot(const Glib::ustring &strName,
 }
 
 void
-ElissoFolderTreeMgr::selectNode(PFSModelBase pDir)
+ElissoFolderTreeMgr::selectNode(PFsObject pDir)
 {
     if (!pDir)
         return;
 
     Debug d(FOLDER_POPULATE_HIGH, string(__func__) + "(" + quote(pDir->getPath()) + ")");
-    PFSModelBase pSelectRoot;
+    PFsObject pSelectRoot;
     PFolderTreeModelRow pRootRow;
 
     for (auto &pair : _pImpl->vTreeRoots)
@@ -312,7 +312,7 @@ ElissoFolderTreeMgr::selectNode(PFSModelBase pDir)
                     else
                     {
                         // Insert a node for the child.
-                        FSContainer *pDir2 = pFSParticle->getContainer();
+                        FsContainer *pDir2 = pFSParticle->getContainer();
                         if (    pDir2
                              && ((pFSParticle = pDir2->find(strParticle)))
                            )
@@ -423,10 +423,10 @@ void ElissoFolderTreeMgr::onGetMountablesDone()
             Debug::Log(MOUNTS, "Got mountable " + pMountable->getBasename());
 }
 
-PFSModelBase
+PFsObject
 ElissoFolderTreeMgr::getSelectedFolder()
 {
-    PFSModelBase pDir;
+    PFsObject pDir;
     auto pTreeSelection = _treeView.get_selection();
     Gtk::TreeModel::iterator it;
     if ((it = pTreeSelection->get_selected()))
@@ -463,7 +463,7 @@ ElissoFolderTreeMgr::onNodeExpanded(const Gtk::TreeModel::iterator &it,
                                  const Gtk::TreeModel::Path &path)
 {
     PFolderTreeModelRow pRow = _pImpl->pModel->findRow(it);
-    PFSModelBase pDir;
+    PFsObject pDir;
     if (    (pRow)
          && ((pDir = pRow->pDir))
        )
@@ -492,7 +492,7 @@ ElissoFolderTreeMgr::spawnPopulate(PFolderTreeModelRow pRow)
 
     if (pRow->state != TreeNodeState::POPULATED_WITH_FOLDERS)
     {
-        FSContainer *pDir2 = pRow->pDir->getContainer();
+        FsContainer *pDir2 = pRow->pDir->getContainer();
         if (pDir2)
         {
             Debug::Log(FOLDER_POPULATE_HIGH, "POPULATING TREE \"" + ((pDir2) ? pRow->pDir->getPath() : "NULL") + "\"");
@@ -511,7 +511,7 @@ ElissoFolderTreeMgr::spawnPopulate(PFolderTreeModelRow pRow)
                 try
                 {
                     pDir2->getContents(pResult->_vContents,
-                                       FSDirectory::Get::FOLDERS_ONLY,
+                                       FsDirectory::Get::FOLDERS_ONLY,
                                        nullptr,
                                        nullptr,
                                        nullptr);        // ptr to stop flag
@@ -617,12 +617,12 @@ ElissoFolderTreeMgr::spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst)
         {
             try
             {
-                FSContainer *pCnr = pAddOneFirst->_pRow->pDir->getContainer();
+                FsContainer *pCnr = pAddOneFirst->_pRow->pDir->getContainer();
                 if (pCnr)
                 {
                     FSVector vFiles;
                     pCnr->getContents(vFiles,
-                                      FSDirectory::Get::FIRST_FOLDER_ONLY,
+                                      FsDirectory::Get::FIRST_FOLDER_ONLY,
                                       nullptr,
                                       nullptr,
                                       nullptr);
@@ -659,10 +659,10 @@ ElissoFolderTreeMgr::onAddAnotherFirst()
     auto pAddOneFirst = this->_pImpl->workerAddOneFirst.fetchResult();
     if (pAddOneFirst)
     {
-        PFSModelBase pFSChild = pAddOneFirst->_pRow->pDir;
+        PFsObject pFSChild = pAddOneFirst->_pRow->pDir;
         Debug::Log(FOLDER_POPULATE_LOW, "TreeJob::onAddAnotherFirst(): popped \"" + pFSChild->getBasename() + "\"");
 
-        PFSModelBase pFSGrandchild = pAddOneFirst->_pFirstSubfolder;
+        PFsObject pFSGrandchild = pAddOneFirst->_pFirstSubfolder;
         if (pFSGrandchild)
         {
             _pImpl->pModel->append(pAddOneFirst->_pRow,
@@ -698,13 +698,13 @@ ElissoFolderTreeMgr::updateCursor()
 
 /* virtual */
 void
-FolderTreeMonitor::onItemAdded(PFSModelBase &pFS) /* override */
+FolderTreeMonitor::onItemAdded(PFsObject &pFS) /* override */
 {
 }
 
 /* virtual */
 void
-FolderTreeMonitor::onItemRemoved(PFSModelBase &pFS) /* override */
+FolderTreeMonitor::onItemRemoved(PFsObject &pFS) /* override */
 {
     auto pRow = _tree._pImpl->pModel->findRow(_pRowWatching, pFS->getBasename());
     if (pRow)
@@ -713,7 +713,7 @@ FolderTreeMonitor::onItemRemoved(PFSModelBase &pFS) /* override */
 
 /* virtual */
 void
-FolderTreeMonitor::onItemRenamed(PFSModelBase &pFS,
+FolderTreeMonitor::onItemRenamed(PFsObject &pFS,
                                  const std::string &strOldName,
                                  const std::string &strNewName) /* override */
 {

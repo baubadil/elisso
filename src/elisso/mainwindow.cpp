@@ -27,11 +27,12 @@ struct ElissoApplicationWindow::Impl
     PSimpleAction                   pActionEditOpenSelected;
     PSimpleAction                   pActionEditOpenSelectedInTab;
     PSimpleAction                   pActionEditOpenSelectedInTerminal;
-    PSimpleAction                   pActionEditOpenSelectedInImageViewer;
     PSimpleAction                   pActionEditCopy;
     PSimpleAction                   pActionEditCut;
     PSimpleAction                   pActionEditPaste;
     PSimpleAction                   pActionEditSelectAll;
+    PSimpleAction                   pActionEditSelectNextPreviewable;
+    PSimpleAction                   pActionEditSelectPreviousPreviewable;
     PSimpleAction                   pActionEditRename;
     PSimpleAction                   pActionEditTrash;
     PSimpleAction                   pActionEditTestFileops;
@@ -54,6 +55,7 @@ struct ElissoApplicationWindow::Impl
     Gtk::ToolButton                 *pButtonViewList;
     PSimpleAction                   pActionViewCompact;
 //     Gtk::ToolButton                 *_pButtonViewCompact;
+    PSimpleAction                   pActionViewShowPreview;
     PSimpleAction                   pActionViewRefresh;
     Gtk::ToolButton                 *pButtonViewRefresh;
 
@@ -237,7 +239,7 @@ ElissoApplicationWindow::getActiveFolderView()
 }
 
 void
-ElissoApplicationWindow::addFolderTab(PFSModelBase pDirOrSymlink)       //!< in: directory to open, or nullptr for "home"
+ElissoApplicationWindow::addFolderTab(PFsObject pDirOrSymlink)       //!< in: directory to open, or nullptr for "home"
 {
     // Add the page in an idle loop so we have no delay in showing the window.
     Glib::signal_idle().connect([this, pDirOrSymlink]() -> bool
@@ -248,7 +250,7 @@ ElissoApplicationWindow::addFolderTab(PFSModelBase pDirOrSymlink)       //!< in:
 
         auto p2 = pDirOrSymlink;
         if (!p2)
-            p2 = FSModelBase::GetHome();
+            p2 = FsObject::GetHome();
         pView->setDirectory(p2,
                             SetDirectoryFlag::PUSH_TO_HISTORY); // but not CLICK_FROM_TREE
 
@@ -328,14 +330,9 @@ ElissoApplicationWindow::enableEditActions(FileSelection *pSel)
     _pImpl->pActionEditOpenSelected->set_enabled(cTotal == 1);
     _pImpl->pActionEditOpenSelectedInTab->set_enabled(fSingleFolder);
     _pImpl->pActionEditOpenSelectedInTerminal->set_enabled(fSingleFolder);
-    bool fImageFile = false;
-    if (!cFolders && (cOtherFiles == 1))  // then pSel cannot be null
-    {
-        auto pFS = pSel->vOthers.at(0);
-        auto t = pFS->getResolvedType();
-        fImageFile = ContentType::IsImageFile(g_pFsGioImpl->getFile(pFS, t));
-    }
-    _pImpl->pActionEditOpenSelectedInImageViewer->set_enabled(fImageFile);
+
+    _pImpl->pActionEditSelectNextPreviewable->set_enabled(cOtherFiles > 0);
+    _pImpl->pActionEditSelectPreviousPreviewable->set_enabled(cOtherFiles > 0);
 
     _pImpl->pActionEditCopy->set_enabled(cTotal > 0);
     _pImpl->pActionEditCut->set_enabled(cTotal > 0);
@@ -356,6 +353,12 @@ ElissoApplicationWindow::enableBackForwardActions()
     }
     _pImpl->pActionGoBack->set_enabled(fBack);
     _pImpl->pActionGoForward->set_enabled(fForward);
+}
+
+void
+ElissoApplicationWindow::setShowingPreview(bool fShowingPreview)
+{
+    _pImpl->pActionViewShowPreview->change_state(fShowingPreview);
 }
 
 void
@@ -392,7 +395,7 @@ ElissoApplicationWindow::onNotebookTabChanged(ElissoFolderView &view)
 Glib::ustring
 ElissoApplicationWindow::updateWindowTitle(ElissoFolderView &view)
 {
-    PFSModelBase pDir = view.getDirectory();
+    PFsObject pDir = view.getDirectory();
 
     Glib::ustring strTitle = "?";
     if (pDir)
@@ -441,7 +444,7 @@ ElissoApplicationWindow::setThumbnailerProgress(uint current, uint max, ShowHide
 }
 
 void
-ElissoApplicationWindow::setStatusbarFree(PFSModelBase pDir)
+ElissoApplicationWindow::setStatusbarFree(PFsObject pDir)
 {
     Glib::ustring strFree;
     PGioFile pGioFile;
@@ -470,7 +473,7 @@ ElissoApplicationWindow::setStatusbarFree(PFSModelBase pDir)
 }
 
 void
-ElissoApplicationWindow::selectInFolderTree(PFSModelBase pDir)
+ElissoApplicationWindow::selectInFolderTree(PFsObject pDir)
 {
     if (pDir)
     {
@@ -586,38 +589,33 @@ ElissoApplicationWindow::onMouseButton3Pressed(GdkEventButton *pEvent,
                 }
                 else
                 {
-                    PFSModelBase pFS = sel.vOthers.front();
-                    if (pFS)
+                    PFsGioFile pFile = sel.getTheOneSelectedFile();
+                    if (pFile)
                     {
-                        auto t = pFS->getResolvedType();
-                        PFsGioFile pFile = g_pFsGioImpl->getFile(pFS, t);
-                        if (pFile)
+                        auto pContentType = ContentType::Guess(pFile);
+                        if (pContentType)
                         {
-                            auto pContentType = ContentType::Guess(pFile);
-                            if (pContentType)
+                            auto pDefaultAppInfo = pContentType->getDefaultAppInfo();
+                            if (pDefaultAppInfo)
                             {
-                                auto pDefaultAppInfo = pContentType->getDefaultAppInfo();
-                                if (pDefaultAppInfo)
-                                {
-                                    // The menu item for the default application is easy, it has a a compile-time action.
-                                    _app.addMenuItem(pMenu, "Open with " + pDefaultAppInfo->get_name(), ACTION_EDIT_OPEN_SELECTED);
+                                // The menu item for the default application is easy, it has a a compile-time action.
+                                _app.addMenuItem(pMenu, "Open with " + pDefaultAppInfo->get_name(), ACTION_EDIT_OPEN_SELECTED);
 
-                                    // The menu items for the non-default application items are difficult because they have
-                                    // no compile-time actions, and we cannot add signals to the Gio::Menu items we are creating
-                                    // here. So make a list of them and override the signals below when we create the Gtk::Menu.
-                                    AppInfoList llInfos = pContentType->getAllAppInfos();
-                                    if (llInfos.size() > 1)
-                                        for (auto &pInfo : llInfos)
-                                            if (pInfo->get_id() != pDefaultAppInfo->get_id())
-                                            {
-                                                std::string strLabel("Open with " + pInfo->get_name());
-                                                auto pMenuItem = Gio::MenuItem::create(strLabel,
-                                                                                       EMPTY_STRING);   // empty action
-                                                // Remember the application info for the signal handlers below.
-                                                mapAppInfosForTempMenuItems[strLabel] = pInfo;
-                                                pMenu->append_item(pMenuItem);
-                                            }
-                                }
+                                // The menu items for the non-default application items are difficult because they have
+                                // no compile-time actions, and we cannot add signals to the Gio::Menu items we are creating
+                                // here. So make a list of them and override the signals below when we create the Gtk::Menu.
+                                AppInfoList llInfos = pContentType->getAllAppInfos();
+                                if (llInfos.size() > 1)
+                                    for (auto &pInfo : llInfos)
+                                        if (pInfo->get_id() != pDefaultAppInfo->get_id())
+                                        {
+                                            std::string strLabel("Open with " + pInfo->get_name());
+                                            auto pMenuItem = Gio::MenuItem::create(strLabel,
+                                                                                   EMPTY_STRING);   // empty action
+                                            // Remember the application info for the signal handlers below.
+                                            mapAppInfosForTempMenuItems[strLabel] = pInfo;
+                                            pMenu->append_item(pMenuItem);
+                                        }
                             }
                         }
                     }
@@ -684,7 +682,7 @@ ElissoApplicationWindow::onMouseButton3Pressed(GdkEventButton *pEvent,
 }
 
 void
-ElissoApplicationWindow::openFile(PFSModelBase pFS,        //!< in: file or folder to open; if nullptr, get single file from selection
+ElissoApplicationWindow::openFile(PFsObject pFS,        //!< in: file or folder to open; if nullptr, get single file from selection
                                   PAppInfo pAppInfo)       //!< in: application to open file with; if nullptr, use file type's default
 {
     auto pActiveFolderView = getActiveFolderView();
@@ -778,7 +776,7 @@ ElissoApplicationWindow::openFile(PFSModelBase pFS,        //!< in: file or fold
 }
 
 void
-ElissoApplicationWindow::openFolderInTerminal(PFSModelBase pFS)
+ElissoApplicationWindow::openFolderInTerminal(PFsObject pFS)
 {
     auto strPath = pFS->getPath();
     if (startsWith(strPath, "file:///"))
@@ -791,7 +789,7 @@ ElissoApplicationWindow::openFolderInTerminal(PFSModelBase pFS)
 void
 ElissoApplicationWindow::addFileOperation(FileOperationType type,
                                           const FSVector &vFiles,
-                                          PFSModelBase pTarget)
+                                          PFsObject pTarget)
 {
     FileOperation::Create(type,
                           vFiles,
@@ -842,11 +840,13 @@ ElissoApplicationWindow::initActionHandlers()
     _pImpl->pActionEditOpenSelected = this->addActiveViewActionHandler(ACTION_EDIT_OPEN_SELECTED);
     _pImpl->pActionEditOpenSelectedInTab = this->addActiveViewActionHandler(ACTION_EDIT_OPEN_SELECTED_IN_TAB);
     _pImpl->pActionEditOpenSelectedInTerminal = this->addActiveViewActionHandler(ACTION_EDIT_OPEN_SELECTED_IN_TERMINAL);
-    _pImpl->pActionEditOpenSelectedInImageViewer = this->addActiveViewActionHandler(ACTION_EDIT_OPEN_SELECTED_IN_IMAGE_VIEWER);
     _pImpl->pActionEditCopy = this->addActiveViewActionHandler(ACTION_EDIT_COPY);
     _pImpl->pActionEditCut = this->addActiveViewActionHandler(ACTION_EDIT_CUT);
     _pImpl->pActionEditPaste = this->addActiveViewActionHandler(ACTION_EDIT_PASTE);
     _pImpl->pActionEditSelectAll = this->addActiveViewActionHandler(ACTION_EDIT_SELECT_ALL);
+    _pImpl->pActionEditSelectNextPreviewable = this->addActiveViewActionHandler(ACTION_EDIT_SELECT_NEXT_PREVIEWABLE);
+    _pImpl->pActionEditSelectPreviousPreviewable = this->addActiveViewActionHandler(ACTION_EDIT_SELECT_PREVIOUS_PREVIEWABLE);
+
     _pImpl->pActionEditRename = this->addActiveViewActionHandler(ACTION_EDIT_RENAME);
     _pImpl->pActionEditTrash = this->addActiveViewActionHandler(ACTION_EDIT_TRASH);
 
@@ -886,6 +886,12 @@ ElissoApplicationWindow::initActionHandlers()
     _pImpl->pActionViewIcons = this->addActiveViewActionHandler(ACTION_VIEW_ICONS);
     _pImpl->pActionViewList = this->addActiveViewActionHandler(ACTION_VIEW_LIST);
     _pImpl->pActionViewCompact = this->addActiveViewActionHandler(ACTION_VIEW_COMPACT);
+
+    _pImpl->pActionViewShowPreview = this->add_action_bool(ACTION_VIEW_SHOW_PREVIEW, [this]()
+    {
+        this->handleActiveViewAction(ACTION_VIEW_SHOW_PREVIEW);
+    });
+
     _pImpl->pActionViewRefresh = this->addActiveViewActionHandler(ACTION_VIEW_REFRESH);
 
 
@@ -1022,7 +1028,7 @@ ElissoApplicationWindow::handleActiveViewAction(const std::string &strAction)
     {
         if (strAction == ACTION_FILE_NEW_TAB)
         {
-            PFSModelBase pDir;
+            PFsObject pDir;
             if ((pDir = pView->getDirectory()))
                 this->addFolderTab(pDir);
         }
@@ -1056,8 +1062,9 @@ ElissoApplicationWindow::handleActiveViewAction(const std::string &strAction)
                 { ACTION_EDIT_CUT, FolderAction::EDIT_CUT },
                 { ACTION_EDIT_PASTE, FolderAction::EDIT_PASTE },
                 { ACTION_EDIT_SELECT_ALL, FolderAction::EDIT_SELECT_ALL },
+                { ACTION_EDIT_SELECT_NEXT_PREVIEWABLE, FolderAction::EDIT_SELECT_NEXT_PREVIEWABLE },
+                { ACTION_EDIT_SELECT_PREVIOUS_PREVIEWABLE, FolderAction::EDIT_SELECT_PREVIOUS_PREVIEWABLE },
                 { ACTION_EDIT_OPEN_SELECTED, FolderAction::EDIT_OPEN_SELECTED },
-                { ACTION_EDIT_OPEN_SELECTED_IN_IMAGE_VIEWER, FolderAction::EDIT_OPEN_SELECTED_IN_IMAGE_VIEWER },
                 { ACTION_FILE_CREATE_FOLDER, FolderAction::FILE_CREATE_FOLDER },
                 { ACTION_FILE_CREATE_DOCUMENT, FolderAction::FILE_CREATE_DOCUMENT },
                 { ACTION_EDIT_RENAME, FolderAction::EDIT_RENAME },
@@ -1068,6 +1075,7 @@ ElissoApplicationWindow::handleActiveViewAction(const std::string &strAction)
                 { ACTION_VIEW_ICONS, FolderAction::VIEW_ICONS },
                 { ACTION_VIEW_LIST, FolderAction::VIEW_LIST },
                 { ACTION_VIEW_COMPACT, FolderAction::VIEW_COMPACT },
+                { ACTION_VIEW_SHOW_PREVIEW, FolderAction::VIEW_SHOW_PREVIEW },
                 { ACTION_VIEW_REFRESH, FolderAction::VIEW_REFRESH },
                 { ACTION_GO_BACK, FolderAction::GO_BACK },
                 { ACTION_GO_FORWARD, FolderAction::GO_FORWARD },

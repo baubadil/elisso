@@ -77,8 +77,9 @@ enum class FolderAction
     EDIT_CUT,
     EDIT_PASTE,
     EDIT_SELECT_ALL,
+    EDIT_SELECT_NEXT_PREVIEWABLE,
+    EDIT_SELECT_PREVIOUS_PREVIEWABLE,
     EDIT_OPEN_SELECTED,
-    EDIT_OPEN_SELECTED_IN_IMAGE_VIEWER,
     FILE_CREATE_FOLDER,
     FILE_CREATE_DOCUMENT,
     EDIT_RENAME,
@@ -89,6 +90,7 @@ enum class FolderAction
     VIEW_ICONS,
     VIEW_LIST,
     VIEW_COMPACT,
+    VIEW_SHOW_PREVIEW,
     VIEW_REFRESH,
     GO_BACK,
     GO_FORWARD,
@@ -123,14 +125,24 @@ typedef FlagSet<SetDirectoryFlag> SetDirectoryFlagSet;
 
 /**
  *  The ElissoFolderView is always created as a tab under the main window's notebook
- *  and thus consumes the right two thirds of a folder window. The class derives from
- *  Overlay to be able to overlay a "loading" spinner. Most importantly though,
- *  it contains a ScrolledWindow, which in turn contains either a TreeView or
- *  IconView child, depending on which view is selected. Both views are
- *  constructed in the ElissoFolderView constructor, but inserted and removed
- *  by setViewMode() when the view is changed.
+ *  and thus consumes the right two thirds of a folder window.
+ *
+ *  See ElissoApplicationWindow for the window hierarchy.
+ *
+ *  The class derives from Overlay to be able to overlay a "loading" spinner while
+ *  the folder is populating. It has exactly one child, a Gtk::Paned with two
+ *  more children:
+ *
+ *   -- most importantly, on the left, a ScrolledWindow, which in turn contains
+ *      either a TreeView or IconView child, depending on which view is selected.
+ *      Both views are constructed in the ElissoFolderView constructor, but inserted
+ *      and removed by setViewMode() when the view is changed;
+ *
+ *   -- an ElissoPreviewPane on the right, which is a subclassed Gtk::EventBox
+ *      containing a  Gtk::Image for previews. This is hidden and only shown when
+ *      a previewable file is selected in the folder contents on the left.
  */
-class ElissoFolderView : public Gtk::Overlay
+class ElissoFolderView : public Gtk::Overlay, ProhibitCopy
 {
 public:
     /**
@@ -166,11 +178,11 @@ public:
     }
 
     /**
-     *  Returns the FSDirectory that's currently showing. In the event that
-     *  we're displaying a directory via a symlink, an FSSymlink is returned
+     *  Returns the FsDirectory that's currently showing. In the event that
+     *  we're displaying a directory via a symlink, an FsSymlink is returned
      *  that points to the directory.
      */
-    PFSModelBase getDirectory()
+    PFsObject getDirectory()
     {
         return _pDir;
     }
@@ -189,7 +201,7 @@ public:
      *
      *  Returns true if a populate thread was started, or false if the folder had already been populated.
      */
-    bool setDirectory(PFSModelBase pDirOrSymlinkToDir,
+    bool setDirectory(PFsObject pDirOrSymlinkToDir,
                       SetDirectoryFlagSet fl);
 
     /**
@@ -222,23 +234,62 @@ public:
      */
     void setState(ViewState s);
 
+    /**
+     *  Switches the folder's view between list, icon or compact view, and shows, hides and adjusts
+     *  all the  Gtk controls accordingly.
+     *
+     *  setError() calls this with the view mode FolderViewMode::ERROR when errors occur.
+     */
     void setViewMode(FolderViewMode m);
 
+    /**
+     *  Shows or hides the preview pane.
+     */
+    void showPreviewPane(bool fShow);
+
+    /**
+     *  Replaces the entire view with an error message. This sets both the state and the view to
+     *  special error modes, which the user can get out of by selecting a different folder again.
+     */
     void setError(Glib::ustring strError);
 
+    /**
+     *  Gets called whenever the folder selection changes to display info on the selected items.
+     */
     void updateStatusbar(FileSelection *pSel);
 
     /*
      *  Public selection methods
      */
+
+    /**
+     *  Selects all items in the folder (e.g. because of ctrl+a).
+     */
     void selectAll();
 
-    PFSModelBase getSelectedFolder();
+    /**
+     *  Attempts to select the next or previous file in the currently displayed folder which
+     *  might be previewable. If fNext is true, then the next file is displayed; otherwise the
+     *  previous. If nothing is currently selected or more than one file is selected, this
+     *  does nothing.
+     */
+    void selectPreviewable(bool fNext);
+
+    /**
+     *  Returns the single selected folder (directory or symlink pointing to one),
+     *  or nullptr if either nothing is selected or the selection is not a single
+     *  such folder.
+     */
+    PFsObject getSelectedFolder();
 
     /*
      *  Public file action methods
      */
 
+    /**
+     *  Fills the given FileSelection object with the selected items from the
+     *  active icon or tree view. Returns the total no. of item selected.
+     */
     size_t getSelection(FileSelection &sel);
 
     /**
@@ -274,7 +325,7 @@ public:
      *
      *  This may throw FSException.
      */
-    PFSDirectory handleCreateSubfolder();
+    PFsDirectory handleCreateSubfolder();
 
     /**
      *  Called from handleAction to prompt for the name of a new empty file and then create it
@@ -303,6 +354,7 @@ public:
 private:
     friend class FolderViewMonitor;
     friend class TreeViewPlus;
+    friend class ElissoPreviewPane;
 
     void setWaitCursor(Cursor cursor);
     void dumpStack();
@@ -320,16 +372,16 @@ private:
      *  Returns the filesystem object for the given row, looking it up by name, or nullptr
      *  if it could not be found.
      */
-    PFSModelBase getFileFromRow(Gtk::TreeModel::Row &row);
+    PFsObject getFsObjFromRow(Gtk::TreeModel::Row &row);
 
-    Gtk::ListStore::iterator insertFile(PFSModelBase pFS);
-    void removeFile(PFSModelBase pFS);
-    void renameFile(PFSModelBase pFS, const std::string &strOldName, const std::string &strNewName);
+    Gtk::ListStore::iterator insertFile(PFsObject pFS);
+    void removeFile(PFsObject pFS);
+    void renameFile(PFsObject pFS, const std::string &strOldName, const std::string &strNewName);
     void connectModel(bool fConnect);
 
     void setNotebookTabTitle();
 
-    PPixbuf loadIcon(PFSModelBase pFS,
+    PPixbuf loadIcon(PFsObject pFS,
                      FSTypeResolved tr,
                      int size,
                      bool *pfThumbnailing);
@@ -348,42 +400,23 @@ private:
     void onPathActivated(const Gtk::TreeModel::Path &path);
     void onSelectionChanged();
 
+    /**
+     *  Called from ElissoPreviewPane when a preview has finished loading. We can then
+     *  scroll the folder contents into view if necessary. The currently selected item
+     *  may be scrolled out of view if a "next" or "previous" item was selected through
+     *  folder actions or by clicking on the preview pane.
+     */
+    void onPreviewReady(PFsGioFile pFile);
+
     ElissoApplication& getApplication();
 
     size_t                      _id;
 
     ElissoApplicationWindow     &_mainWindow;
+    PFsObject                   _pDir;
+
     struct Impl;
     Impl                        *_pImpl;
-
-    ViewState                   _state = ViewState::UNDEFINED;
-    Glib::ustring               _strError;          // only with ViewState::ERROR, use setError() to set
-    FolderViewMode              _mode = FolderViewMode::UNDEFINED;
-    FolderViewMode              _modeBeforeError = FolderViewMode::UNDEFINED;
-
-    Gtk::Label                  _labelNotebookPage;
-    Gtk::Label                  _labelNotebookMenu;
-
-    Gtk::ScrolledWindow         _scrolledWindow;        // Parent of both icon and tree view.
-
-#ifdef USE_XICONVIEW
-    Gtk::XIconView              _iconView;
-#else
-    Gtk::IconView               _iconView;
-#endif
-    TreeViewPlus                _treeView;
-//     Gtk::FlowBox                _compactView;
-    Gtk::InfoBar                _infoBarError;
-    Gtk::Label                  _infoBarLabel;
-    Gtk::CellRendererPixbuf     _cellRendererIconSmall;
-    Gtk::CellRendererPixbuf     _cellRendererIconBig;
-    Gtk::CellRendererText       _cellRendererSize;
-
-    Gtk::EventBox               *_pLoading = nullptr;
-
-    PFSModelBase                _pDir;
-    std::vector<std::string>    _aPathHistory;
-    uint32_t                    _uPathHistoryOffset = 0;
 };
 
 
@@ -394,22 +427,22 @@ private:
  **************************************************************************/
 
 /**
- *  FSMonitorBase subclassed tailored for the folder contents list.
+ *  FsMonitorBase subclassed tailored for the folder contents list.
  *
  *  This is for updating the folder contents when file operations are
  *  going on.
  */
-class FolderViewMonitor : public FSMonitorBase
+class FolderViewMonitor : public FsMonitorBase
 {
 public:
     FolderViewMonitor(ElissoFolderView &view)
-        : FSMonitorBase(),
+        : FsMonitorBase(),
           _view(view)
     { };
 
-    virtual void onItemAdded(PFSModelBase &pFS) override;
-    virtual void onItemRemoved(PFSModelBase &pFS) override;
-    virtual void onItemRenamed(PFSModelBase &pFS, const std::string &strOldName, const std::string &strNewName) override;
+    virtual void onItemAdded(PFsObject &pFS) override;
+    virtual void onItemRemoved(PFsObject &pFS) override;
+    virtual void onItemRenamed(PFsObject &pFS, const std::string &strOldName, const std::string &strNewName) override;
 
 private:
     ElissoFolderView &_view;

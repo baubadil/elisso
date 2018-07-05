@@ -31,6 +31,13 @@ struct FileSelection
     FSVector vFolders;       // directories or symlinks to directories
     FSVector vOthers;        // other files
     FSVector vAll;           // both lists combined, in order
+
+    /**
+     *  Useful helper that returns a file if exactly one file is selected,
+     *  or nullptr otherwise (if nothing is selected, or more than one item,
+     *  or the one selected item isn't a file).
+     */
+    PFsGioFile getTheOneSelectedFile();
 };
 
 
@@ -60,10 +67,10 @@ typedef std::shared_ptr<ProgressDialog> PProgressDialog;
  *  creates a GUI dialog which displays progress, and all file-system monitors attached to
  *  containers are invoked correctly on the GUI thread.
  *
- *  This inherits from WorkerResult<PFSModelBase> so the worker thread can push file-system
+ *  This inherits from WorkerResult<PFsObject> so the worker thread can push file-system
  *  objects onto the member deque for file-system monitor processing on the GUI thread.
  */
-class FileOperation : public WorkerResultQueue<PFSModelBase>,
+class FileOperation : public WorkerResultQueue<PFsObject>,
                       public enable_shared_from_this<FileOperation>
 {
 public:
@@ -71,7 +78,7 @@ public:
 
     static PFileOperation Create(FileOperationType t,
                                  const FSVector &vFiles,
-                                 PFSModelBase pTarget,
+                                 PFsObject pTarget,
                                  FileOperationsList &refQueue,
                                  PProgressDialog *ppProgressDialog,
                                  Gtk::Window *pParentWindow);
@@ -101,7 +108,7 @@ protected:
     void threadFunc();
 
     void onProgress();
-    void onProcessingNextItem(PFSModelBase pFS);
+    void onProcessingNextItem(PFsObject pFS);
 
     FileOperationType   _t;
     uint                _id;
@@ -109,7 +116,7 @@ protected:
     std::string         _strError;
     FileOperationsList  &_refQueue;
     FSVector            _vFiles;
-    PFSModelBase        _pTarget;
+    PFsObject           _pTarget;
     struct Impl;
     Impl                *_pImpl;
 };

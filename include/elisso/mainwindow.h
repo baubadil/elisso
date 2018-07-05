@@ -55,15 +55,18 @@ enum class ShowHideOrNothing : uint8_t
  *               |   |
  *               |   +- Tab: ElissoFolderView (derived from GtkOverlay)
  *               |   |   |
- *               |   |   +- GtkScrolledWindow
+ *               |   |   +- GtkPaned: to split between the icon/list (left) and image preview (right)
  *               |   |       |
- *               |   |       +- GtkTreeView (list view)
+ *               |   |       +- GtkScrolledWindow (icon/list view parent)
+ *               |   |       |   |
+ *               |   |       |   +- GtkTreeView, GtkIconView
+ *               |   |       |
+ *               |   |       +- GtkScrolledWindow
+ *               |   |           |
+ *               |   |           +- ElissoFilePreview
  *               |   |
- *               |   +- Tab: ElissoFolderView (subclass of GtkOverlay)
- *               |       |
- *               |       +- GtkScrolledWindow
- *               |           |
- *               |           +- GtkTreeView (list view)
+ *               |   +- maybe another Tab: ElissoFolderView (subclass of GtkOverlay)
+ *               |     .....
  *               |
  *               +- GtkStatusBar
  *
@@ -116,7 +119,7 @@ public:
      *
      *  If pDir is nullptr, we retrieve the user's home directory from the FS backend.
      */
-    void addFolderTab(PFSModelBase pDirOrSymlink);
+    void addFolderTab(PFsObject pDirOrSymlink);
 
     void addFolderTab(const std::string &strError);
 
@@ -133,6 +136,11 @@ public:
      *  Called from ElissoFolderView::setDirectory() to enable back/forward actions.
      */
     void enableBackForwardActions();
+
+    /**
+     *  Called from ElissoFolderView::handleAction to change the preview menu item state.
+     */
+    void setShowingPreview(bool fShowingPreview);
 
     void onLoadingFolderView(ElissoFolderView &view);
 
@@ -174,9 +182,9 @@ public:
      *  in the folder).
      *
      */
-    void setStatusbarFree(PFSModelBase pDir);
+    void setStatusbarFree(PFsObject pDir);
 
-    void selectInFolderTree(PFSModelBase pDir);
+    void selectInFolderTree(PFsObject pDir);
 
     /**
      *  Handler for the "button press event" signal for
@@ -216,14 +224,14 @@ public:
      *  If the object is a directory or a symlink to one, we call setDirectory().
      *  Otherwise we open the file with the
      */
-    void openFile(PFSModelBase pFS,
+    void openFile(PFsObject pFS,
                   PAppInfo pAppInfo);
 
-    void openFolderInTerminal(PFSModelBase pFS);
+    void openFolderInTerminal(PFsObject pFS);
 
     void addFileOperation(FileOperationType type,
                           const FSVector &vFiles,
-                          PFSModelBase pTarget);
+                          PFsObject pTarget);
     bool areFileOperationsRunning() const;
 
 protected:

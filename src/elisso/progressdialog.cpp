@@ -93,7 +93,7 @@ public:
     }
 
     void
-    update(PFSModelBase pfsCurrent,
+    update(PFsObject pfsCurrent,
            double dProgress)
     {
         Debug::Log(PROGRESSDIALOG, __func__);
@@ -184,7 +184,7 @@ public:
     Gtk::ProgressBar    _progressBar;
     Gtk::Button         _cancelButton;
 
-    PFSModelBase        _pfsLast;
+    PFsObject           _pfsLast;
     double              _dProgressLast = -1;
 };
 
@@ -234,7 +234,7 @@ ProgressDialog::addOperation(PFileOperation pOp)
 
 void
 ProgressDialog::updateOperation(PFileOperation pOp,
-                                PFSModelBase pFSCurrent,
+                                PFsObject pFSCurrent,
                                 double dProgress)
 {
     auto it1 = _pImpl->mapOpRows.find(pOp->getId());

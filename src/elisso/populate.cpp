@@ -34,17 +34,17 @@ std::atomic<uint> g_uPopulateThreadID(0);
  */
 /* static */
 PPopulateThread
-PopulateThread::Create(PFSModelBase &pDir,               //!< in: directory or symlink to directory to populate
+PopulateThread::Create(PFsObject &pDir,               //!< in: directory or symlink to directory to populate
                        PViewPopulatedWorker pWorkerResult,
                        bool fClickFromTree,              //!< in: stored in instance data for dispatcher handler
                        bool fFollowSymlinks,             //!< in: whether to call follow() on each symlink in the thread
-                       PFSModelBase pDirSelectPrevious)  //!< in: if set, select this item after populating
+                       PFsObject pDirSelectPrevious)  //!< in: if set, select this item after populating
 {
     /* This nasty trickery is necessary to make std::make_shared work with a protected constructor. */
     class Derived : public PopulateThread
     {
     public:
-        Derived(PFSModelBase &pDir, PViewPopulatedWorker pWorkerResult, PFSModelBase pDirSelectPrevious)
+        Derived(PFsObject &pDir, PViewPopulatedWorker pWorkerResult, PFsObject pDirSelectPrevious)
             : PopulateThread(pDir, pWorkerResult, pDirSelectPrevious) { }
     };
 
@@ -68,9 +68,9 @@ PopulateThread::Create(PFSModelBase &pDir,               //!< in: directory or s
 /**
  *  Constructor.
  */
-PopulateThread::PopulateThread(PFSModelBase &pDir,
+PopulateThread::PopulateThread(PFsObject &pDir,
                                PViewPopulatedWorker pWorkerResult,
-                               PFSModelBase pDirSelectPrevious)
+                               PFsObject pDirSelectPrevious)
     : _pDir(pDir),
       _pWorkerResult(pWorkerResult),
       _pDirSelectPrevious(pDirSelectPrevious)
@@ -88,10 +88,10 @@ PopulateThread::threadFunc(uint idPopulateThread,
                                                                          _pDirSelectPrevious);
     try
     {
-        FSContainer *pCnr = _pDir->getContainer();
+        FsContainer *pCnr = _pDir->getContainer();
         if (pCnr)
             pCnr->getContents(*pResult->pvContents,
-                              FSDirectory::Get::ALL,
+                              FsDirectory::Get::ALL,
                               &pResult->vAdded,
                               &pResult->vRemoved,
                               &_stopFlag,

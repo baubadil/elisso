@@ -22,44 +22,6 @@
 #include <cstdlib>
 #include <vector>
 
-/**
- *  Simple structure to temporarily hold the complete binary contents
- *  of a file. The constructor reads them from disk via fopen().
- */
-struct FileContents
-{
-    FileContents(PGioFile pFile)
-         : _pData(nullptr), _size(0)
-    {
-        try
-        {
-            auto pStream = pFile->read();
-            Glib::RefPtr<Gio::FileInfo> pInfo = pStream->query_info(G_FILE_ATTRIBUTE_STANDARD_SIZE);
-            _size = pInfo->get_attribute_uint64(G_FILE_ATTRIBUTE_STANDARD_SIZE);
-
-            if (!(_pData = (char*)malloc(_size)))
-                throw FSException("Not enough memory");
-            gsize zRead;
-            pStream->read_all(_pData, _size, zRead);
-            pStream->close();
-        }
-        catch (Gio::Error &e)
-        {
-            throw FSException(e.what());
-        }
-    }
-
-    ~FileContents()
-    {
-        if (_pData)
-            free(_pData);
-    }
-
-    char *_pData;
-    size_t _size;
-};
-typedef std::shared_ptr<FileContents> PFileContents;
-
 struct ThumbnailTemp
 {
     PThumbnail      pThumb;
@@ -312,7 +274,7 @@ Thumbnailer::fileReaderThread()
             else
             {
                 // Is image file:
-                std::shared_ptr<FileContents> pFileContents = make_shared<FileContents>(g_pFsGioImpl->getGioFile(*pThumbnailIn->pFile));
+                std::shared_ptr<FileContents> pFileContents = make_shared<FileContents>(*pThumbnailIn->pFile);
 
                 auto pThumbnailTemp = make_shared<ThumbnailTemp>(pThumbnailIn,
                                                                  pFileContents);
@@ -404,22 +366,24 @@ Thumbnailer::pixbufLoaderThread(uint threadno)
     }
 }
 
-PPixbuf Thumbnailer::scale(PFsGioFile pFS,
-                           PPixbuf ppbIn,
-                           size_t thumbsize)
+/* static */
+PPixbuf
+Thumbnailer::ScaleAndRotate(PPixbuf ppbIn,
+                            size_t cxTargetIn,
+                            size_t cyTargetIn)
 {
     size_t
         cxSrc = ppbIn->get_width(),
         cySrc = ppbIn->get_height(),
-        cxThumb = thumbsize,
-        cyThumb = thumbsize;
+        cxTargetUse = cxTargetIn,
+        cyTargetUse = cyTargetIn;
     if (cxSrc > cySrc)      // landscape
-        cyThumb = thumbsize * cySrc / cxSrc;
+        cyTargetUse = cxTargetIn * cySrc / cxSrc;
     else                    // portrait
-        cxThumb = thumbsize * cxSrc / cySrc;
+        cxTargetUse = cyTargetIn * cxSrc / cySrc;
 
-    auto ppbOut = ppbIn->scale_simple(cxThumb,
-                                      cyThumb,
+    auto ppbOut = ppbIn->scale_simple(cxTargetUse,
+                                      cyTargetUse,
                                       Gdk::InterpType::INTERP_BILINEAR);
 
     if (ppbOut)
@@ -438,6 +402,15 @@ PPixbuf Thumbnailer::scale(PFsGioFile pFS,
                 ppbOut = ppbOut->rotate_simple(Gdk::PixbufRotation::PIXBUF_ROTATE_COUNTERCLOCKWISE);
         }
     }
+
+    return ppbOut;
+}
+
+PPixbuf Thumbnailer::scale(PFsGioFile pFS,
+                           PPixbuf ppbIn,
+                           size_t thumbsize)
+{
+    auto ppbOut = ScaleAndRotate(ppbIn, thumbsize, thumbsize);
 
     pFS->setThumbnail(thumbsize, ppbOut);
 

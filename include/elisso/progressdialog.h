@@ -18,8 +18,8 @@
 class FileOperation;
 typedef std::shared_ptr<FileOperation> PFileOperation;
 
-class FSModelBase;
-typedef std::shared_ptr<FSModelBase> PFSModelBase;
+class FsObject;
+typedef std::shared_ptr<FsObject> PFsObject;
 
 class OperationRow;
 typedef std::shared_ptr<OperationRow> POperationRow;
@@ -63,7 +63,7 @@ public:
      *  the operation finished and removes it from the dialog's VBox.
      */
     void updateOperation(PFileOperation pOp,
-                         PFSModelBase pFSCurrent,
+                         PFsObject pFSCurrent,
                          double dProgress);
 
     void setError(PFileOperation pOp, const Glib::ustring &strError);

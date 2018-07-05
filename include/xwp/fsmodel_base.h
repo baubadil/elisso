@@ -41,22 +41,22 @@ enum class FSTypeResolved
     MOUNTABLE
 };
 
-class FSModelBase;
-typedef std::shared_ptr<FSModelBase> PFSModelBase;
+class FsObject;
+typedef std::shared_ptr<FsObject> PFsObject;
 
 class FSFile;
 typedef std::shared_ptr<FSFile> PFSFile;
 
-class FSDirectory;
-typedef std::shared_ptr<FSDirectory> PFSDirectory;
+class FsDirectory;
+typedef std::shared_ptr<FsDirectory> PFsDirectory;
 
-class FSSymlink;
-typedef std::shared_ptr<FSSymlink> PFSSymlink;
+class FsSymlink;
+typedef std::shared_ptr<FsSymlink> PFsSymlink;
 
-typedef std::vector<PFSModelBase> FSVector;
+typedef std::vector<PFsObject> FSVector;
 typedef std::shared_ptr<FSVector> PFSVector;
 
-class FSContainer;
+class FsContainer;
 class ContentsLock;
 
 namespace XWP { class Debug; }
@@ -64,13 +64,13 @@ namespace XWP { class Debug; }
 
 /***************************************************************************
  *
- *  FSLock
+ *  FsLock
  *
  **************************************************************************/
 
 /**
  *  Global lock for the whole file-system model. This is used to protect
- *  instance data of FSModelBase and the derived classes. Since the
+ *  instance data of FsObject and the derived classes. Since the
  *  file-system model is designed to be thread-safe, this lock must always
  *  be held when reading or modifying instance data.
  *
@@ -79,18 +79,18 @@ namespace XWP { class Debug; }
  *
  *  The one exception is ContentsLock, see below.
  *
- *  To avoid deadlocks, never hold FSLock when requesting a ContentsLock.
+ *  To avoid deadlocks, never hold FsLock when requesting a ContentsLock.
  *
  *  Again, do not hold this for a long time since this will block all
  *  file operations. If you have something that takes longer but needs
- *  to be atomic, use a mechanism like in FSSymlink::follow(), which
- *  introduces a per-object state flag (which is protected by FSLock)
+ *  to be atomic, use a mechanism like in FsSymlink::follow(), which
+ *  introduces a per-object state flag (which is protected by FsLock)
  *  together with a condition variable.
  */
-class FSLock : public XWP::Lock
+class FsLock : public XWP::Lock
 {
 public:
-    FSLock();
+    FsLock();
 };
 
 
@@ -123,7 +123,7 @@ protected:
     FsImplBase();
 
 public:
-    virtual PFSModelBase findPath(const string &strPath) = 0;
+    virtual PFsObject findPath(const string &strPath) = 0;
 
     /**
      *  Instantiates the given file system object from the given path and returns it,
@@ -133,16 +133,16 @@ public:
      *  This never returns NULL, but throws FSExceptions instead, even for file-system
      *  errors.
      */
-    virtual PFSModelBase makeAwake(const string &strParentPath,
-                                   const string &strBasename,
-                                   bool fIsLocal) = 0;
+    virtual PFsObject makeAwake(const string &strParentPath,
+                                const string &strBasename,
+                                bool fIsLocal) = 0;
 
     /**
      *  The equivalent of opendir(). This returns a shared pointer to a buffer with
      *  implementation-defined data. Keep calling getNextChild() until that returns
      *  false.
      */
-    virtual PFsDirEnumeratorBase beginEnumerateChildren(FSContainer &cnr) = 0;
+    virtual PFsDirEnumeratorBase beginEnumerateChildren(FsContainer &cnr) = 0;
 
     /**
      *  To be used with the buffer returned by beginEnumerateChildren(). If this
@@ -157,32 +157,32 @@ public:
      *  The equivalent of readlink(). Returns the unprocessed contents of the given
      *  symlink.
      */
-    virtual string getSymlinkContents(FSSymlink &ln) = 0;
+    virtual string getSymlinkContents(FsSymlink &ln) = 0;
 
     /**
      *  This renames a file. Throws an FSException on errors.
      */
-    virtual void rename(FSModelBase &fs, const string &strNewName) = 0;
+    virtual void rename(FsObject &fs, const string &strNewName) = 0;
 
     /**
      *  This sends a file to the trash can. Throws an FSException on errors.
      */
-    virtual void trash(FSModelBase &fs) = 0;
+    virtual void trash(FsObject &fs) = 0;
 
     /**
      *  This copies a file. Throws an FSException on errors.
      */
-    virtual void copy(XWP::Debug &d, FSModelBase &fs, const string &strTargetPath) = 0;
+    virtual void copy(XWP::Debug &d, FsObject &fs, const string &strTargetPath) = 0;
 
     /**
      *  This moves a file. Throws an FSException on errors.
      */
-    virtual void move(XWP::Debug &d, FSModelBase &fs, const string &strTargetPath) = 0;
+    virtual void move(XWP::Debug &d, FsObject &fs, const string &strTargetPath) = 0;
 
     /**
      *  This creates a subdirectory in the given directory. Throws an FSException on errors.
      */
-    virtual PFSDirectory createSubdirectory(const string &strParentPath,
+    virtual PFsDirectory createSubdirectory(const string &strParentPath,
                                             const string &strBasename) = 0;
 
     /**
@@ -195,7 +195,7 @@ public:
 
 /***************************************************************************
  *
- *  FSMonitorBase
+ *  FsMonitorBase
  *
  **************************************************************************/
 
@@ -222,9 +222,9 @@ public:
  *  can watch at most one container, but a folder (container) can have
  *  multiple monitors.
  */
-class FSMonitorBase : public ProhibitCopy, public enable_shared_from_this<FSMonitorBase>
+class FsMonitorBase : public ProhibitCopy, public enable_shared_from_this<FsMonitorBase>
 {
-    friend class FSContainer;
+    friend class FsContainer;
 
     /**************************************
      *
@@ -233,7 +233,7 @@ class FSMonitorBase : public ProhibitCopy, public enable_shared_from_this<FSMoni
      *************************************/
 
 protected:
-    virtual ~FSMonitorBase();
+    virtual ~FsMonitorBase();
 
 
     /**************************************
@@ -243,17 +243,17 @@ protected:
      *************************************/
 
 public:
-    virtual void onItemAdded(PFSModelBase &pFS) = 0;
-    virtual void onItemRemoved(PFSModelBase &pFS) = 0;
-    virtual void onItemRenamed(PFSModelBase &pFS, const std::string &strOldName, const std::string &strNewName) = 0;
+    virtual void onItemAdded(PFsObject &pFS) = 0;
+    virtual void onItemRemoved(PFsObject &pFS) = 0;
+    virtual void onItemRenamed(PFsObject &pFS, const std::string &strOldName, const std::string &strNewName) = 0;
 
-    FSContainer* isWatching()
+    FsContainer* isWatching()
     {
         return _pContainer;
     }
 
-    void startWatching(FSContainer &cnr);
-    void stopWatching(FSContainer &cnr);
+    void startWatching(FsContainer &cnr);
+    void stopWatching(FsContainer &cnr);
 
 
     /**************************************
@@ -263,15 +263,15 @@ public:
      *************************************/
 
 private:
-    FSContainer *_pContainer = nullptr;
+    FsContainer *_pContainer = nullptr;
 };
 
-typedef std::shared_ptr<FSMonitorBase> PFSMonitorBase;
+typedef std::shared_ptr<FsMonitorBase> PFsMonitorBase;
 
 
 /***************************************************************************
  *
- *  FSModelBase
+ *  FsObject
  *
  **************************************************************************/
 
@@ -287,7 +287,6 @@ enum class FSFlag : uint16_t
     HIDDEN                     =  (1 <<  7),
     THUMBNAILING               =  (1 <<  8),
     IS_LOCAL                   =  (1 <<  9),        // path has file:/// URI
-
 };
 // DEFINE_FLAGSET(FSFlag)
 
@@ -298,20 +297,20 @@ typedef FlagSet<FSFlag> FSFlagSet;
  *
  *  There are several main entry points to get objects for files and directories:
  *
- *   -- Most obviously, FSModelBase::FindPath() and FSModelBase::FindDirectory().
+ *   -- Most obviously, FsObject::FindPath() and FsObject::FindDirectory().
  *      They will do blocking I/O and build a hierarchy of objects for the given
  *      path (including all parent directories to the root).
  *
  *   -- To get objects for the contents of a folder (directory), use
- *      FSDirectory::getContents() and FSDirectory::find().
+ *      FsDirectory::getContents() and FsDirectory::find().
  *
  *  This code also handles symlinks and can treat symlinks to directories like
- *  directories; see FSSymlink for details.
+ *  directories; see FsSymlink for details.
  */
-class FSModelBase : public std::enable_shared_from_this<FSModelBase>
+class FsObject : public std::enable_shared_from_this<FsObject>
 {
-    friend class FSContainer;
-    friend class FSSymlink;
+    friend class FsContainer;
+    friend class FsSymlink;
 
     /**************************************
      *
@@ -321,25 +320,23 @@ class FSModelBase : public std::enable_shared_from_this<FSModelBase>
 
 protected:
     /**
-     *  Protected internal method to creates a new FSModelBase instance around the given Gio::File,
-     *  picking the correct FSModelBase subclass depending on the file's type.
+     *  Protected internal method to creates a new FsObject instance around the given Gio::File,
+     *  picking the correct FsObject subclass depending on the file's type.
      *
      *  Note that creating a Gio::File never fails because there is no I/O involved, but this
      *  function does perform blocking I/O to test for the file's existence and dermine its type,
      *  so it can fail. If it does fail, e.g. because the file does not exist, then we throw FSException.
      *
      *  If this returns something, it is a dangling file object without an owner. You MUST call
-     *  FSContainer::addChild() with the return value.
+     *  FsContainer::addChild() with the return value.
      *
      *  In any case, DO NOT CALL THIS FOR ROOT DIRECTORIES since this will mess up our internal
      *  management. Use RootDirectory::Get() instead.
      */
-//     static PFSModelBase MakeAwake(PGioFile pGioFile);
-
-    FSModelBase(FSType type,
-                const string &strBasename,
-                uint64_t cbSize);
-    virtual ~FSModelBase() { };
+    FsObject(FSType type,
+             const string &strBasename,
+             uint64_t cbSize);
+    virtual ~FsObject() { };
 
 
     /**************************************
@@ -422,9 +419,9 @@ public:
 
     /**
      *  Returns the parent directory of this filesystem object. Note that this
-     *  can be either a FSDirectory or a FSSymlink that points to one.
+     *  can be either a FsDirectory or a FsSymlink that points to one.
      */
-    PFSModelBase getParent() const;
+    PFsObject getParent() const;
 
     /**
      *  Returns true if this is located under the given directory, either directly
@@ -433,20 +430,20 @@ public:
      *  Does NOT return true if this and pDir are the same; you need to test for that
      *  manually.
      */
-    bool isUnder(PFSDirectory pDir) const;
+    bool isUnder(PFsDirectory pDir) const;
 
     /**
-     *  Returns the FSContainer component of this directory or symlink.
+     *  Returns the FsContainer component of this directory or symlink.
      *
      *  We use C++ multiple inheritance to be able to store directory contents for
      *  both real directories and symlinks to real directories. In both cases,
-     *  this returns a pointer to the FSContainer class of this instance. Otherwise
+     *  this returns a pointer to the FsContainer class of this instance. Otherwise
      *  (including for non-directory symlinks), this returns nullptr.
      *
      *  This allows you to call container methods like find() and getContents() for
      *  both directories and directory symlinks without losing path information.
      */
-    FSContainer* getContainer();
+    FsContainer* getContainer();
 
     const std::string& describeType() const;
     std::string describe(bool fLong = false) const;
@@ -459,7 +456,7 @@ public:
      *  Renames this file to the given new name.
      *
      *  This does not notify file monitors since we can't be sure which thread we're running on. Call
-     *  FSContainer::notifyFileRenamed() either afterwards if you call this on thread one, or have a
+     *  FsContainer::notifyFileRenamed() either afterwards if you call this on thread one, or have a
      *  GUI dispatcher which calls it instead.
      */
     void rename(const std::string &strNewName);
@@ -471,7 +468,7 @@ public:
      *  support, or if the object's permissions are insufficient.
      *
      *  This does not notify file monitors since we can't be sure which thread we're running on. Call
-     *  FSContainer::notifyFileRemoved() either afterwards if you call this on thread one, or have a
+     *  FsContainer::notifyFileRemoved() either afterwards if you call this on thread one, or have a
      *  GUI dispatcher which calls it instead.
      */
     void sendToTrash();
@@ -481,12 +478,12 @@ public:
      *  or a symlink to one.
      *
      *  This does not notify file monitors since we can't be sure which thread we're running on. Call
-     *  FSContainer::notifyFileRemoved() and FSContainer::notifyFileAdded() either afterwards if you
+     *  FsContainer::notifyFileRemoved() and FsContainer::notifyFileAdded() either afterwards if you
      *  call this on thread one, or have a GUI dispatcher which calls it instead.
      */
-    void moveTo(PFSModelBase pTarget);
+    void moveTo(PFsObject pTarget);
 
-    PFSModelBase copyTo(PFSModelBase pTarget);
+    PFsObject copyTo(PFsObject pTarget);
 
     void testFileOps();
 
@@ -498,7 +495,7 @@ public:
      *************************************/
 
     /**
-     *  This should return an FSModelBase instance for the given file system path,
+     *  This should return an FsObject instance for the given file system path,
      *  waking up all parent objects as necessary.
      *
      *  For example, if you call this on "/home/user/subdir/file.txt", this will
@@ -514,18 +511,18 @@ public:
      *
      *  This is thread-safe. This throws FSException if the path is invalid.
      */
-    static PFSModelBase FindPath(const string &strPath);
+    static PFsObject FindPath(const string &strPath);
 
     /**
      *  Looks up the given full path and returns it as a directory, or nullptr
      *  if the path does not exist or is not a directory.
      */
-    static PFSDirectory FindDirectory(const string &strPath);
+    static PFsDirectory FindDirectory(const string &strPath);
 
     /**
      *  Returns the user's home directory, or nullptr on errors.
      */
-    static PFSDirectory GetHome();
+    static PFsDirectory GetHome();
 
 
     /**************************************
@@ -535,12 +532,12 @@ public:
      *************************************/
 
 protected:
-    PFSModelBase getSharedFromThis()
+    PFsObject getSharedFromThis()
     {
         return shared_from_this();
     }
 
-    PFSModelBase copyOrMoveImpl(PFSModelBase pTarget, bool fIsCopy);
+    PFsObject copyOrMoveImpl(PFsObject pTarget, bool fIsCopy);
 
     /**
      *  Implementation for getPath(), which only gets called if *this is not a root directory. This
@@ -561,7 +558,7 @@ protected:
     FSFlagSet                   _fl;
     std::string                 _strBasename;
     uint64_t                    _cbSize;
-    PFSModelBase                _pParent;
+    PFsObject                   _pParent;
 };
 
 
@@ -572,13 +569,16 @@ protected:
  **************************************************************************/
 
 /**
- *  FSModelBase subclass for ordinary files. Everything that is not a directory
+ *  FsObject subclass for ordinary files. Everything that is not a directory
  *  and not a symlink is instantiated as an instance of this.
+ *
+ *  Note that instances of this are only created by the implementation and
+ *  may actually be of a derivate class always.
  */
-class FSFile : public FSModelBase
+class FSFile : public FsObject
 {
-    friend class FSModelBase;
-    friend class FSContainer;
+    friend class FsObject;
+    friend class FsContainer;
 
 
     /**************************************
@@ -590,9 +590,9 @@ class FSFile : public FSModelBase
 protected:
     FSFile(const string &strBasename,
            uint64_t cbSize)
-        : FSModelBase(FSType::FILE,
-                      strBasename,
-                      cbSize)
+        : FsObject(FSType::FILE,
+                   strBasename,
+                   cbSize)
     { }
 
     virtual ~FSFile()
@@ -616,13 +616,13 @@ public:
 
 /***************************************************************************
  *
- *  FSContainer
+ *  FsContainer
  *
  **************************************************************************/
 
 /**
  *  Helper class that implements directory contents. This is inherited via
- *  multiple inheritance by both FSContainer and FSSymlink and contains
+ *  multiple inheritance by both FsContainer and FsSymlink and contains
  *  the public methods that both these classes should have to populate
  *  their contents.
  *
@@ -631,16 +631,16 @@ public:
  *  but without losing type safety.
  *
  *  As an example, if you have /dir/symlink/subdir but "symlink" is really
- *  a symlink pointing to /otherdir, FSModelBase::FindPath() will still
+ *  a symlink pointing to /otherdir, FsObject::FindPath() will still
  *  build a path for /dir/symlink/subdir and the "symlink" particle will
- *  be an instance of FSSymlink with its own contents. However, you can
- *  call getTarget() on the symlink and receive a PFSDirectory for /otherdir.
+ *  be an instance of FsSymlink with its own contents. However, you can
+ *  call getTarget() on the symlink and receive a PFsDirectory for /otherdir.
  */
-class FSContainer : public ProhibitCopy
+class FsContainer : public ProhibitCopy
 {
-    friend class FSModelBase;
+    friend class FsObject;
     friend class FsImplBase;
-    friend class FSMonitorBase;
+    friend class FsMonitorBase;
     friend class ContentsLock;
 
 public:
@@ -659,12 +659,12 @@ public:
      *************************************/
 protected:
     /**
-     *  Constructor. This is protected because an FSContainer only ever gets created through
+     *  Constructor. This is protected because an FsContainer only ever gets created through
      *  multiple inheritance.
      */
-    FSContainer(FSModelBase &refBase);
+    FsContainer(FsObject &refBase);
 
-    virtual ~FSContainer();
+    virtual ~FsContainer();
 
 
     /**************************************
@@ -683,7 +683,7 @@ public:
      *  This calls into the backend and may throw FSException. It may return nullptr if
      *  no such file exists.
      */
-    PFSModelBase find(const std::string &strParticle);
+    PFsObject find(const std::string &strParticle);
 
     /**
      *  Returns true if the container has the "populated with directories" flag set.
@@ -707,10 +707,12 @@ public:
     /**
      *  Returns the container's contents by copying them into the given list.
      *
-     *  This will perform blocking I/O and can take several seconds to complete, depending on
-     *  the size of the directory contents and the medium, unless this is not the first
-     *  call on this container and the container contents have been cached before. Caching
-     *  depends on the given getContents flag:
+     *  On the first call for a given container, this will perform blocking I/O and can
+     *  take several seconds to complete, depending on the size of the directory contents
+     *  and the medium. On subsequent calls, the container contents will have been cached,
+     *  and the contents may be returned immediately.
+     *
+     *  Caching depends on the given getContents flag:
      *
      *   -- If getContents == Get::ALL, this will return all files and direct subdirectories
      *      of the container, and all these objects will be cached, and the "populated with all"
@@ -720,23 +722,23 @@ public:
      *
      *   -- If getContents == Get::FOLDERS_ONLY, this only wakes up directories and symlinks
      *      to directories in the container, which might be slightly faster. (Probably not
-     *      a lot since we still have to enumerate the entire directory contents and wake
-     *      up all symlinks to test for whether they point to subdirectories.) This will
-     *      only copy directories and symlinks to directories to the given list and then set
-     *      the "populated with directories" flag on the container. If this mode is called
-     *      on a container with the "populated with all" or "populated with directories"
-     *      flag already set, this can return without blocking disk I/O.
+     *      a lot for directories with symlinks since we still have to enumerate the entire
+     *      directory contents and wake up all symlinks and follow them to test for whether
+     *      they point to subdirectories.) This will only copy directories and symlinks to
+     *      directories to the given list and then set the "populated with directories" flag
+     *      on the container. If this mode is called on a container with the "populated with all"
+     *      or "populated with directories" flag already set, this can return without blocking disk I/O.
      *
      *   -- If getContents == Get::FIRST_FOLDER_ONLY, this will only enumerate directory
      *      contents until the first directory or symlink to a directory is encountered.
-     *      This has the potential to be a lot faster. This can be useful for a directory
-     *      tree view where an expander ("+" sign) needs to be shown for folders that
-     *      have at least one subfolder, but a full populate with folders only needs to
-     *      happen once the folder is actually expanded. Note that this will not return the
-     *      first folder in a strictly alphabetical sense, but simply the first directory
-     *      or symlink pointing to a directory that happens to be returned by the Gio
-     *      backend. Unfortunately even this cannot be faster than Get::FOLDERS_ONLY if
-     *      the container happens to contain only files but no subdirectories, since in
+     *      This has the potential to be a lot faster if a directory is found early. This
+     *      can be useful for a directory tree view where an expander ("+" sign) needs to be
+     *      shown for folders that have at least one subfolder, but a full populate with
+     *      folders only needs to happen once the folder is actually expanded. Note that this
+     *      will not return the first folder in a strictly alphabetical sense, but simply the
+     *      first directory or symlink pointing to a directory that happens to be returned by
+     *      the file backend. Unfortunately even this cannot be faster than Get::FOLDERS_ONLY
+     *      if the container happens to contain only files but no subdirectories, since in
      *      that case, the code will have to enumerate the entire directory contents.
      *
      *  For all modes, you can optionally pass the address of an atomic bool with pfStopFlag,
@@ -764,7 +766,7 @@ public:
      *  This does not automatically call file-system monitors since this may not run on
      *  the GUI thread. Call notifyFileAdded() with the returned instance afterwards.
      */
-    PFSDirectory createSubdirectory(const std::string &strName);
+    PFsDirectory createSubdirectory(const std::string &strName);
 
     /**
      *  Creates a new physical directory in this container (physical directory or symlink
@@ -783,7 +785,7 @@ public:
      *  Call this on the GUI thread after pFS has been added to a container
      *  (e.g. by a create or move or copy operation).
      */
-    void notifyFileAdded(PFSModelBase pFS) const;
+    void notifyFileAdded(PFsObject pFS) const;
 
     /**
      *  Notifies all monitors attached to *this that a file has been removed.
@@ -793,13 +795,13 @@ public:
      *  Note that at this time, the file may longer exist on disk and is only
      *  an empty shell any more.
      */
-    void notifyFileRemoved(PFSModelBase pFS) const;
+    void notifyFileRemoved(PFsObject pFS) const;
 
     /**
      *  Notifies all monitors attached to *this that a file has been renamed
      *  (without having changed containers).
      */
-    void notifyFileRenamed(PFSModelBase pFS, const std::string &strOldName, const std::string &strNewName) const;
+    void notifyFileRenamed(PFsObject pFS, const std::string &strOldName, const std::string &strNewName) const;
 
 
     /**************************************
@@ -809,21 +811,21 @@ public:
      *************************************/
 
 protected:
-    PFSDirectory resolveDirectory();
+    PFsDirectory resolveDirectory();
 
     /**
      *  Protected method to add the given child to this container's list of children, under
      *  this container's ContentsLock. Also updates the parent pointer in the child.
      *
-     *  This must be called after an object has been instantiated with FSModelBase::MakeAwake().
+     *  This must be called after an object has been instantiated with FsObject::MakeAwake().
      */
-    void addChild(ContentsLock &lock, PFSModelBase p);
+    void addChild(ContentsLock &lock, PFsObject p);
 
     /**
      *  Inversely to addChild(), removes the given child from this container's list of
      *  children.
      */
-    void removeChild(ContentsLock &lock, PFSModelBase p);
+    void removeChild(ContentsLock &lock, PFsObject p);
 
     /**
      *  Debugging helper.
@@ -841,27 +843,27 @@ protected:
     Impl                *_pImpl;
 
 public:
-    FSModelBase         &_refBase;
+    FsObject            &_refBase;
 };
 
 
 /***************************************************************************
  *
- *  FSDirectory
+ *  FsDirectory
  *
  **************************************************************************/
 
 /**
- *  FSModelBase subclass for physical directories. This multiply-inherits from FSContainer
+ *  FsObject subclass for physical directories. This multiply-inherits from FsContainer
  *  so the content methods work.
  *
- *  Note that symlinks to directories are instantiated as FSSymlink instances instead,
+ *  Note that symlinks to directories are instantiated as FsSymlink instances instead,
  *  like all symlinks.
  */
-class FSDirectory : public FSModelBase, public FSContainer
+class FsDirectory : public FsObject, public FsContainer
 {
-    friend class FSModelBase;
-    friend class FSContainer;
+    friend class FsObject;
+    friend class FsContainer;
 
     /**************************************
      *
@@ -870,9 +872,9 @@ class FSDirectory : public FSModelBase, public FSContainer
      *************************************/
 
 protected:
-    FSDirectory(const string &strBasename)
-        : FSModelBase(FSType::DIRECTORY, strBasename, 0),
-          FSContainer((FSModelBase&)*this)
+    FsDirectory(const string &strBasename)
+        : FsObject(FSType::DIRECTORY, strBasename, 0),
+          FsContainer((FsObject&)*this)
     { }
 
 
@@ -888,18 +890,18 @@ public:
         return FSTypeResolved::DIRECTORY;
     }
 
-    static PFSDirectory GetCwdOrThrow();
+    static PFsDirectory GetCwdOrThrow();
 };
 
 
 /***************************************************************************
  *
- *  FSSymlink
+ *  FsSymlink
  *
  **************************************************************************/
 
 /**
- *  FSModelBase subclass for symbolic links. All symbolic links are instantiated
+ *  FsObject subclass for symbolic links. All symbolic links are instantiated
  *  as instances of this, even if the symlink's target is a directory.
  *
  *  To speed up things, we only read the symlink target lazily, on request.
@@ -917,15 +919,15 @@ public:
  *  in two ways:
  *
  *   -- You can call getTarget(), which returns the target, which will really be
- *      an FSDirectory for the target. You can then populate that directory,
+ *      an FsDirectory for the target. You can then populate that directory,
  *      but the path will be different (the symlink will have been followed).
  *
- *  --  You can call the FSContainer content methods directly on the symlink,
- *      since FSSymlink multiply-inherits from both FSModelBase and FSContainer.
+ *  --  You can call the FsContainer content methods directly on the symlink,
+ *      since FsSymlink multiply-inherits from both FsObject and FsContainer.
  *      In that case the symlink behaves exactly like a directory, and the
  *      symlink is not followed.
  */
-class FSSymlink : public FSModelBase, public FSContainer
+class FsSymlink : public FsObject, public FsContainer
 {
     friend class FsGioImpl;
 
@@ -938,15 +940,15 @@ class FSSymlink : public FSModelBase, public FSContainer
 protected:
     /**
      *  Factory method to create an instance and return a shared_ptr to it.
-     *  This normally gets called by FSModelBase::MakeAwake() only. This
+     *  This normally gets called by FsObject::MakeAwake() only. This
      *  does not add the new object to a container; you must call setParent()
      *  on the result.
      */
-    static PFSSymlink Create(const string &strBasename);
+    static PFsSymlink Create(const string &strBasename);
 
-    FSSymlink(const string &strBasename)
-        : FSModelBase(FSType::SYMLINK, strBasename, 0),
-          FSContainer((FSModelBase&)*this),
+    FsSymlink(const string &strBasename)
+        : FsObject(FSType::SYMLINK, strBasename, 0),
+          FsContainer((FsObject&)*this),
           _state(State::NOT_FOLLOWED_YET)
     { }
 
@@ -964,7 +966,7 @@ public:
      *  Returns the symlink target, or nullptr if the symlink is broken.
      *  This cannot be const as the target may need to be resolved on the first call.
      */
-    PFSModelBase getTarget();
+    PFsObject getTarget();
 
 
     /**************************************
@@ -979,13 +981,13 @@ protected:
         NOT_FOLLOWED_YET = 0,
         RESOLVING = 1,
         BROKEN = 2,
-        TO_FILE = 3,
-        TO_DIRECTORY = 4,
-        TO_OTHER = 5
+        RESOLVED_TO_FILE = 3,
+        RESOLVED_TO_DIRECTORY = 4,
+        RESOLVED_TO_OTHER = 5
     };
 
     State           _state;
-    PFSModelBase    _pTarget;
+    PFsObject       _pTarget;
     Mutex           _mutexState;
 
     /**

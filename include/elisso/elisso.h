@@ -101,11 +101,12 @@ DEF_STRING(ACTION_FILE_CLOSE_TAB, "file-close-tab");
 DEF_STRING(ACTION_EDIT_OPEN_SELECTED, "edit-open-selected");
 DEF_STRING(ACTION_EDIT_OPEN_SELECTED_IN_TAB, "edit-open-selected-in-tab");
 DEF_STRING(ACTION_EDIT_OPEN_SELECTED_IN_TERMINAL, "edit-open-selected-in-terminal");
-DEF_STRING(ACTION_EDIT_OPEN_SELECTED_IN_IMAGE_VIEWER, "edit-open-selected-in-image-viewer");
 DEF_STRING(ACTION_EDIT_COPY, "edit-copy");
 DEF_STRING(ACTION_EDIT_CUT, "edit-cut");
 DEF_STRING(ACTION_EDIT_PASTE, "edit-paste");
 DEF_STRING(ACTION_EDIT_SELECT_ALL, "edit-select-all");
+DEF_STRING(ACTION_EDIT_SELECT_NEXT_PREVIEWABLE, "edit-select-next-previewable");
+DEF_STRING(ACTION_EDIT_SELECT_PREVIOUS_PREVIEWABLE, "edit-select-previous-previewable");
 DEF_STRING(ACTION_EDIT_RENAME, "edit-rename");
 DEF_STRING(ACTION_EDIT_TRASH, "edit-trash");
 #ifdef USE_TESTFILEOPS
@@ -124,6 +125,7 @@ DEF_STRING(ACTION_VIEW_PREVIOUS_TAB, "view-previous-tab");
 DEF_STRING(ACTION_VIEW_ICONS, "view-icons");
 DEF_STRING(ACTION_VIEW_LIST, "view-list");
 DEF_STRING(ACTION_VIEW_COMPACT, "view-compact");
+DEF_STRING(ACTION_VIEW_SHOW_PREVIEW, "view-show-preview");
 DEF_STRING(ACTION_VIEW_REFRESH, "view-refresh");
 
 DEF_STRING(ACTION_GO_PARENT, "go-parent");

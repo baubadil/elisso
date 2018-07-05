@@ -85,28 +85,28 @@ typedef std::map<Glib::ustring, PFolderTreeModelRow> RowsMap;
  */
 struct FolderTreeModelRow
 {
-    Glib::ustring             name;
+    Glib::ustring           name;
 
     // Additional private data, not retrievable by GTK.
-    unsigned                  overrideSort;         // To keep "home" sorted before "file system" etc.
-    Glib::ustring             nameUpper;
-    TreeNodeState             state;
-    PFolderTreeModelRow       pParent;
-    int                       uRowIndex2;
-    int                       uRowIndexCopy;        // For when sorting.
-    PFSModelBase              pDir;
-    PFolderTreeMonitor        pMonitor;
+    unsigned                overrideSort;         // To keep "home" sorted before "file system" etc.
+    Glib::ustring           nameUpper;
+    TreeNodeState           state;
+    PFolderTreeModelRow     pParent;
+    int                     uRowIndex2;
+    int                     uRowIndexCopy;        // For when sorting.
+    PFsObject               pDir;
+    PFolderTreeMonitor      pMonitor;
 
     // The list of children. Additionally we maintain a map sorted
     // by file name to allow for looking up rows quickly. Note that
     // the "root" list and maps is not here, but in FolderTreeModel::Impl.
-    RowsVector                vChildren;
-    RowsMap                   mapChildren2;
+    RowsVector              vChildren;
+    RowsMap                 mapChildren2;
 
     FolderTreeModelRow(PFolderTreeModelRow pParent_,
                        int uRowIndex_,
                        unsigned overrideSort_,
-                       PFSModelBase pDir_,
+                       PFsObject pDir_,
                        const Glib::ustring &strName);
 
     int getIndex() const
@@ -144,7 +144,7 @@ public:
 
     PFolderTreeModelRow append(PFolderTreeModelRow pParent,
                                unsigned overrideSort,
-                               PFSModelBase pDir,
+                               PFsObject pDir,
                                const Glib::ustring &strName);
     void rename(PFolderTreeModelRow pRow, const Glib::ustring &strNewName);
     void remove(PFolderTreeModelRow pParent, PFolderTreeModelRow pRemoveRow);

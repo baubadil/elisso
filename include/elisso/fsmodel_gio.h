@@ -49,39 +49,39 @@ typedef std::shared_ptr<CurrentDirectory> PCurrentDirectory;
 class FsGioImpl : public FsImplBase
 {
 public:
-    virtual PFSModelBase findPath(const string &strPath) override;
+    virtual PFsObject findPath(const string &strPath) override;
 
     /**
      *  Instantiates the given file system object from the given path and returns it,
      *  but does NOT add it to the parent container.
      */
-    virtual PFSModelBase makeAwake(const string &strParentPath,
-                                   const string &strBasename,
-                                   bool fIsLocal) override;
+    virtual PFsObject makeAwake(const string &strParentPath,
+                                const string &strBasename,
+                                bool fIsLocal) override;
 
-    virtual PFsDirEnumeratorBase beginEnumerateChildren(FSContainer &cnr) override;
+    virtual PFsDirEnumeratorBase beginEnumerateChildren(FsContainer &cnr) override;
 
     virtual bool getNextChild(PFsDirEnumeratorBase pEnum, string &strBasename) override;
 
-    virtual string getSymlinkContents(FSSymlink &ln) override;
+    virtual string getSymlinkContents(FsSymlink &ln) override;
 
-    virtual void rename(FSModelBase &fs, const string &strNewName) override;
+    virtual void rename(FsObject &fs, const string &strNewName) override;
 
-    virtual void trash(FSModelBase &fs) override;
+    virtual void trash(FsObject &fs) override;
 
-    virtual void copy(Debug &d, FSModelBase &fs, const string &strTargetPath) override;
+    virtual void copy(Debug &d, FsObject &fs, const string &strTargetPath) override;
 
-    virtual void move(Debug &d, FSModelBase &fs, const string &strTargetPath) override;
+    virtual void move(Debug &d, FsObject &fs, const string &strTargetPath) override;
 
-    virtual PFSDirectory createSubdirectory(const string &strParentPath,
+    virtual PFsDirectory createSubdirectory(const string &strParentPath,
                                             const string &strBasename) override;
 
     virtual PFSFile createEmptyDocument(const string &strParentPath,
                                         const string &strBasename) override;
 
-    PGioFile getGioFile(FSModelBase &fs);
+    PGioFile getGioFile(FsObject &fs);
 
-    PFsGioFile getFile(PFSModelBase pFS, FSTypeResolved t);
+    PFsGioFile getFile(PFsObject pFS, FSTypeResolved t);
 
     static void Init();
 };
@@ -95,6 +95,10 @@ extern FsGioImpl *g_pFsGioImpl;
  *
  **************************************************************************/
 
+/**
+ *  Subclass of the base implementation's FsFile. All file instances are actually
+ *  instantiated as instances of this subclass, adding Gio::File support to them.
+ */
 class FsGioFile : public FSFile
 {
     friend class FsGioImpl;
@@ -108,7 +112,7 @@ class FsGioFile : public FSFile
 protected:
     /**
      *  Factory method to create an instance and return a shared_ptr to it.
-     *  This normally gets called by FSModelBase::MakeAwake() only. This
+     *  This normally gets called by FsObject::MakeAwake() only. This
      *  does not add the new object to a container; you must call setParent()
      *  on the result.
      */
@@ -170,7 +174,7 @@ protected:
  *
  **************************************************************************/
 
-class FsGioDirectory : public FSDirectory
+class FsGioDirectory : public FsDirectory
 {
     friend class FsGioImpl;
 
@@ -183,14 +187,14 @@ class FsGioDirectory : public FSDirectory
 protected:
     /**
      *  Factory method to create an instance and return a shared_ptr to it.
-     *  This normally gets called by FSModelBase::MakeAwake() only. This
+     *  This normally gets called by FsObject::MakeAwake() only. This
      *  does not add the new object to a container; you must call setParent()
      *  on the result.
      */
     static PFsGioDirectory Create(const string &strBasename);
 
     FsGioDirectory(const string &strBasename)
-        : FSDirectory(strBasename)
+        : FsDirectory(strBasename)
     { }
 };
 
@@ -210,7 +214,7 @@ typedef std::shared_ptr<RootDirectory> PRootDirectory;
  *  local file system, but we can instantiate all of the schemes
  *  supported by Gio::File.
  */
-class RootDirectory : public FSDirectory
+class RootDirectory : public FsDirectory
 {
 
     /**************************************
@@ -244,7 +248,7 @@ private:
  *
  **************************************************************************/
 
-class FsGioSpecial : public FSModelBase
+class FsGioSpecial : public FsObject
 {
     friend class FsGioImpl;
 
@@ -257,14 +261,14 @@ class FsGioSpecial : public FSModelBase
 protected:
     /**
      *  Factory method to create an instance and return a shared_ptr to it.
-     *  This normally gets called by FSModelBase::MakeAwake() only. This
+     *  This normally gets called by FsObject::MakeAwake() only. This
      *  does not add the new object to a container; you must call setParent()
      *  on the result.
      */
     static PFsGioSpecial Create(const string &strBasename);
 
     FsGioSpecial(const string &strBasename)
-        : FSModelBase(FSType::SPECIAL, strBasename, 0)
+        : FsObject(FSType::SPECIAL, strBasename, 0)
     { }
 
 
@@ -288,7 +292,7 @@ public:
  *
  **************************************************************************/
 
-class FsGioMountable : public FSModelBase
+class FsGioMountable : public FsObject
 {
     friend class FsGioImpl;
 
@@ -300,14 +304,14 @@ class FsGioMountable : public FSModelBase
 protected:
     /**
      *  Factory method to create an instance and return a shared_ptr to it.
-     *  This normally gets called by FSModelBase::MakeAwake() only. This
+     *  This normally gets called by FsObject::MakeAwake() only. This
      *  does not add the new object to a container; you must call setParent()
      *  on the result.
      */
     static PFsGioMountable Create(const string &strBasename);
 
     FsGioMountable(const string &strBasename)
-        : FSModelBase(FSType::MOUNTABLE, strBasename, 0)
+        : FsObject(FSType::MOUNTABLE, strBasename, 0)
     { }
 
 
@@ -332,6 +336,27 @@ public:
 public:
     static void GetMountables(FsGioMountablesVector &llMountables);
 };
+
+
+/***************************************************************************
+ *
+ *  FileContents
+ *
+ **************************************************************************/
+
+/**
+ *  Simple structure to temporarily hold the complete binary contents
+ *  of a file. The constructor reads them from disk via fopen().
+ */
+struct FileContents
+{
+    FileContents(FsGioFile &file);
+    ~FileContents();
+
+    char *_pData;
+    size_t _size;
+};
+typedef std::shared_ptr<FileContents> PFileContents;
 
 
 #endif // ELISSO_FSMODEL_GIO_H
