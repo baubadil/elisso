@@ -272,6 +272,8 @@ ElissoFolderView::ElissoFolderView(ElissoApplicationWindow &mainWindow, int &iPa
         this->onPathActivated(path);
     });
 
+//     _pImpl->iconView.signal_row_changed().connect();
+
     /*
      *  Connect to the thumbnailer.
      */
@@ -1781,7 +1783,7 @@ ElissoFolderView::loadIcon(PFsObject pFS,
 void
 ElissoFolderView::onThumbnailReady()
 {
-    FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
+//     FolderContentsModelColumns &cols = FolderContentsModelColumns::Get();
 
     auto pThumbnail = _pImpl->thumbnailer.fetchResult();
 
@@ -1794,12 +1796,34 @@ ElissoFolderView::onThumbnailReady()
         if (path)
         {
             auto it = _pImpl->pListStore->get_iter(path);
-            if (it)
-            {
-                Gtk::TreeModel::Row row = *it;
-                row[cols._colIconSmall] = pThumbnail->ppbIconSmall;
-                row[cols._colIconBig] = pThumbnail->ppbIconBig;
-            }
+            GdkPixbuf *ppbSmall = pThumbnail->ppbIconSmall->gobj();
+            GdkPixbuf *ppbBig = pThumbnail->ppbIconBig->gobj();
+
+//             GValue value = G_VALUE_INIT;
+//             g_value_init(&value, GDK_TYPE_PIXBUF);
+
+//             g_value_set_pointer(&value, ppbSmall);
+            auto pListStore = _pImpl->pListStore->gobj();
+            auto it2 = it.gobj();
+            gtk_list_store_set(pListStore,
+                               it2,
+                               4,
+                               ppbSmall,
+                               5,
+                               ppbBig,
+                               -1);
+
+//             g_value_set_pointer(&value, ppbBig);
+//             gtk_list_store_set_value(_pImpl->pListStore->gobj(),
+//                                      it.gobj(),
+//                                      5,
+//                                      &value);
+//             if (it)
+//             {
+//                 Gtk::TreeModel::Row row = *it;
+//                 row[cols._colIconSmall] = pThumbnail->ppbIconSmall;
+//                 row[cols._colIconBig] = pThumbnail->ppbIconBig;
+//             }
         }
     }
 
