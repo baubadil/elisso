@@ -117,6 +117,7 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app)      //
     _toolbar.append(*(_pImpl->pButtonGoForward = makeToolButton("go-next-symbolic", _pImpl->pActionGoForward)));
     _toolbar.append(*(_pImpl->pButtonGoParent = makeToolButton("go-up-symbolic", _pImpl->pActionGoParent)));
     _toolbar.append(*(_pImpl->pButtonGoHome = makeToolButton("go-home-symbolic", _pImpl->pActionGoHome)));
+    _toolbar.append(*(_pImpl->pButtonViewRefresh = makeToolButton("view-refresh-symbolic", _pImpl->pActionViewRefresh)));
 
     auto pSeparator = new Gtk::SeparatorToolItem();
     pSeparator->set_expand(true);
@@ -125,7 +126,6 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app)      //
 
     _toolbar.append(*(_pImpl->pButtonViewIcons = makeToolButton("view-grid-symbolic", _pImpl->pActionViewIcons, true)));
     _toolbar.append(*(_pImpl->pButtonViewList = makeToolButton("view-list-symbolic", _pImpl->pActionViewList)));
-    _toolbar.append(*(_pImpl->pButtonViewRefresh = makeToolButton("view-refresh-symbolic", _pImpl->pActionViewRefresh)));
 
     this->signal_action_enabled_changed().connect([this](const Glib::ustring &strAction, bool fEnabled)
     {
