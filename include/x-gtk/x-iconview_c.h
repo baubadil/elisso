@@ -15,8 +15,8 @@
  * License along with this library. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _ELISSO_XICONVIEW_H_
-#define _ELISSO_XICONVIEW_H_
+#ifndef _ELISSO_XICONVIEW_H
+#define _ELISSO_XICONVIEW_H
 
 #include <gtk/gtkcontainer.h>
 #include <gtk/gtktreemodel.h>
@@ -300,5 +300,5 @@ void     xiconview_set_tooltip_column                     (XGtkIconView       *i
 GDK_AVAILABLE_IN_ALL
 gint     xiconview_get_tooltip_column                     (XGtkIconView       *icon_view);
 
-#endif // _ELISSO_XICONVIEW_H_
+#endif // _ELISSO_XICONVIEW_H
 

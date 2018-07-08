@@ -1277,7 +1277,7 @@ static void adjust_wrap_width(XGtkIconView *icon_view)
     {
         gint pixbuf_width, wrap_width;
 
-        if (    !icon_view->priv->llItems.empty()
+        if (    !icon_view->priv->vItems.empty()
              && icon_view->priv->pixbuf_cell
            )
         {
@@ -1309,7 +1309,7 @@ static void adjust_wrap_width(XGtkIconView *icon_view)
             wrap_width = MAX(pixbuf_width * 2, 50);
         }
 
-        if (    !icon_view->priv->llItems.empty()
+        if (    !icon_view->priv->vItems.empty()
              && icon_view->priv->pixbuf_cell
            )
         {
@@ -1381,7 +1381,7 @@ static void cell_area_get_preferred_size(XGtkIconView *icon_view,
 
 static gboolean xiconview_is_empty(XGtkIconView *icon_view)
 {
-    return icon_view->priv->llItems.empty();
+    return icon_view->priv->vItems.empty();
 }
 
 static void xiconview_get_preferred_item_size(XGtkIconView *icon_view,
@@ -1403,7 +1403,7 @@ static void xiconview_get_preferred_item_size(XGtkIconView *icon_view,
     if (for_size > 0)
     {
         /* This is necessary for the context to work properly */
-        for (auto &pItem : priv->llItems)
+        for (auto &pItem : priv->vItems)
 //         for (items = priv->items; items; items = items->next)
         {
 //             XGtkIconViewItem *item = &i; // (XGtkIconViewItem *)items->data;
@@ -1415,7 +1415,7 @@ static void xiconview_get_preferred_item_size(XGtkIconView *icon_view,
 
     // for (items = priv->items; items; items = items->next)
     int cItem = 0;
-    for (auto &pItem : priv->llItems)
+    for (auto &pItem : priv->vItems)
     {
 //         XGtkIconViewItem *item = &i; // (XGtkIconViewItem *)items->data;
 
@@ -1746,7 +1746,7 @@ static gboolean xiconview_draw(GtkWidget *widget, cairo_t *cr)
         dest_index = -1;
 
     // for (icons = icon_view->priv->items; icons; icons = icons->next)
-    for (auto &pItem : icon_view->priv->llItems)
+    for (auto &pItem : icon_view->priv->vItems)
     {
 //         XGtkIconViewItem *item = &i; // (XGtkIconViewItem *)icons->data;
         GdkRectangle paint_area;
@@ -2030,9 +2030,9 @@ static void xiconview_remove_editable(GtkCellArea *area,
 
 PXGtkIconViewItem _xiconview_get_nth_item(XGtkIconView *icon_view, size_t N)
 {
-    if (icon_view->priv->llItems.size() > N)
+    if (icon_view->priv->vItems.size() > N)
     {
-        auto it = std::next(icon_view->priv->llItems.begin(), N);
+        auto it = std::next(icon_view->priv->vItems.begin(), N);
         return *it;
     }
 
@@ -2389,7 +2389,7 @@ static void xiconview_start_rubberbanding(XGtkIconView *icon_view, GdkDevice *de
     if (priv->rubberband_device)
         return;
 
-    for (auto &pItem : priv->llItems)
+    for (auto &pItem : priv->vItems)
 //     for (items = priv->items; items; items = items->next)
     {
 //         XGtkIconViewItem *item = &i; // (XGtkIconViewItem *)items->data;
@@ -2441,7 +2441,7 @@ static void xiconview_update_rubberband_selection(XGtkIconView *icon_view)
     height = ABS(icon_view->priv->rubberband_y1 - icon_view->priv->rubberband_y2);
 
     // for (items = icon_view->priv->items; items; items = items->next)
-    for (auto &pItem : icon_view->priv->llItems)
+    for (auto &pItem : icon_view->priv->vItems)
     {
 //         XGtkIconViewItem *item = &i; // (XGtkIconViewItem *)items->data;
         gboolean is_in;
@@ -2519,7 +2519,7 @@ static gboolean xiconview_unselect_all_internal(XGtkIconView *icon_view)
         return FALSE;
 
     // for (items = icon_view->priv->items; items; items = items->next)
-    for (auto &pItem : icon_view->priv->llItems)
+    for (auto &pItem : icon_view->priv->vItems)
     {
 //         XGtkIconViewItem *item = &i; // (XGtkIconViewItem *)items->data;
 
@@ -2770,7 +2770,7 @@ static void xiconview_layout(XGtkIconView *icon_view)
      * that is O(N²) and nonsensical.
      * And we're proud of it. */
     // for (items = priv->items; items; items = items->next)
-    for (auto &pItem : priv->llItems)
+    for (auto &pItem : priv->vItems)
     {
 //         XGtkIconViewItem *item = &i;
         _xiconview_set_cell_data(icon_view, pItem);
@@ -2783,7 +2783,7 @@ static void xiconview_layout(XGtkIconView *icon_view)
 
     sizes = g_newa(GtkRequestedSize, n_rows);
     // items = priv->items;
-    auto itItems = priv->llItems.begin();
+    auto itItems = priv->vItems.begin();
     priv->height = priv->margin;
 
     /* Collect the heights for all rows */
@@ -2793,7 +2793,7 @@ static void xiconview_layout(XGtkIconView *icon_view)
         g_ptr_array_add(priv->row_contexts, context);
 
         for (col = 0;
-            (col < n_columns) && (itItems != priv->llItems.end());
+            (col < n_columns) && (itItems != priv->vItems.end());
             ++col, ++itItems)
         {
             PXGtkIconViewItem &pItem = *itItems; // (XGtkIconViewItem *)items->data;
@@ -2822,7 +2822,7 @@ static void xiconview_layout(XGtkIconView *icon_view)
     /* Actually allocate the rows */
     g_qsort_with_data(sizes, n_rows, sizeof(GtkRequestedSize), compare_sizes, NULL);
 
-    itItems = priv->llItems.begin();
+    itItems = priv->vItems.begin();
     // items = priv->items;
     priv->height = priv->margin;
 
@@ -2834,7 +2834,7 @@ static void xiconview_layout(XGtkIconView *icon_view)
         priv->height += priv->item_padding;
 
         for (col = 0;
-             (col < n_columns) && (itItems != priv->llItems.end()); // items;
+             (col < n_columns) && (itItems != priv->vItems.end()); // items;
              ++col, ++itItems) // items = items->next)
         {
             PXGtkIconViewItem &pItem = *itItems; // (XGtkIconViewItem *)items->data;
@@ -2864,7 +2864,7 @@ static void xiconview_layout(XGtkIconView *icon_view)
 static void xiconview_invalidate_sizes(XGtkIconView *icon_view)
 {
     /* Clear all item sizes */
-    for (auto &pItem : icon_view->priv->llItems)
+    for (auto &pItem : icon_view->priv->vItems)
         xiconview_item_invalidate_size(pItem);
 
 //     g_list_foreach(icon_view->priv->items,
@@ -2986,7 +2986,7 @@ static void xiconview_queue_draw_path(XGtkIconView *icon_view, GtkTreePath *path
     index = gtk_tree_path_get_indices(path)[0];
 
     // for (l = icon_view->priv->items; l; l = l->next)
-    for (auto &pItem : icon_view->priv->llItems)
+    for (auto &pItem : icon_view->priv->vItems)
     {
 //         XGtkIconViewItem *item = &i; // (XGtkIconViewItem *)l->data;
 
@@ -3093,7 +3093,7 @@ PXGtkIconViewItem _xiconview_get_item_at_coords(XGtkIconView *icon_view,
         *cell_at_pos = NULL;
 
     // for (items = icon_view->priv->items; items; items = items->next)
-    for (auto &pItem : icon_view->priv->llItems)
+    for (auto &pItem : icon_view->priv->vItems)
     {
 //         XGtkIconViewItem *item = &i; // (XGtkIconViewItem *)items->data;
         GdkRectangle *item_area = &pItem->cell_area;
@@ -3241,9 +3241,9 @@ static void xiconview_row_inserted(GtkTreeModel *model,
     pItem->index = index;
 
     int i = 0;
-    std::list<PXGtkIconViewItem>::iterator itInsert = icon_view->priv->llItems.end();
-    for (auto it = icon_view->priv->llItems.begin();
-         it != icon_view->priv->llItems.end();
+    std::vector<PXGtkIconViewItem>::iterator itInsert = icon_view->priv->vItems.end();
+    for (auto it = icon_view->priv->vItems.begin();
+         it != icon_view->priv->vItems.end();
          ++it, ++i)
         if (i == index)
         {
@@ -3251,7 +3251,7 @@ static void xiconview_row_inserted(GtkTreeModel *model,
             break;
         }
 
-    auto itInserted = icon_view->priv->llItems.insert(itInsert, pItem);
+    auto itInserted = icon_view->priv->vItems.insert(itInsert, pItem);
 
 //          l.insert(i, 10);
 
@@ -3265,7 +3265,7 @@ static void xiconview_row_inserted(GtkTreeModel *model,
 
     ++itInserted;
     for (;
-         itInserted != icon_view->priv->llItems.end();
+         itInserted != icon_view->priv->vItems.end();
          ++itInserted)
 //     for (; list; list = list->next)
     {
@@ -3290,9 +3290,9 @@ static void xiconview_row_deleted(GtkTreeModel *model, GtkTreePath *path, gpoint
         return;
 
     size_t index = gtk_tree_path_get_indices(path)[0];
-    if (icon_view->priv->llItems.size() > index)
+    if (icon_view->priv->vItems.size() > index)
     {
-        auto itRemove = std::next(icon_view->priv->llItems.begin(), index);
+        auto itRemove = std::next(icon_view->priv->vItems.begin(), index);
         pItem = *itRemove;
 
 //     list = g_list_nth(icon_view->priv->items, index);
@@ -3318,14 +3318,14 @@ static void xiconview_row_deleted(GtkTreeModel *model, GtkTreePath *path, gpoint
         auto itFix = itRemove;
         ++itFix;
         for (;
-             itFix != icon_view->priv->llItems.end();
+             itFix != icon_view->priv->vItems.end();
              ++itFix)
         {
             (*itFix)->index--;
         }
 
 //         icon_view->priv->items = g_list_delete_link(icon_view->priv->items, list);
-        icon_view->priv->llItems.erase(itRemove);
+        icon_view->priv->vItems.erase(itRemove);
 
         verify_items(icon_view);
 
@@ -3398,7 +3398,7 @@ static void xiconview_build_items(XGtkIconView *icon_view)
     {
         PXGtkIconViewItem pItem = xiconview_item_new();
         pItem->index = i++;
-        icon_view->priv->llItems.push_back(pItem);
+        icon_view->priv->vItems.push_back(pItem);
 
 
 //         i++;
@@ -3510,7 +3510,7 @@ static PXGtkIconViewItem find_item(XGtkIconView *icon_view,
     row = pCurrent->row + row_ofs;
     col = pCurrent->col + col_ofs;
 
-    for (auto &pItem : icon_view->priv->llItems)
+    for (auto &pItem : icon_view->priv->vItems)
         if (    pItem->row == row
              && pItem->col == col
            )
@@ -3541,10 +3541,10 @@ static PXGtkIconViewItem find_item_page_up_down(XGtkIconView *icon_view,
     PXGtkIconViewItem pItem;
 
     // item = g_list_find(icon_view->priv->items, current);
-    auto it = std::find(icon_view->priv->llItems.begin(), icon_view->priv->llItems.end(), pCurrent);
+    auto it = std::find(icon_view->priv->vItems.begin(), icon_view->priv->vItems.end(), pCurrent);
     if (count > 0)
     {
-        while (it != icon_view->priv->llItems.end())
+        while (it != icon_view->priv->vItems.end())
         {
             ++it;
             if (    ((*it)->col == col)
@@ -3571,7 +3571,7 @@ static PXGtkIconViewItem find_item_page_up_down(XGtkIconView *icon_view,
     }
     else
     {
-        while (it != icon_view->priv->llItems.begin())
+        while (it != icon_view->priv->vItems.begin())
         {
             --it;
             if (    ((*it)->col == col)
@@ -3636,7 +3636,7 @@ xiconview_select_all_between(XGtkIconView *icon_view,
     }
 
     // for (items = icon_view->priv->items; items; items = items->next)
-    for (auto &pItem : icon_view->priv->llItems)
+    for (auto &pItem : icon_view->priv->vItems)
     {
 //         item = (XGtkIconViewItem *)items->data;
 
@@ -3675,12 +3675,12 @@ static void xiconview_move_cursor_up_down(XGtkIconView *icon_view, gint count)
     {
 //         GList *list;
 //
-        if (!icon_view->priv->llItems.empty())
+        if (!icon_view->priv->vItems.empty())
         {
             if (count > 0)
-                pItem = icon_view->priv->llItems.front();
+                pItem = icon_view->priv->vItems.front();
             else
-                pItem = icon_view->priv->llItems.back();
+                pItem = icon_view->priv->vItems.back();
         }
 //             list = icon_view->priv->items;
 //         else
@@ -3768,12 +3768,12 @@ static void xiconview_move_cursor_page_up_down(XGtkIconView *icon_view, gint cou
     {
 //         GList *list;
 
-        if (!icon_view->priv->llItems.empty())
+        if (!icon_view->priv->vItems.empty())
         {
             if (count > 0)
-                pItem = icon_view->priv->llItems.front(); // list = icon_view->priv->items;
+                pItem = icon_view->priv->vItems.front(); // list = icon_view->priv->items;
             else
-                pItem = icon_view->priv->llItems.back(); // // list = g_list_last(icon_view->priv->items);
+                pItem = icon_view->priv->vItems.back(); // // list = g_list_last(icon_view->priv->items);
         }
 
 //         item = list ? (XGtkIconViewItem *)list->data : NULL;
@@ -3825,12 +3825,12 @@ static void xiconview_move_cursor_left_right(XGtkIconView *icon_view, gint count
     {
 //         GList *list;
 
-        if (!icon_view->priv->llItems.empty())
+        if (!icon_view->priv->vItems.empty())
         {
             if (count > 0)
-                pItem = icon_view->priv->llItems.front(); // list = icon_view->priv->items;
+                pItem = icon_view->priv->vItems.front(); // list = icon_view->priv->items;
             else
-                pItem = icon_view->priv->llItems.back(); // list = g_list_last(icon_view->priv->items);
+                pItem = icon_view->priv->vItems.back(); // list = g_list_last(icon_view->priv->items);
         }
 
         if (pItem)
@@ -3910,12 +3910,12 @@ static void xiconview_move_cursor_start_end(XGtkIconView *icon_view, gint count)
     if (!gtk_widget_has_focus(GTK_WIDGET(icon_view)))
         return;
 
-    if (!icon_view->priv->llItems.empty())
+    if (!icon_view->priv->vItems.empty())
     {
         if (count < 0)
-            pItem = icon_view->priv->llItems.front(); // icon_view->priv->items;
+            pItem = icon_view->priv->vItems.front(); // icon_view->priv->items;
         else
-            pItem = icon_view->priv->llItems.back(); // list = g_list_last(icon_view->priv->items);
+            pItem = icon_view->priv->vItems.back(); // list = g_list_last(icon_view->priv->items);
     }
 
 //     item = list ? (XGtkIconViewItem *)list->data : NULL;
@@ -4574,7 +4574,7 @@ gboolean xiconview_get_visible_range(XGtkIconView *icon_view, GtkTreePath **star
         return FALSE;
 
     // for (icons = icon_view->priv->items; icons; icons = icons->next)
-    for (auto &pItem : icon_view->priv->llItems)
+    for (auto &pItem : icon_view->priv->vItems)
     {
 //         XGtkIconViewItem *item = (XGtkIconViewItem *)icons->data;
         GdkRectangle *item_area = &pItem->cell_area;
@@ -4617,7 +4617,7 @@ void xiconview_selected_foreach(XGtkIconView *icon_view, XGtkIconViewForeachFunc
 //     GList *list;
 
     // for (list = icon_view->priv->items; list; list = list->next)
-    for (auto &pItem : icon_view->priv->llItems)
+    for (auto &pItem : icon_view->priv->vItems)
     {
 //         XGtkIconViewItem *item = (XGtkIconViewItem *)list->data;
         GtkTreePath *path = gtk_tree_path_new_from_indices(pItem->index, -1);
@@ -4741,7 +4741,7 @@ void xiconview_set_model(XGtkIconView *icon_view, GtkTreeModel *model)
 
 //         g_list_free_full(icon_view->priv->items, (GDestroyNotify)xiconview_item_free);
 //         icon_view->priv->items = NULL;
-        icon_view->priv->llItems.clear();
+        icon_view->priv->vItems.clear();
         icon_view->priv->anchor_item = NULL;
         icon_view->priv->cursor_item = NULL;
         icon_view->priv->last_single_clicked = NULL;
@@ -5130,7 +5130,7 @@ GList* xiconview_get_selected_items(XGtkIconView *icon_view)
     g_return_val_if_fail(IS_XICONVIEW(icon_view), NULL);
 
 //     for (list = icon_view->priv->items; list != NULL; list = list->next)
-    for (auto &pItem : icon_view->priv->llItems)
+    for (auto &pItem : icon_view->priv->vItems)
     {
 //         XGtkIconViewItem *item = (XGtkIconViewItem *)list->data;
 
@@ -5165,7 +5165,7 @@ void xiconview_select_all(XGtkIconView *icon_view)
         return;
 
     // for (items = icon_view->priv->items; items; items = items->next)
-    for (auto &pItem : icon_view->priv->llItems)
+    for (auto &pItem : icon_view->priv->vItems)
     {
 //         XGtkIconViewItem *item = (XGtkIconViewItem *)items->data;
 
@@ -6630,7 +6630,7 @@ cairo_surface_t *xiconview_create_drag_icon(XGtkIconView *icon_view, GtkTreePath
     index = gtk_tree_path_get_indices(path)[0];
 
     // for (l = icon_view->priv->items; l; l = l->next)
-    for (auto &pItem : icon_view->priv->llItems)
+    for (auto &pItem : icon_view->priv->vItems)
     {
 //         XGtkIconViewItem *item = (XGtkIconViewItem *)l->data;
 

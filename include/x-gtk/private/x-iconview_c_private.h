@@ -15,8 +15,8 @@
  * License along with this library. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __GTK_ICON_VIEW_PRIVATE_H__
-#define __GTK_ICON_VIEW_PRIVATE_H__
+#ifndef __XGTK_ICON_VIEW_PRIVATE_H__
+#define __XGTK_ICON_VIEW_PRIVATE_H__
 
 #include "x-gtk/x-iconview_c.h"
 
@@ -85,7 +85,7 @@ struct XGtkIconViewPrivate
     GtkTreeModel *model;
 
     // GList *items;
-    std::list<PXGtkIconViewItem> llItems;
+    std::vector<PXGtkIconViewItem> vItems;
 
     GtkAdjustment *hadjustment;
     GtkAdjustment *vadjustment;
@@ -180,5 +180,5 @@ void gtk_adjustment_animate_to_value (GtkAdjustment *adjustment,
                                       gdouble        value);
 
 
-#endif /* __GTK_ICON_VIEW_PRIVATE_H__ */
+#endif /* __XGTK_ICON_VIEW_PRIVATE_H__ */
 
