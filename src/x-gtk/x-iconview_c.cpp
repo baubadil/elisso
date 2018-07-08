@@ -1286,9 +1286,17 @@ static gint xiconview_get_n_items(XGtkIconView *icon_view)
     if (priv->model == NULL)
         return 0;
 
-    return gtk_tree_model_iter_n_children(priv->model, NULL);
+    // UFM TODO This call is expensive. Several levels down it calls g_sequence_get_length() which traverses the whole list. Called from xiconview_layout()
+//     return gtk_tree_model_iter_n_children(priv->model, NULL);
+
+    return icon_view->priv->vItems.size();
 }
 
+/*
+ *  This sets the "wrap-width" and "width" properties of the text cell renderer
+ *  to something like double the size of the first icon found in the model.
+ *  Requires that the attributes for the first model item have been set.
+ */
 static void adjust_wrap_width(XGtkIconView *icon_view)
 {
     if (icon_view->priv->text_cell)
