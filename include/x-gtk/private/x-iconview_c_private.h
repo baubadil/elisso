@@ -72,7 +72,7 @@ struct XGtkIconViewPrivate
     gulong              remove_editable_id;
     gulong              context_changed_id;
 
-    GPtrArray          *row_contexts;
+    GPtrArray          *row_contexts;       /* Array of CellAreaContext instances, one for each icon view (not model). */
 
     gint width, height;
 
@@ -158,13 +158,12 @@ struct XGtkIconViewPrivate
     guint vscroll_policy : 1;
 
     guint doing_rubberband : 1;
-
 };
 
 void _xiconview_set_cell_data(XGtkIconView *icon_view,
-                              PXGtkIconViewItem pItem);
+                              PXGtkIconViewItem &pItem);
 void _xiconview_set_cursor_item(XGtkIconView *icon_view,
-                                PXGtkIconViewItem pItem,
+                                PXGtkIconViewItem &pItem,
                                 GtkCellRenderer *cursor_cell);
 PXGtkIconViewItem _xiconview_get_item_at_coords(XGtkIconView *icon_view,
                                                     gint x,
@@ -172,9 +171,9 @@ PXGtkIconViewItem _xiconview_get_item_at_coords(XGtkIconView *icon_view,
                                                     gboolean                only_in_cell,
                                                     GtkCellRenderer       **cell_at_pos);
 void                 _xiconview_select_item(XGtkIconView *icon_view,
-                                            PXGtkIconViewItem pItem);
+                                            PXGtkIconViewItem &pItem);
 void                 _xiconview_unselect_item(XGtkIconView *icon_view,
-                                              PXGtkIconViewItem pItem);
+                                              PXGtkIconViewItem &pItem);
 
 void gtk_adjustment_animate_to_value (GtkAdjustment *adjustment,
                                       gdouble        value);
