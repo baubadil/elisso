@@ -391,7 +391,7 @@ main(int argc, char *argv[])
 //                   | FILE_MID
 //                   | FILE_HIGH
 //                   | THUMBNAILER
-// //                   | XICONVIEW
+                  | XICONVIEW
 //                   | WINDOWHIERARCHY
 //                   | FILEMONITORS
 //                   | FOLDER_STACK

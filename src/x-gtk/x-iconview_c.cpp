@@ -933,6 +933,9 @@ static void xiconview_init(XGtkIconView *icon_view)
     icon_view->priv->pixbuf_cell = NULL;
     icon_view->priv->tooltip_column = -1;
 
+    // UFM
+    icon_view->priv->cDirtyItems = -1;
+
     gtk_widget_set_can_focus(GTK_WIDGET(icon_view), TRUE);
 
     icon_view->priv->item_orientation = GTK_ORIENTATION_VERTICAL;
@@ -1446,6 +1449,8 @@ static void xiconview_get_preferred_item_size(XGtkIconView *icon_view,
 
     g_assert(!xiconview_is_empty(icon_view));
 
+    Debug d(XICONVIEW, __func__ + string(" (for size = ") + to_string(for_size));
+
     context = gtk_cell_area_create_context(priv->cell_area);
 
     for_size -= 2 * priv->item_padding;
@@ -1594,11 +1599,19 @@ static void xiconview_compute_n_items_for_size(XGtkIconView *icon_view,
 
 static GtkSizeRequestMode xiconview_get_request_mode(GtkWidget *widget) { return GTK_SIZE_REQUEST_HEIGHT_FOR_WIDTH; }
 
+/*
+ *  Retrieves a widget’s initial minimum and natural width.
+ *
+ *  This call is specific to height-for-width requests (the "normal" mode) and is the first call from a
+ *  toplevel wanting to find out about its children.
+ */
 static void xiconview_get_preferred_width(GtkWidget *widget, gint *minimum, gint *natural)
 {
     XGtkIconView *icon_view = XICONVIEW(widget);
     XGtkIconViewPrivate *priv = icon_view->priv;
     int item_min, item_nat;
+
+    Debug d(XICONVIEW, __func__ + string(" (step 1)"));
 
     if (xiconview_is_empty(icon_view))
     {
@@ -1631,6 +1644,8 @@ static void xiconview_get_preferred_width_for_height(GtkWidget *widget, gint hei
     XGtkIconViewPrivate *priv = icon_view->priv;
     int item_min, item_nat, rows, row_height, n_items;
 
+    Debug d(XICONVIEW, __func__ + string(" (?)"));
+
     if (xiconview_is_empty(icon_view))
     {
         *minimum = *natural = 2 * priv->margin;
@@ -1653,6 +1668,8 @@ static void xiconview_get_preferred_height(GtkWidget *widget, gint *minimum, gin
     XGtkIconView *icon_view = XICONVIEW(widget);
     XGtkIconViewPrivate *priv = icon_view->priv;
     int item_min, item_nat, n_items;
+
+    Debug d(XICONVIEW, __func__ + string(" (?)"));
 
     if (xiconview_is_empty(icon_view))
     {
@@ -1685,6 +1702,8 @@ static void xiconview_get_preferred_height_for_width(GtkWidget *widget, gint wid
     XGtkIconView *icon_view = XICONVIEW(widget);
     XGtkIconViewPrivate *priv = icon_view->priv;
     int item_min, item_nat, columns, column_width, n_items;
+
+    Debug d(XICONVIEW, __func__ + string(" (step 2)"));
 
     if (xiconview_is_empty(icon_view))
     {
@@ -1720,6 +1739,8 @@ static void xiconview_allocate_children(XGtkIconView *icon_view)
 static void xiconview_size_allocate(GtkWidget *widget, GtkAllocation *allocation)
 {
     XGtkIconView *icon_view = XICONVIEW(widget);
+
+    Debug d(XICONVIEW, __func__);
 
     gtk_widget_set_allocation(widget, allocation);
 
@@ -2800,6 +2821,8 @@ static void xiconview_layout(XGtkIconView *icon_view)
     GtkRequestedSize *sizes;
     gboolean rtl;
 
+    Debug d(XICONVIEW, __func__);
+
     if (xiconview_is_empty(icon_view))
         return;
 
@@ -2917,6 +2940,9 @@ static void xiconview_layout(XGtkIconView *icon_view)
     priv->height -= priv->row_spacing;
     priv->height += priv->margin;
     priv->height = MAX(priv->height, gtk_widget_get_allocated_height(widget));
+
+    // UFM Everything calculated and clean now.
+    icon_view->priv->cDirtyItems = 0;
 }
 
 static void xiconview_invalidate_sizes(XGtkIconView *icon_view)
@@ -2928,6 +2954,9 @@ static void xiconview_invalidate_sizes(XGtkIconView *icon_view)
 //     g_list_foreach(icon_view->priv->items,
 //                    (GFunc)xiconview_item_invalidate_size,
 //                    NULL);
+
+    // UFM
+    icon_view->priv->cDirtyItems = -1;
 
     /* Re-layout the items */
     gtk_widget_queue_resize(GTK_WIDGET(icon_view));
@@ -3268,6 +3297,8 @@ static void xiconview_row_changed(GtkTreeModel *model,
     if (icon_view->priv->cell_area)
         gtk_cell_area_stop_editing(icon_view->priv->cell_area, TRUE);
 
+    Debug d(XICONVIEW, __func__);
+
     /* Here we can use a "grow-only" strategy for optimization
      * and only invalidate a single item and queue a relayout
      * instead of invalidating the whole thing.
@@ -3279,12 +3310,17 @@ static void xiconview_row_changed(GtkTreeModel *model,
 //     xiconview_invalidate_sizes(icon_view);
 
     // UFM Invalidate only the one icon whose tree model row changed.
-    gint index = gtk_tree_path_get_indices(path)[0];
-    auto pItem = _xiconview_get_nth_item(icon_view, index);
-    if (pItem)
+    if (icon_view->priv->cDirtyItems != -1)
     {
-        xiconview_item_invalidate_size(pItem);
-        gtk_widget_queue_resize(GTK_WIDGET(icon_view));
+        gint index = gtk_tree_path_get_indices(path)[0];
+        auto pItem = _xiconview_get_nth_item(icon_view, index);
+        if (pItem)
+        {
+            xiconview_item_invalidate_size(pItem);
+            gtk_widget_queue_resize(GTK_WIDGET(icon_view));
+
+            ++icon_view->priv->cDirtyItems;
+        }
     }
 
     verify_items(icon_view);

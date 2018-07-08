@@ -44,6 +44,14 @@ extern void _gtk_marshal_BOOLEAN__ENUM_INT (GClosure     *closure,
         gpointer      invocation_hint,
         gpointer      marshal_data);
 
+typedef std::pair<GtkOrientation, gint> SizesMapKey;
+struct ItemSize
+{
+    int minimum;;
+    int natural;
+};
+typedef std::map<SizesMapKey, ItemSize> SizesMap;
+
 struct XGtkIconViewItem
 {
     GdkRectangle cell_area;
@@ -54,6 +62,8 @@ struct XGtkIconViewItem
 
     bool selected = false;
     bool selected_before_rubberbanding = false;
+
+    SizesMap mapSizesCache;
 
     XGtkIconViewItem()
     {
@@ -84,8 +94,10 @@ struct XGtkIconViewPrivate
 
     GtkTreeModel *model;
 
+    // The list of items (cells) in the icon view. There is one item for each row in the model (which is a cell in the icon view).
     // GList *items;
     std::vector<PXGtkIconViewItem> vItems;
+    gint          cDirtyItems;          // UFM No. of items in vItems that need recalculating; if 0, then all is clean; if -1, then everything is dirty.
 
     GtkAdjustment *hadjustment;
     GtkAdjustment *vadjustment;
