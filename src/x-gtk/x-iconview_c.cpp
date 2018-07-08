@@ -3192,7 +3192,10 @@ static void verify_items(XGtkIconView *icon_view)
 //     }
 }
 
-static void xiconview_row_changed(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter *iter, gpointer data)
+static void xiconview_row_changed(GtkTreeModel *model,
+                                  GtkTreePath *path,
+                                  GtkTreeIter *iter,
+                                  gpointer data)
 {
     XGtkIconView *icon_view = XICONVIEW(data);
 
@@ -3215,7 +3218,16 @@ static void xiconview_row_changed(GtkTreeModel *model, GtkTreePath *path, GtkTre
      * so just invalidate the whole thing when the model
      * changes.
      */
-    xiconview_invalidate_sizes(icon_view);
+//     xiconview_invalidate_sizes(icon_view);
+
+    // UFM Invalidate only the one icon whose tree model row changed.
+    gint index = gtk_tree_path_get_indices(path)[0];
+    auto pItem = _xiconview_get_nth_item(icon_view, index);
+    if (pItem)
+    {
+        xiconview_item_invalidate_size(pItem);
+        gtk_widget_queue_resize(GTK_WIDGET(icon_view));
+    }
 
     verify_items(icon_view);
 }
