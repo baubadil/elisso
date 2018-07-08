@@ -532,9 +532,6 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
                     _pImpl->iconView.scroll_to_path(path, true, 0.5, 0.5);
                     _pImpl->iconView.select_path(path);
                 }
-                // Grab focus (this is useful for "back" and "forward").
-                if (!pResult->fClickFromTree)
-                    _pImpl->iconView.grab_focus();
             break;
 
             case FolderViewMode::LIST:
@@ -544,15 +541,16 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
                     _pImpl->treeView.scroll_to_row(path, 0.5);
                     _pImpl->treeView.get_selection()->select(path);
                 }
-                // Grab focus (this is useful for "back" and "forward").
-                if (!pResult->fClickFromTree)
-                    _pImpl->treeView.grab_focus();
             break;
 
             case FolderViewMode::UNDEFINED:
             case FolderViewMode::ERROR:
             break;
         }
+
+        // Grab focus (this is useful for "back" and "forward").
+        if (!pResult->fClickFromTree)
+            this->grabFocus();
 
         // Release the populate data.
         this->_pImpl->pPopulateThread = nullptr;
@@ -1299,6 +1297,25 @@ ElissoFolderView::handleClick(GdkEventButton *pEvent,
     return clickType;
 }
 
+void ElissoFolderView::grabFocus()
+{
+    switch (_pImpl->mode)
+    {
+        case FolderViewMode::ICONS:
+        case FolderViewMode::COMPACT:
+            _pImpl->iconView.grab_focus();
+        break;
+
+        case FolderViewMode::LIST:
+             _pImpl->treeView.grab_focus();
+         break;
+
+        case FolderViewMode::ERROR:
+        case FolderViewMode::UNDEFINED:
+        break;
+    }
+}
+
 void
 ElissoFolderView::handleAction(FolderAction action)
 {
@@ -1417,6 +1434,11 @@ ElissoFolderView::handleAction(FolderAction action)
                     setDirectory(pTrash, SetDirectoryFlag::PUSH_TO_HISTORY);
             }
             break;
+
+            case FolderAction::GO_LOCATION:
+            {
+                _mainWindow.focusPathEntryField();
+            }
         }
     }
     catch (FSException &e)

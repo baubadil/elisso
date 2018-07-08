@@ -35,43 +35,8 @@ enum class ShowHideOrNothing : uint8_t
  **************************************************************************/
 
 /**
- *  Window hierarchy:
- *
- *  ElissoApplicationWindow
- *   |
- *   +- GtkMenuBar
- *   |
- *   +- GtkBox
- *       |
- *       +- GtkToolbar
- *       |
- *       +- GtkPaned: to split between tree (left) and notebook (right)
- *           |
- *           +- ElissoFolderTreeMgr (derived from GtkScrolledWindow)
- *           |
- *           +- GtkBox (as parent of notebook and status bar)
- *               |
- *               +- GtkNotebook
- *               |   |
- *               |   +- Tab: ElissoFolderView (derived from GtkOverlay)
- *               |   |   |
- *               |   |   +- GtkPaned: to split between the icon/list (left) and image preview (right)
- *               |   |       |
- *               |   |       +- GtkScrolledWindow (icon/list view parent)
- *               |   |       |   |
- *               |   |       |   +- GtkTreeView, GtkIconView
- *               |   |       |
- *               |   |       +- GtkScrolledWindow
- *               |   |           |
- *               |   |           +- ElissoFilePreview
- *               |   |
- *               |   +- maybe another Tab: ElissoFolderView (subclass of GtkOverlay)
- *               |     .....
- *               |
- *               +- GtkStatusBar
- *
  *  There is only a constructor, no "create" method with a refptr, since
- *  the constructor adds the new instance to the GtkApplication behing
+ *  the constructor adds the new instance to the GtkApplication behind
  *  ElissoApplication.
  */
 class ElissoApplicationWindow : public Gtk::ApplicationWindow
@@ -92,21 +57,10 @@ public:
     int errorBox(Glib::ustring strMessage);
 
     /**
-     *  Returns the ElissoFolderTreeMgr that makes up the left of the member Gtk::Paned.
-     */
-    ElissoFolderTreeMgr& getTreeMgr()
-    {
-        return _folderTreeMgr;
-    }
-
-    /**
      *  Returns the notebook that makes up the right of the member Gtk::Paned, which in turns
      *  has ElissoFolderView widgets as notebook pages.
      */
-    Gtk::Notebook& getNotebook()
-    {
-        return _notebook;
-    }
+    Gtk::Notebook& getNotebook();
 
     /**
      *  Returns the ElissoFolderView that is on the currently active notebook page.
@@ -122,6 +76,8 @@ public:
     void addFolderTab(PFsObject pDirOrSymlink);
 
     void addFolderTab(const std::string &strError);
+
+    void focusPathEntryField();
 
     void setWaitCursor(Glib::RefPtr<Gdk::Window> pWindow,
                        Cursor cursor);
@@ -269,10 +225,6 @@ protected:
      */
     void closeFolderTab(ElissoFolderView &viewClose);
 
-    Gtk::ToolButton* makeToolButton(const Glib::ustring &strIconName,
-                                    PSimpleAction pAction,
-                                    bool fAlignRight = false);
-
     /**
      *  Called once on window creation and then via a signal callback whenever the
      *  clipboard contents change. This updates whether the "paste" action is available.
@@ -288,23 +240,6 @@ protected:
 
     struct Impl;
     Impl                            *_pImpl;
-
-    int                             _x = 0, _y = 0, _width = 100, _height = 100;
-    bool                            _fIsMaximized = false,
-                                    _fIsFullscreen = false;
-
-    Gtk::Box                        _mainVBox;
-    Gtk::Toolbar                        _toolbar;
-    Gtk::Paned                          _vPaned;
-    ElissoFolderTreeMgr                        _folderTreeMgr;
-    Gtk::Box                                _boxForNotebookAndStatusBar;
-    Gtk::Notebook                               _notebook;
-    Gtk::Grid                                   _gridStatusBar;
-    Gtk::Statusbar                              _statusbarCurrent;
-    Gtk::Grid                                   _gridThumbnailing;
-    Gtk::Statusbar                                  _statusbarThumbnailing;
-    Gtk::ProgressBar                                _progressBarThumbnailer;
-    Gtk::Statusbar                              _statusbarFree;
 };
 
 #endif // ELISSO_MAINWINDOW_H

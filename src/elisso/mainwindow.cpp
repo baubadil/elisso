@@ -22,8 +22,65 @@
  *
  **************************************************************************/
 
+/**
+ *  Window hierarchy:
+ *
+ *  ElissoApplicationWindow
+ *   |
+ *   +- GtkMenuBar
+ *   |
+ *   +- GtkBox
+ *       |
+ *       +- GtkToolbar
+ *       |
+ *       +- GtkPaned: to split between tree (left) and notebook (right)
+ *           |
+ *           +- ElissoFolderTreeMgr (derived from GtkScrolledWindow)
+ *           |
+ *           +- GtkBox (as parent of notebook and status bar)
+ *               |
+ *               +- GtkNotebook
+ *               |   |
+ *               |   +- Tab: ElissoFolderView (derived from GtkOverlay)
+ *               |   |   |
+ *               |   |   +- GtkPaned: to split between the icon/list (left) and image preview (right)
+ *               |   |       |
+ *               |   |       +- GtkScrolledWindow (icon/list view parent)
+ *               |   |       |   |
+ *               |   |       |   +- GtkTreeView, GtkIconView
+ *               |   |       |
+ *               |   |       +- GtkScrolledWindow
+ *               |   |           |
+ *               |   |           +- ElissoFilePreview
+ *               |   |
+ *               |   +- maybe another Tab: ElissoFolderView (subclass of GtkOverlay)
+ *               |     .....
+ *               |
+ *               +- GtkStatusBar
+ *
+ */
 struct ElissoApplicationWindow::Impl
 {
+    ElissoApplicationWindow         &mainWindow;
+
+    int                             x = 0, y = 0, width = 100, height = 100;
+    bool                            fIsMaximized = false,
+                                    fIsFullscreen = false;
+
+    Gtk::Box                        mainVBox;
+    Gtk::Toolbar                        toolbar;
+    Gtk::Entry                              pathEntry;
+    Gtk::Paned                          vPaned;
+    ElissoFolderTreeMgr                     folderTreeMgr;
+    Gtk::Box                                boxForNotebookAndStatusBar;
+    Gtk::Notebook                               notebook;
+    Gtk::Grid                                   gridStatusBar;
+    Gtk::Statusbar                              statusbarCurrent;
+    Gtk::Grid                                   gridThumbnailing;
+    Gtk::Statusbar                                  statusbarThumbnailing;
+    Gtk::ProgressBar                                progressBarThumbnailer;
+    Gtk::Statusbar                              statusbarFree;
+
     PSimpleAction                   pActionEditOpenSelected;
     PSimpleAction                   pActionEditOpenSelectedInTab;
     PSimpleAction                   pActionEditOpenSelectedInTerminal;
@@ -63,6 +120,114 @@ struct ElissoApplicationWindow::Impl
 
     FileOperationsList              llFileOperations;
     PProgressDialog                 pProgressDialog;
+
+    Impl(ElissoApplicationWindow &win)
+      : mainWindow(win),
+        mainVBox(Gtk::ORIENTATION_VERTICAL),
+        vPaned(),
+        folderTreeMgr(win),
+        boxForNotebookAndStatusBar(Gtk::ORIENTATION_VERTICAL)
+    {
+    }
+
+    /**
+     *  This is in a separate method because it needs the actions, which are not ready during construction.
+     */
+    void initChildren()
+    {
+        /*
+         *  Toolbar
+         */
+
+        toolbar.append(*(pButtonGoBack = makeToolButton("go-previous-symbolic", pActionGoBack)));
+        toolbar.append(*(pButtonGoForward = makeToolButton("go-next-symbolic", pActionGoForward)));
+        toolbar.append(*(pButtonGoParent = makeToolButton("go-up-symbolic", pActionGoParent)));
+        toolbar.append(*(pButtonGoHome = makeToolButton("go-home-symbolic", pActionGoHome)));
+        toolbar.append(*(pButtonViewRefresh = makeToolButton("view-refresh-symbolic", pActionViewRefresh)));
+
+        // Insert the path entry field as a tool item that expands.
+        auto pToolItem = new Gtk::ToolItem();
+        pToolItem->add(this->pathEntry);
+        pToolItem->set_expand(true);
+        toolbar.append(*pToolItem);
+
+        // More buttons on the right (after the expander).
+        toolbar.append(*(pButtonViewIcons = makeToolButton("view-grid-symbolic", pActionViewIcons, true)));
+        toolbar.append(*(pButtonViewList = makeToolButton("view-list-symbolic", pActionViewList)));
+
+        // Install a handler for the esc key.
+        pathEntry.signal_key_press_event().connect([this](GdkEventKey *pEvent) -> bool {
+            if (pEvent->keyval == GDK_KEY_Escape)
+            {
+                pathEntry.select_region(0, 0);
+                auto p = this->mainWindow.getActiveFolderView();
+                if (p)
+                    p->grabFocus();
+                return true;
+            }
+
+            return false;
+        });
+
+        /*
+         *  Others
+         */
+
+        statusbarCurrent.set_hexpand(true);
+
+        progressBarThumbnailer.set_valign(Gtk::Align::ALIGN_CENTER);
+        progressBarThumbnailer.set_size_request(50, -1);
+        gridThumbnailing.set_valign(Gtk::Align::ALIGN_CENTER);
+        statusbarThumbnailing.push("Thumbnailing:");
+        gridThumbnailing.add(statusbarThumbnailing);
+        gridThumbnailing.add(progressBarThumbnailer);
+
+        statusbarFree.set_halign(Gtk::Align::ALIGN_END);
+
+        gridStatusBar.add(statusbarCurrent);
+        gridStatusBar.add(gridThumbnailing);
+        gridStatusBar.add(statusbarFree);
+
+        boxForNotebookAndStatusBar.pack_start(notebook, true, true);
+        boxForNotebookAndStatusBar.pack_start(gridStatusBar, false, false);
+
+        vPaned.set_position(200);
+        vPaned.set_wide_handle(true);
+        vPaned.add1(folderTreeMgr);
+        vPaned.add2(boxForNotebookAndStatusBar);
+
+        mainVBox.pack_start(toolbar, Gtk::PACK_SHRINK);
+        mainVBox.pack_start(vPaned);
+
+        notebook.set_scrollable(true);
+        notebook.popup_enable();
+
+        boxForNotebookAndStatusBar.show_all();
+    }
+
+    Gtk::ToolButton*
+    makeToolButton(const Glib::ustring &strIconName,
+                   PSimpleAction pAction,
+                   bool fAlignRight = false)
+    {
+        Gtk::ToolButton *pButton = nullptr;
+        if (pAction)
+        {
+            auto pImage = new Gtk::Image();
+            pImage->set_from_icon_name(strIconName,
+                                       Gtk::BuiltinIconSize::ICON_SIZE_SMALL_TOOLBAR);
+            pButton = Gtk::manage(new Gtk::ToolButton(*pImage));
+            if (fAlignRight)
+                pButton->set_halign(Gtk::ALIGN_START);
+            // Connect to "clicked" signal on button.
+            pButton->signal_clicked().connect([this, pAction]()
+            {
+                mainWindow.activate_action(pAction->get_name());
+            });
+        }
+        return pButton;
+    }
+
 };
 
 
@@ -74,14 +239,11 @@ struct ElissoApplicationWindow::Impl
 
 ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app)      //!< in: initial directory or nullptr for "home"
     : _app(app),
-      _pImpl(new Impl),
-      _mainVBox(Gtk::ORIENTATION_VERTICAL),
-      _vPaned(),
-      _folderTreeMgr(*this),
-      _boxForNotebookAndStatusBar(Gtk::ORIENTATION_VERTICAL),
-      _notebook()
+      _pImpl(new Impl(*this))
 {
     this->initActionHandlers();
+
+    _pImpl->initChildren();
 
     /*
      *  Window setup
@@ -109,24 +271,6 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app)      //
 //                sigc::mem_fun(*this, &ElissoApplicationWindow::onClipboardGet),
 //                sigc::mem_fun(*this, &ElissoApplicationWindow::onClipboardClear));
 //
-    /*
-     *  Toolbar
-     */
-
-    _toolbar.append(*(_pImpl->pButtonGoBack = makeToolButton("go-previous-symbolic", _pImpl->pActionGoBack)));
-    _toolbar.append(*(_pImpl->pButtonGoForward = makeToolButton("go-next-symbolic", _pImpl->pActionGoForward)));
-    _toolbar.append(*(_pImpl->pButtonGoParent = makeToolButton("go-up-symbolic", _pImpl->pActionGoParent)));
-    _toolbar.append(*(_pImpl->pButtonGoHome = makeToolButton("go-home-symbolic", _pImpl->pActionGoHome)));
-    _toolbar.append(*(_pImpl->pButtonViewRefresh = makeToolButton("view-refresh-symbolic", _pImpl->pActionViewRefresh)));
-
-    auto pSeparator = new Gtk::SeparatorToolItem();
-    pSeparator->set_expand(true);
-    pSeparator->set_draw(false);
-    _toolbar.append(*pSeparator);
-
-    _toolbar.append(*(_pImpl->pButtonViewIcons = makeToolButton("view-grid-symbolic", _pImpl->pActionViewIcons, true)));
-    _toolbar.append(*(_pImpl->pButtonViewList = makeToolButton("view-list-symbolic", _pImpl->pActionViewList)));
-
     this->signal_action_enabled_changed().connect([this](const Glib::ustring &strAction, bool fEnabled)
     {
 //         Debug::Log(DEBUG_ALWAYS, "enabled changed: " + strAction);
@@ -145,60 +289,21 @@ ElissoApplicationWindow::ElissoApplicationWindow(ElissoApplication &app)      //
             _pImpl->pButtonViewRefresh->set_sensitive(fEnabled);
     });
 
-    _statusbarCurrent.set_hexpand(true);
-
-    _progressBarThumbnailer.set_valign(Gtk::Align::ALIGN_CENTER);
-    _progressBarThumbnailer.set_size_request(50, -1);
-    _gridThumbnailing.set_valign(Gtk::Align::ALIGN_CENTER);
-    _statusbarThumbnailing.push("Thumbnailing:");
-    _gridThumbnailing.add(_statusbarThumbnailing);
-    _gridThumbnailing.add(_progressBarThumbnailer);
-
-    _statusbarFree.set_halign(Gtk::Align::ALIGN_END);
-
-    _gridStatusBar.add(_statusbarCurrent);
-    _gridStatusBar.add(_gridThumbnailing);
-    _gridStatusBar.add(_statusbarFree);
-
-    _boxForNotebookAndStatusBar.pack_start(_notebook, true, true);
-    _boxForNotebookAndStatusBar.pack_start(_gridStatusBar, false, false);
-
-    _vPaned.set_position(200);
-    _vPaned.set_wide_handle(true);
-    _vPaned.add1(_folderTreeMgr);
-    _vPaned.add2(_boxForNotebookAndStatusBar);
-
-    _mainVBox.pack_start(_toolbar, Gtk::PACK_SHRINK);
-    _mainVBox.pack_start(_vPaned);
-
-//     auto pStatusBar = new Gtk::Statusbar();
-//     _mainVBox.pack_start(*pStatusBar);
-//     pStatusBar->show();
-
-//     int context_id = pStatusBar->get_context_id("Statusbar example");
-//     pStatusBar->push("Test", context_id);
-
-    this->add(_mainVBox);
+    this->add(_pImpl->mainVBox);
 
     this->show_all_children();
-
-    _notebook.set_scrollable(true);
-    _notebook.popup_enable();
-
-    _boxForNotebookAndStatusBar.show_all();
 
     /*
      *  Children setup
      */
 
-    _notebook.signal_switch_page().connect([this](Gtk::Widget *pw,
-                                                  guint /* page_number */)
+    _pImpl->notebook.signal_switch_page().connect([this](Gtk::Widget *pw,
+                                                         guint /* page_number */)
     {
         auto p = static_cast<ElissoFolderView*>(pw);
         if (p)
             this->onNotebookTabChanged(*p);
     });
-
 
     Glib::ustring data = ".file-ops-success {background-image: radial-gradient(ellipse at center, green 0%, transparent 100%);}";
     auto css = Gtk::CssProvider::create();
@@ -228,12 +333,17 @@ int ElissoApplicationWindow::errorBox(Glib::ustring strMessage)
     return dialog.run();
 }
 
+Gtk::Notebook& ElissoApplicationWindow::getNotebook()
+{
+    return _pImpl->notebook;
+}
+
 ElissoFolderView*
 ElissoApplicationWindow::getActiveFolderView()
 {
-    auto i = _notebook.get_current_page();
+    auto i = _pImpl->notebook.get_current_page();
     if (i != -1)
-        return static_cast<ElissoFolderView*>(_notebook.get_nth_page(i));
+        return static_cast<ElissoFolderView*>(_pImpl->notebook.get_nth_page(i));
 
     return nullptr;
 }
@@ -264,6 +374,12 @@ ElissoApplicationWindow::addFolderTab(const std::string &strError)
     Debug d(CMD_TOP, "addFolderTab with error: " + strError);
     auto pView = this->doAddTab();
     pView->setError(strError);
+}
+
+void
+ElissoApplicationWindow::focusPathEntryField()
+{
+    _pImpl->pathEntry.grab_focus();
 }
 
 void
@@ -401,7 +517,12 @@ ElissoApplicationWindow::updateWindowTitle(ElissoFolderView &view)
     if (pDir)
         strTitle = pDir->getPath();
 
+    if (startsWith(strTitle, "file:///"))
+        strTitle = strTitle.substr(7);
+
     this->setWindowTitle(strTitle);
+
+    _pImpl->pathEntry.set_text(strTitle);
 
     return strTitle;
 }
@@ -409,31 +530,31 @@ ElissoApplicationWindow::updateWindowTitle(ElissoFolderView &view)
 void
 ElissoApplicationWindow::setStatusbarCurrent(const Glib::ustring &str)
 {
-    _statusbarCurrent.pop();       // Remove previous message, if any.
-    _statusbarCurrent.push(str);
+    _pImpl->statusbarCurrent.pop();       // Remove previous message, if any.
+    _pImpl->statusbarCurrent.push(str);
 }
 
 void
 ElissoApplicationWindow::setThumbnailerProgress(uint current, uint max, ShowHideOrNothing shn)
 {
     if (max && current < max)
-        _progressBarThumbnailer.set_fraction((gdouble)current / (gdouble)max);
+        _pImpl->progressBarThumbnailer.set_fraction((gdouble)current / (gdouble)max);
     else
     {
-        _progressBarThumbnailer.set_fraction(1);
+        _pImpl->progressBarThumbnailer.set_fraction(1);
         shn = ShowHideOrNothing::HIDE;
     }
 
     switch (shn)
     {
         case ShowHideOrNothing::SHOW:
-            _gridThumbnailing.show();
+            _pImpl->gridThumbnailing.show();
         break;
 
         case ShowHideOrNothing::HIDE:
             Glib::signal_timeout().connect([this]() -> bool
             {
-                _gridThumbnailing.hide();
+                _pImpl->gridThumbnailing.hide();
                 return false; // disconnect
             }, 500);
         break;
@@ -468,8 +589,8 @@ ElissoApplicationWindow::setStatusbarFree(PFsObject pDir)
     if (cbThumbs)
         strFree += " — " + formatBytes(cbThumbs) + " thumbs";
 
-    _statusbarFree.pop();       // Remove previous message, if any.
-    _statusbarFree.push(strFree);
+    _pImpl->statusbarFree.pop();       // Remove previous message, if any.
+    _pImpl->statusbarFree.push(strFree);
 }
 
 void
@@ -477,7 +598,7 @@ ElissoApplicationWindow::selectInFolderTree(PFsObject pDir)
 {
     if (pDir)
     {
-        this->_folderTreeMgr.selectNode(pDir);
+        _pImpl->folderTreeMgr.selectNode(pDir);
     }
 }
 
@@ -496,17 +617,16 @@ ElissoApplicationWindow::onButtonPressedEvent(GdkEventButton *pEvent,
 
                 if (mode == TreeViewPlusMode::IS_FOLDER_TREE_LEFT)
                 {
-                    auto &tmgr = this->getTreeMgr();
-                    auto &twp = tmgr.getTreeViewPlus();
+                    auto &twp = _pImpl->folderTreeMgr.getTreeViewPlus();
                     auto pSel = twp.get_selection();
                     if (pSel)
                     {
                         if (twp.get_path_at_pos((int)pEvent->x, (int)pEvent->y, path))
                         {
                             // Select, but without populating the contents.
-                            tmgr.suppressSelectHandler(true);
+                            _pImpl->folderTreeMgr.suppressSelectHandler(true);
                             pSel->select(path);
-                            tmgr.suppressSelectHandler(false);
+                            _pImpl->folderTreeMgr.suppressSelectHandler(false);
 
                             clickType = MouseButton3ClickType::TREE_ITEM_SELECTED;
                             // Call our handler for the popup menu below.
@@ -871,16 +991,16 @@ ElissoApplicationWindow::initActionHandlers()
      */
     _pImpl->pActionViewNextTab = this->add_action(ACTION_VIEW_NEXT_TAB, [this]()
     {
-        int i = _notebook.get_current_page();
-        if (i < _notebook.get_n_pages() - 1)
-            _notebook.set_current_page(i + 1);
+        int i = _pImpl->notebook.get_current_page();
+        if (i < _pImpl->notebook.get_n_pages() - 1)
+            _pImpl->notebook.set_current_page(i + 1);
     });
 
     _pImpl->pActionViewPreviousTab = this->add_action(ACTION_VIEW_PREVIOUS_TAB, [this]()
     {
-        int i = _notebook.get_current_page();
+        int i = _pImpl->notebook.get_current_page();
         if (i > 0)
-            _notebook.set_current_page(i - 1);
+            _pImpl->notebook.set_current_page(i - 1);
     });
 
     _pImpl->pActionViewIcons = this->addActiveViewActionHandler(ACTION_VIEW_ICONS);
@@ -904,6 +1024,7 @@ ElissoApplicationWindow::initActionHandlers()
     _pImpl->pActionGoHome = this->addActiveViewActionHandler(ACTION_GO_HOME);
     this->addActiveViewActionHandler(ACTION_GO_COMPUTER);
     this->addActiveViewActionHandler(ACTION_GO_TRASH);
+    this->addActiveViewActionHandler(ACTION_GO_LOCATION);
 
 
     /*
@@ -944,8 +1065,7 @@ ElissoApplicationWindow::addTreeActionHandler(const string &strAction)
 {
     PSimpleAction p = this->add_action(strAction, [this, &strAction]()
     {
-        auto &tmgr = this->getTreeMgr();
-        tmgr.handleAction(strAction);
+        _pImpl->folderTreeMgr.handleAction(strAction);
     });
 
     return p;
@@ -958,8 +1078,8 @@ ElissoApplicationWindow::setSizeAndPosition()
     auto v = explodeVector(strPos, ",");
     if (v.size() == 6)
     {
-        _width = stoi(v[2]);
-        _height = stoi(v[3]);
+        _pImpl->width = stoi(v[2]);
+        _pImpl->height = stoi(v[3]);
 
         bool fCenterX = (v[0] == "x");
         bool fCenterY = (v[1] == "x");
@@ -974,24 +1094,24 @@ ElissoApplicationWindow::setSizeAndPosition()
         }
 
         if (fCenterX)
-            _x = rectCurrentMonitor.get_x() + (rectCurrentMonitor.get_width() - _width) / 2;
+            _pImpl->x = rectCurrentMonitor.get_x() + (rectCurrentMonitor.get_width() - _pImpl->width) / 2;
         else
-            _x = stoi(v[0]);
+            _pImpl->x = stoi(v[0]);
         if (fCenterY)
-            _y = rectCurrentMonitor.get_y() + (rectCurrentMonitor.get_height() - _height) / 2;
+            _pImpl->y = rectCurrentMonitor.get_y() + (rectCurrentMonitor.get_height() - _pImpl->height) / 2;
         else
-            _y = stoi(v[1]);
+            _pImpl->y = stoi(v[1]);
 
-        _fIsMaximized = !!(stoi(v[4]));
-        _fIsFullscreen = !!(stoi(v[5]));
+        _pImpl->fIsMaximized = !!(stoi(v[4]));
+        _pImpl->fIsFullscreen = !!(stoi(v[5]));
     }
 
-    this->set_default_size(_width, _height);
-    this->move(_x, _y);
+    this->set_default_size(_pImpl->width, _pImpl->height);
+    this->move(_pImpl->x, _pImpl->y);
 
-    if (_fIsMaximized)
+    if (_pImpl->fIsMaximized)
         this->maximize();
-    if (_fIsFullscreen)
+    if (_pImpl->fIsFullscreen)
         this->fullscreen();
 }
 
@@ -1006,8 +1126,8 @@ ElissoApplicationWindow::setWindowTitle(Glib::ustring str)
 void
 ElissoApplicationWindow::enableViewTabActions()
 {
-    int cCurrent = _notebook.get_current_page();
-    _pImpl->pActionViewNextTab->set_enabled(cCurrent < _notebook.get_n_pages() - 1);
+    int cCurrent = _pImpl->notebook.get_current_page();
+    _pImpl->pActionViewNextTab->set_enabled(cCurrent < _pImpl->notebook.get_n_pages() - 1);
     _pImpl->pActionViewPreviousTab->set_enabled(cCurrent > 0);
 }
 
@@ -1083,6 +1203,7 @@ ElissoApplicationWindow::handleActiveViewAction(const std::string &strAction)
                 { ACTION_GO_HOME, FolderAction::GO_HOME },
                 { ACTION_GO_COMPUTER, FolderAction::GO_COMPUTER },
                 { ACTION_GO_TRASH, FolderAction::GO_TRASH },
+                { ACTION_GO_LOCATION, FolderAction::GO_LOCATION },
             };
 
             // Forward all others to currently active folder view.
@@ -1102,25 +1223,25 @@ ElissoApplicationWindow::doAddTab()
     int iPageInserted;
     auto pView = new ElissoFolderView(*this, iPageInserted);
     pView->show();
-    _notebook.set_current_page(iPageInserted);
-    _notebook.set_tab_reorderable(*pView, true);
+    _pImpl->notebook.set_current_page(iPageInserted);
+    _pImpl->notebook.set_tab_reorderable(*pView, true);
     return pView;
 }
 
 void
 ElissoApplicationWindow::closeFolderTab(ElissoFolderView &viewClose)
 {
-    int cPages = _notebook.get_n_pages();
+    int cPages = _pImpl->notebook.get_n_pages();
     if (cPages > 1)
     {
         for (int i = 0; i < cPages; ++i)
         {
-            auto pPageWidget = _notebook.get_nth_page(i);
+            auto pPageWidget = _pImpl->notebook.get_nth_page(i);
             ElissoFolderView *pViewThis = static_cast<ElissoFolderView *>(pPageWidget);
             if (pViewThis->getID() == viewClose.getID())
             {
                 Debug::Log(DEBUG_ALWAYS, "removing notebook page");
-                _notebook.remove_page(*pPageWidget);
+                _pImpl->notebook.remove_page(*pPageWidget);
                 delete pViewThis;
                 break;
             }
@@ -1128,29 +1249,6 @@ ElissoApplicationWindow::closeFolderTab(ElissoFolderView &viewClose)
     }
     else
         this->close();
-}
-
-Gtk::ToolButton*
-ElissoApplicationWindow::makeToolButton(const Glib::ustring &strIconName,
-                                        PSimpleAction pAction,
-                                        bool fAlignRight /* = false*/ )
-{
-    Gtk::ToolButton *pButton = nullptr;
-    if (pAction)
-    {
-        auto pImage = new Gtk::Image();
-        pImage->set_from_icon_name(strIconName,
-                                   Gtk::BuiltinIconSize::ICON_SIZE_SMALL_TOOLBAR);
-        pButton = Gtk::manage(new Gtk::ToolButton(*pImage));
-        if (fAlignRight)
-            pButton->set_halign(Gtk::ALIGN_START);
-        // Connect to "clicked" signal on button.
-        pButton->signal_clicked().connect([this, pAction]()
-        {
-            this->activate_action(pAction->get_name());
-        });
-    }
-    return pButton;
 }
 
 void ElissoApplicationWindow::onClipboardChanged()
@@ -1176,10 +1274,10 @@ ElissoApplicationWindow::on_size_allocate(Gtk::Allocation& allocation) /* overri
 {
     ApplicationWindow::on_size_allocate(allocation);
 
-    if (!_fIsMaximized && !_fIsFullscreen)
+    if (!_pImpl->fIsMaximized && !_pImpl->fIsFullscreen)
     {
-        this->get_position(_x, _y);
-        this->get_size(_width, _height);
+        this->get_position(_pImpl->x, _pImpl->y);
+        this->get_size(_pImpl->width, _pImpl->height);
     }
 }
 
@@ -1189,8 +1287,8 @@ ElissoApplicationWindow::on_window_state_event(GdkEventWindowState *ev) /* overr
 {
     ApplicationWindow::on_window_state_event(ev);
 
-    _fIsMaximized = (ev->new_window_state & GDK_WINDOW_STATE_MAXIMIZED) != 0;
-    _fIsFullscreen = (ev->new_window_state & GDK_WINDOW_STATE_FULLSCREEN) != 0;
+    _pImpl->fIsMaximized = (ev->new_window_state & GDK_WINDOW_STATE_MAXIMIZED) != 0;
+    _pImpl->fIsFullscreen = (ev->new_window_state & GDK_WINDOW_STATE_FULLSCREEN) != 0;
 
     return false; // propagate
 }
@@ -1202,12 +1300,12 @@ ElissoApplicationWindow::on_delete_event(GdkEventAny *ev) /* override */
     ApplicationWindow::on_delete_event(ev);
 
     StringVector v;
-    v.push_back(to_string(_x));
-    v.push_back(to_string(_y));
-    v.push_back(to_string(_width));
-    v.push_back(to_string(_height));
-    v.push_back((_fIsMaximized) ? "1" : "0");
-    v.push_back((_fIsFullscreen) ? "1" : "0");
+    v.push_back(to_string(_pImpl->x));
+    v.push_back(to_string(_pImpl->y));
+    v.push_back(to_string(_pImpl->width));
+    v.push_back(to_string(_pImpl->height));
+    v.push_back((_pImpl->fIsMaximized) ? "1" : "0");
+    v.push_back((_pImpl->fIsFullscreen) ? "1" : "0");
     if (v.size() == 6)
         _app.setSettingsString(SETTINGS_WINDOWPOS, implode(",", v));
 

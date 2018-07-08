@@ -322,6 +322,8 @@ ElissoApplication::on_startup() /* override */
     addMenuItem(pSubSection, "Home", ACTION_GO_HOME, "<Alt>Home");
     addMenuItem(pSubSection, "Computer", ACTION_GO_COMPUTER);
     addMenuItem(pSubSection, "Trash", ACTION_GO_TRASH);
+    pSubSection = addMenuSection(pSubmenu);
+    addMenuItem(pSubSection, "Enter location", ACTION_GO_LOCATION, "<Primary>l");
 
     pSubmenu = Gio::Menu::create();
     pMenuBar->append_submenu("_Help", pSubmenu);

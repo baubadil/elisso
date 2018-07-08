@@ -98,6 +98,7 @@ enum class FolderAction
     GO_HOME,
     GO_COMPUTER,
     GO_TRASH,
+    GO_LOCATION,
 };
 
 class ElissoApplicationWindow;
@@ -298,6 +299,11 @@ public:
      */
     MouseButton3ClickType handleClick(GdkEventButton *pEvent,       //!< in: mouse button event
                                       Gtk::TreeModel::Path &path);  //!< out: path of selected item
+
+    /**
+     *  Invokes grab_focus() on either the icon or tree (list) view, depending on the view mode.
+     */
+    void grabFocus();
 
     /**
      *  Called from ElissoApplicationWindow::handleViewAction() to handle
