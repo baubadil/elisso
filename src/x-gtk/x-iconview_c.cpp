@@ -2889,8 +2889,10 @@ static void xiconview_layout(XGtkIconView *icon_view)
         }
 
         sizes[row].data = GINT_TO_POINTER(row);
-        gtk_cell_area_context_get_preferred_height_for_width(
-            context, item_width, &sizes[row].minimum_size, &sizes[row].natural_size);
+        gtk_cell_area_context_get_preferred_height_for_width(context,
+                                                             item_width,
+                                                             &sizes[row].minimum_size,
+                                                             &sizes[row].natural_size);
         priv->height += sizes[row].minimum_size + 2 * priv->item_padding + priv->row_spacing;
     }
 

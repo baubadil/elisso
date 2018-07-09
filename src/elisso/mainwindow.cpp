@@ -36,6 +36,8 @@
  *       +- GtkPaned: to split between tree (left) and notebook (right)
  *           |
  *           +- ElissoFolderTreeMgr (derived from GtkScrolledWindow)
+ *           |   |
+ *           |   +- TreeViewPlus (our TreeView subclass)
  *           |
  *           +- GtkBox (as parent of notebook and status bar)
  *               |
