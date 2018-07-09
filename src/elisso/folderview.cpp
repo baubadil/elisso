@@ -1149,7 +1149,8 @@ ElissoFolderView::selectPreviewable(bool fNext)
             if (fNext)
                 _pImpl->pathPreviewing.next();
             else
-                _pImpl->pathPreviewing.prev();
+                if (!(_pImpl->pathPreviewing.prev()))
+                    break;
 
             Gtk::TreeModel::iterator iter = _pImpl->pListStore->get_iter(_pImpl->pathPreviewing);
             if (iter)
