@@ -7,7 +7,7 @@
           <description>The position and size of the main application window, in "x,y,width,height,maximized,fullscreen" string format</description>
       </key>
       <key type="s" name="list-column-widths">
-          <default>"40,500,100,80"</default>
+          <default>"40,800,120,120,120"</default>
           <summary>Widths of the columns in list view</summary>
           <description>Widths of the columns in list view</description>
       </key>

@@ -267,7 +267,8 @@ ElissoApplication::on_startup() /* override */
     auto pSubSection = addMenuSection(pSubmenu);
     addMenuItem(pSubSection, "New _tab", ACTION_FILE_NEW_TAB, "<Primary>t");
     addMenuItem(pSubSection, "New _window", ACTION_FILE_NEW_WINDOW, "<Primary>n");
-    addMenuItem(pSubSection, "Open current folder in ter_minal", ACTION_FILE_OPEN_IN_TERMINAL, "<Primary><Shift>m");
+    addMenuItem(pSubSection, "Open current folder in ter_minal", ACTION_FILE_OPEN_IN_TERMINAL2, "<Primary><Shift>m");
+    addMenuItem(pSubSection, "Open current folder in nemo", ACTION_FILE_OPEN_IN_NEMO);
 
     pSubSection = addMenuSection(pSubmenu);
     addMenuItem(pSubSection, "Create new folder", ACTION_FILE_CREATE_FOLDER, "<Primary><Shift>n");
@@ -293,7 +294,8 @@ ElissoApplication::on_startup() /* override */
     pSubSection = addMenuSection(pSubmenu);
     addMenuItem(pSubSection, "_Open selected", ACTION_EDIT_OPEN_SELECTED);
     addMenuItem(pSubSection, "Open selected in new ta_b", ACTION_EDIT_OPEN_SELECTED_IN_TAB);
-    addMenuItem(pSubSection, "Open selected in ter_minal", ACTION_EDIT_OPEN_SELECTED_IN_TERMINAL);
+    addMenuItem(pSubSection, "Open selected in ter_minal", ACTION_EDIT_OPEN_SELECTED_IN_TERMINAL2);
+    addMenuItem(pSubSection, "Open selected in nemo", ACTION_EDIT_OPEN_SELECTED_IN_NEMO);
     pSubSection = addMenuSection(pSubmenu);
     addMenuItem(pSubSection, "_Rename selected", ACTION_EDIT_RENAME, "F2");
     addMenuItem(pSubSection, "Tras_h selected", ACTION_EDIT_TRASH);
@@ -393,14 +395,14 @@ main(int argc, char *argv[])
 //                   | FILE_MID
 //                   | FILE_HIGH
 //                   | THUMBNAILER
-                  | XICONVIEW
+//                   | XICONVIEW
 //                   | WINDOWHIERARCHY
 //                   | FILEMONITORS
 //                   | FOLDER_STACK
-//                   | CLIPBOARD
-//                   | PROGRESSDIALOG
+                  | CLIPBOARD
+                  | PROGRESSDIALOG
 //                   | TREEMODEL
-//                    | MOUNTS
+                  | MOUNTS
                   ;
 
     mallopt(M_ARENA_MAX, 2);

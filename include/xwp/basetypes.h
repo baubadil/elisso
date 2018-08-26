@@ -54,3 +54,4 @@ public:
 using namespace XWP;
 
 #endif // XWP_BASETYPES_H
+

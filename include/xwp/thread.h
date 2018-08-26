@@ -8,12 +8,13 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the LICENSE file for more details.
  */
 
-#ifndef XWP_LOCK_H
-#define XWP_LOCK_H
+#ifndef XWP_THREAD_H
+#define XWP_THREAD_H
 
 #include <thread>
 #include <mutex>
 #include <atomic>
+#include <functional>
 
 #include "xwp/basetypes.h"
 
@@ -135,4 +136,4 @@ private:
 
 } // namespace XWP
 
-#endif // XWP_LOCK_H
+#endif // XWP_THREAD_H

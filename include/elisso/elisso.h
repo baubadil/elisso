@@ -50,8 +50,8 @@ const DebugFlag PROGRESSDIALOG          = (1 << 28);
 const DebugFlag TREEMODEL               = (1 << 29);
 const DebugFlag MOUNTS                  = (1 << 30);
 
-#define ICON_SIZE_SMALL     16
-#define ICON_SIZE_BIG       128
+#define ICON_SIZE_SMALL      16
+#define ICON_SIZE_BIG       256
 
 using namespace XWP;
 
@@ -75,7 +75,8 @@ DEF_STRING(ICON_FILE_LOADING, "image-loading");
 
 DEF_STRING(MENUITEM_OPEN, "Open");
 DEF_STRING(MENUITEM_OPEN_IN_TAB, "Open in new tab");
-DEF_STRING(MENUITEM_OPEN_IN_TERMINAL, "Open in terminal");
+DEF_STRING(MENUITEM_OPEN_IN_TERMINAL2, "Open in terminal");
+DEF_STRING(MENUITEM_OPEN_IN_NEMO, "Open in nemo");
 DEF_STRING(MENUITEM_TRASH, "Move to trash");
 
 DEF_STRING(TYPE_FILE, "File");
@@ -90,7 +91,8 @@ DEF_STRING(TYPE_MOUNTABLE, "Mountable");
 
 DEF_STRING(ACTION_FILE_NEW_TAB, "file-new-tab");
 DEF_STRING(ACTION_FILE_NEW_WINDOW, "file-new-window");
-DEF_STRING(ACTION_FILE_OPEN_IN_TERMINAL, "file-open-in-terminal");
+DEF_STRING(ACTION_FILE_OPEN_IN_TERMINAL2, "file-open-in-terminal");
+DEF_STRING(ACTION_FILE_OPEN_IN_NEMO, "file-open-in-nemo");
 DEF_STRING(ACTION_FILE_CREATE_FOLDER, "file-create-folder");
 DEF_STRING(ACTION_FILE_CREATE_DOCUMENT, "file-create-document");
 DEF_STRING(ACTION_FILE_PROPERTIES, "file-properties");
@@ -100,7 +102,8 @@ DEF_STRING(ACTION_FILE_CLOSE_TAB, "file-close-tab");
 // Items that operate on the selected rows in the contents.
 DEF_STRING(ACTION_EDIT_OPEN_SELECTED, "edit-open-selected");
 DEF_STRING(ACTION_EDIT_OPEN_SELECTED_IN_TAB, "edit-open-selected-in-tab");
-DEF_STRING(ACTION_EDIT_OPEN_SELECTED_IN_TERMINAL, "edit-open-selected-in-terminal");
+DEF_STRING(ACTION_EDIT_OPEN_SELECTED_IN_TERMINAL2, "edit-open-selected-in-terminal");
+DEF_STRING(ACTION_EDIT_OPEN_SELECTED_IN_NEMO, "edit-open-selected-in-nemo");
 DEF_STRING(ACTION_EDIT_COPY, "edit-copy");
 DEF_STRING(ACTION_EDIT_CUT, "edit-cut");
 DEF_STRING(ACTION_EDIT_PASTE, "edit-paste");
@@ -117,7 +120,8 @@ DEF_STRING(ACTION_EDIT_PROPERTIES, "edit-properties");
 // Items that operate on the selected rows in the tree. Tree popup menu only.
 DEF_STRING(ACTION_TREE_OPEN_SELECTED, "tree-open-selected");
 DEF_STRING(ACTION_TREE_OPEN_SELECTED_IN_TAB, "tree-open-selected-in-tab");
-DEF_STRING(ACTION_TREE_OPEN_SELECTED_IN_TERMINAL, "tree-open-selected-in-terminal");
+DEF_STRING(ACTION_TREE_OPEN_SELECTED_IN_TERMINAL2, "tree-open-selected-in-terminal");
+DEF_STRING(ACTION_TREE_OPEN_SELECTED_IN_NEMO, "tree-open-selected-in-nemo");
 DEF_STRING(ACTION_TREE_TRASH_SELECTED, "tree-trash-selected");
 
 DEF_STRING(ACTION_VIEW_NEXT_TAB, "view-next-tab");

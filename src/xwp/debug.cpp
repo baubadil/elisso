@@ -117,9 +117,9 @@ void Debug::Log(DebugFlag fl,
             cout << "\n";
         else
         {
-            cout.flush();
             g_fNeedsNewline2 = true;     // for next message
         }
+            cout.flush();
     }
 }
 

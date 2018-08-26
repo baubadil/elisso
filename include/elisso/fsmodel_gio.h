@@ -83,6 +83,8 @@ public:
 
     PFsGioFile getFile(PFsObject pFS, FSTypeResolved t);
 
+    Glib::RefPtr<Gio::FileInfo> getFileInfo(PGioFile pGioFile);
+
     static void Init();
 };
 
@@ -116,10 +118,11 @@ protected:
      *  does not add the new object to a container; you must call setParent()
      *  on the result.
      */
-    static PFsGioFile Create(const string &strBasename, uint64_t cbSize);
+    static PFsGioFile Create(const string &strBasename, const FsCoreInfo &info);
 
-    FsGioFile(const string &strBasename, uint64_t cbSize)
-        : FSFile(strBasename, cbSize)
+    FsGioFile(const string &strBasename,
+              const FsCoreInfo &info)
+        : FSFile(strBasename, info)
     { }
 
     virtual ~FsGioFile();
@@ -191,10 +194,11 @@ protected:
      *  does not add the new object to a container; you must call setParent()
      *  on the result.
      */
-    static PFsGioDirectory Create(const string &strBasename);
+    static PFsGioDirectory Create(const string &strBasename, const FsCoreInfo &info);
 
-    FsGioDirectory(const string &strBasename)
-        : FsDirectory(strBasename)
+    FsGioDirectory(const string &strBasename,
+                   const FsCoreInfo &info)
+        : FsDirectory(FSType::DIRECTORY, strBasename, info)
     { }
 };
 
@@ -236,7 +240,7 @@ public:
     static PRootDirectory Get(const std::string &strScheme);
 
 private:
-    RootDirectory(const std::string &strScheme);
+    RootDirectory(const std::string &strScheme, const FsCoreInfo &info);
 
     std::string     _strScheme;
 };
@@ -268,7 +272,7 @@ protected:
     static PFsGioSpecial Create(const string &strBasename);
 
     FsGioSpecial(const string &strBasename)
-        : FsObject(FSType::SPECIAL, strBasename, 0)
+        : FsObject(FSType::SPECIAL, strBasename, { 0, "", ""})
     { }
 
 
@@ -308,10 +312,13 @@ protected:
      *  does not add the new object to a container; you must call setParent()
      *  on the result.
      */
-    static PFsGioMountable Create(const string &strBasename);
+    static PFsGioMountable Create(const string &strName,
+                                  PFsGioDirectory pRootDir);
 
-    FsGioMountable(const string &strBasename)
-        : FsObject(FSType::MOUNTABLE, strBasename, 0)
+    FsGioMountable(const string &strName,
+                   PFsGioDirectory pRootDir)
+        : FsObject(FSType::MOUNTABLE, strName, { 0, "", ""}),
+          _pRootDir(pRootDir)
     { }
 
 
@@ -327,14 +334,21 @@ public:
         return FSTypeResolved::MOUNTABLE;
     }
 
+    PFsGioDirectory getRootDirectory()
+    {
+        return _pRootDir;
+    }
+
     /**************************************
      *
      *  Public static methods
      *
      *************************************/
 
-public:
     static void GetMountables(FsGioMountablesVector &llMountables);
+
+private:
+    PFsGioDirectory _pRootDir;
 };
 
 

@@ -76,6 +76,10 @@ class FileOperation : public WorkerResultQueue<PFsObject>,
 public:
     static const uint UPDATE_PROGRESS_MILLIS = 100;
 
+    /**
+     *  Factory method which creates a shared_ptr<FileOperation> and starts the thread
+     *  that operates on it.
+     */
     static PFileOperation Create(FileOperationType t,
                                  const FSVector &vFiles,
                                  PFsObject pTarget,
@@ -93,6 +97,10 @@ public:
         return _id;
     }
 
+    /**
+     *  Cancels the ongoing file operation by setting the worker thread's stop flag.
+     *  This is for the implementation of a "Cancel" button in a progress dialog.
+     */
     void cancel();
 
     const std::string& getError() const
@@ -101,10 +109,36 @@ public:
     }
 
 protected:
+    /**
+     *  Protected constructor, only to be used by Create().
+     */
     FileOperation(FileOperationType t,
                   FileOperationsList  &refQueue);
     ~FileOperation();
 
+    /**
+     *  Thread function. The std::thread gets spawned in Create() and simply calls this method.
+     *  This operated on the files in _llFiles (given to Create()) depending on the operation
+     *  type.
+     *
+     *  The semantics of the variables are:
+     *
+     *   -- FileOperationType::TEST: does nothing really. FsObject::testFileOps() only waits a little
+     *      while for testing the progress dialog.
+     *
+     *   -- FileOperationType::TRASH: sends all files on the list to the desktop's trash can. This removes
+     *      the files from all views they were inserted into; a target folder is not needed.
+     *
+     *   -- FileOperationType::MOVE: moves all files to the target folder given to the constructor.
+     *      This removes the files from all views where they were inserted and inserts them
+     *      into views of the target folder, if they are currently being monitored.
+     *
+     *   -- FileOperationType::COPY: copies all files to the target folder given to the constructor.
+     *      This inserts the copies into views of the target folder.
+     *
+     *  This passes the source file pointer to postResultToGUI() except in the case of COPY,
+     *  when this passes the copy.
+     */
     void threadFunc();
 
     void onProgress();

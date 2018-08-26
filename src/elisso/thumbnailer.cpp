@@ -337,31 +337,39 @@ Thumbnailer::pixbufLoaderThread(uint threadno)
         using namespace std::chrono;
         steady_clock::time_point t1 = steady_clock::now();
 
-        PPixbuf ppb;
-        try
+        string strFormatName = pTemp->pThumb->pFormat2->get_name();
+        auto pLoader = Gdk::PixbufLoader::create(strFormatName);
+        if (pLoader)
         {
-            auto pLoader = Gdk::PixbufLoader::create(pTemp->pThumb->pFormat2->get_name());
-            if (pLoader)
+            PPixbuf ppb;
+            string strStatus("unknown");
+            try
             {
-                pLoader->write((const guint8*)pTemp->pFileContents->_pData, pTemp->pFileContents->_size);       // can throw
-                ppb = pLoader->get_pixbuf();
+                strStatus = "writing";
+                pLoader->write((const guint8*)pTemp->pFileContents->_pData,
+                               pTemp->pFileContents->_size);       // can throw
+                strStatus = "closing";
                 pLoader->close();
+
+                strStatus = "getting pixbuf";
+                ppb = pLoader->get_pixbuf();
             }
-        }
-        catch (...)
-        {
-            // No error handling. If we can't read the file, no thumbnail. Period.
-        }
+            catch (std::exception &e)
+            {
+            }
 
-        if (ppb)
-        {
-            milliseconds time_span = duration_cast<milliseconds>(steady_clock::now() - t1);
-            Debug::Log(THUMBNAILER, string(__func__) + to_string(threadno) + ": loading \"" + pTemp->pThumb->pFile->getBasename() + "\" took " + to_string(time_span.count()) + "ms");
+            if (ppb)
+            {
+                milliseconds time_span = duration_cast<milliseconds>(steady_clock::now() - t1);
+                Debug::Log(THUMBNAILER, string(__func__) + to_string(threadno) + ": loading \"" + pTemp->pThumb->pFile->getBasename() + "\" took " + to_string(time_span.count()) + "ms");
 
-            pTemp->setLoaded(ppb);
+                pTemp->setLoaded(ppb);
 
-            _pImpl->qScalerIconSmall.post(pTemp);
-            _pImpl->qScalerIconBig.post(pTemp);
+                _pImpl->qScalerIconSmall.post(pTemp);
+                _pImpl->qScalerIconBig.post(pTemp);
+            }
+            else
+                Debug::Log(CMD_TOP, "pixbufLoaderThread(): failed to load " + quote(pTemp->pThumb->pFile->getBasename()) + " (format " + strFormatName + ", status " + strStatus + ")");
         }
     }
 }

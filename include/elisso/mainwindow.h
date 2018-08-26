@@ -183,7 +183,13 @@ public:
     void openFile(PFsObject pFS,
                   PAppInfo pAppInfo);
 
-    void openFolderInTerminal(PFsObject pFS);
+    enum class OpenFolder
+    {
+        TERMINAL,
+        NEMO
+    };
+
+    void openFolderExternally(PFsObject pFS, OpenFolder o);
 
     void addFileOperation(FileOperationType type,
                           const FSVector &vFiles,

@@ -50,6 +50,7 @@ public:
         add(_colIconSmall);
         add(_colIconBig);
         add(_colTypeString);
+        add(_colOwnerString);
     }
 
     Gtk::TreeModelColumn<Glib::ustring>     _colFilename;
@@ -59,6 +60,7 @@ public:
     Gtk::TreeModelColumn<PPixbuf>           _colIconSmall;
     Gtk::TreeModelColumn<PPixbuf>           _colIconBig;
     Gtk::TreeModelColumn<Glib::ustring>     _colTypeString;
+    Gtk::TreeModelColumn<Glib::ustring>     _colOwnerString;
 
     static FolderContentsModelColumns& Get()
     {
@@ -679,6 +681,8 @@ ElissoFolderView::insertFile(PFsObject pFS)
         }
 
         row[cols._colTypeString] = *pstrType;
+
+        row[cols._colOwnerString] = pFS->makeOwnerString();
 
         // Store this in the map by 1) creating a path from iterator and 2) then a row reference from the path.
         Gtk::TreePath path(it);
@@ -1451,6 +1455,7 @@ ElissoFolderView::handleAction(FolderAction action)
 void
 ElissoFolderView::handleClipboardCopyOrCut(bool fCut)
 {
+    Debug d(CMD_TOP, __func__);
     FileSelection sel;
     if (getSelection(sel))
     {
@@ -1749,20 +1754,6 @@ ElissoFolderView::connectModel(bool fConnect)
     }
 }
 
-/**
- *  Part of the lazy-loading implementation.
- *
- *  If the given file should have a stock icon, then it is returned immediately
- *  and we're done.
- *
- *  If the given file has already been thumbnailed for the given size in this
- *  session, then its pixbuf is returned.
- *
- *  If the given file can be thumbnailed but has not yet been, then a stock icon
- *  is returned and it is handed over to the thumbnailer worker threads which
- *  will create a thumbnail in the background and call a dispatcher when the
- *  thumbnail is done.
- */
 PPixbuf
 ElissoFolderView::loadIcon(PFsObject pFS,
                            FSTypeResolved tr,
@@ -1998,10 +1989,10 @@ ElissoFolderView::setListViewColumns()
     int i;
     Gtk::TreeView::Column* pColumn;
 
-    int aSizes[4] = { 40, 40, 40, 40 };
+    int aSizes[5] = { 40, 40, 40, 40, 40 };
     auto s = _mainWindow.getApplication().getSettingsString(SETTINGS_LIST_COLUMN_WIDTHS);
     StringVector sv = explodeVector(s, ",");
-    if (sv.size() == 4)
+    if (sv.size() == 5)
     {
         int i = 0;
         for (auto &s : sv)
@@ -2078,6 +2069,15 @@ ElissoFolderView::setListViewColumns()
         pColumn->set_sort_column(cols._colTypeString);
     }
 
+    i = _pImpl->treeView.append_column("Owner", cols._colOwnerString);
+    if ((pColumn = _pImpl->treeView.get_column(i - 1)))
+    {
+        pColumn->set_sizing(Gtk::TREE_VIEW_COLUMN_FIXED);
+        pColumn->set_fixed_width(aSizes[i - 1]);
+        pColumn->set_resizable(true);
+        pColumn->set_sort_column(cols._colTypeString);
+    }
+
     _pImpl->treeView.set_fixed_height_mode(true);
 }
 
@@ -2124,7 +2124,7 @@ ElissoFolderView::onSelectionChanged()
     }
 }
 
-void ElissoFolderView::onPreviewReady(PFsGioFile pFile)
+void ElissoFolderView::onPreviewReady(PFsGioFile /* pFile */)
 {
     switch (_pImpl->mode)
     {

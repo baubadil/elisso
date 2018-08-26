@@ -373,8 +373,10 @@ ElissoFolderTreeMgr::handleAction(const string &strAction)
             onNodeSelected();       // duplicates work but less code
         else if (strAction == ACTION_TREE_OPEN_SELECTED_IN_TAB)
             _mainWindow.addFolderTab(pDir);
-        else if (strAction == ACTION_TREE_OPEN_SELECTED_IN_TERMINAL)
-            _mainWindow.openFolderInTerminal(pDir);
+        else if (strAction == ACTION_TREE_OPEN_SELECTED_IN_TERMINAL2)
+            _mainWindow.openFolderExternally(pDir, ElissoApplicationWindow::OpenFolder::TERMINAL);
+        else if (strAction == ACTION_TREE_OPEN_SELECTED_IN_NEMO)
+            _mainWindow.openFolderExternally(pDir, ElissoApplicationWindow::OpenFolder::NEMO);
         else if (strAction == ACTION_TREE_TRASH_SELECTED)
             _mainWindow.addFileOperation(FileOperationType::TRASH,
                                          { pDir },
@@ -420,7 +422,11 @@ void ElissoFolderTreeMgr::onGetMountablesDone()
 
     if (pllMountables)
         for (auto pMountable : *pllMountables)
-            Debug::Log(MOUNTS, "Got mountable " + pMountable->getBasename());
+        {
+            Debug::Log(MOUNTS, "Got mountable " + pMountable->getBasename() + " from thread, inserting");
+
+            this->addTreeRoot(pMountable->getBasename(), pMountable->getRootDirectory());
+        }
 }
 
 PFsObject

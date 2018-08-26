@@ -387,6 +387,20 @@ private:
 
     void setNotebookTabTitle();
 
+    /**
+     *  Part of the lazy-loading implementation.
+     *
+     *  If the given file should have a stock icon, then it is returned immediately
+     *  and we're done.
+     *
+     *  If the given file has already been thumbnailed for the given size in this
+     *  session, then its pixbuf is returned.
+     *
+     *  If the given file can be thumbnailed but has not yet been, then a stock icon
+     *  is returned and it is handed over to the thumbnailer worker threads which
+     *  will create a thumbnail in the background and call a dispatcher when the
+     *  thumbnail is done.
+     */
     PPixbuf loadIcon(PFsObject pFS,
                      FSTypeResolved tr,
                      int size,

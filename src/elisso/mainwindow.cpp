@@ -86,6 +86,7 @@ struct ElissoApplicationWindow::Impl
     PSimpleAction                   pActionEditOpenSelected;
     PSimpleAction                   pActionEditOpenSelectedInTab;
     PSimpleAction                   pActionEditOpenSelectedInTerminal;
+    PSimpleAction                   pActionEditOpenSelectedInNemo;
     PSimpleAction                   pActionEditCopy;
     PSimpleAction                   pActionEditCut;
     PSimpleAction                   pActionEditPaste;
@@ -689,7 +690,8 @@ ElissoApplicationWindow::onMouseButton3Pressed(GdkEventButton *pEvent,
         {
             _app.addMenuItem(pMenu, MENUITEM_OPEN, ACTION_TREE_OPEN_SELECTED);
             _app.addMenuItem(pMenu, MENUITEM_OPEN_IN_TAB, ACTION_TREE_OPEN_SELECTED_IN_TAB);
-            _app.addMenuItem(pMenu, MENUITEM_OPEN_IN_TERMINAL, ACTION_TREE_OPEN_SELECTED_IN_TERMINAL);
+            _app.addMenuItem(pMenu, MENUITEM_OPEN_IN_TERMINAL2, ACTION_TREE_OPEN_SELECTED_IN_TERMINAL2);
+            _app.addMenuItem(pMenu, MENUITEM_OPEN_IN_NEMO, ACTION_TREE_OPEN_SELECTED_IN_NEMO);
             auto pSubSection = _app.addMenuSection(pMenu);
             _app.addMenuItem(pSubSection, MENUITEM_TRASH, ACTION_TREE_TRASH_SELECTED);
         }
@@ -707,7 +709,8 @@ ElissoApplicationWindow::onMouseButton3Pressed(GdkEventButton *pEvent,
                 {
                     _app.addMenuItem(pMenu, MENUITEM_OPEN, ACTION_EDIT_OPEN_SELECTED);
                     _app.addMenuItem(pMenu, MENUITEM_OPEN_IN_TAB, ACTION_EDIT_OPEN_SELECTED_IN_TAB);
-                    _app.addMenuItem(pMenu, MENUITEM_OPEN_IN_TERMINAL, ACTION_EDIT_OPEN_SELECTED_IN_TERMINAL);
+                    _app.addMenuItem(pMenu, MENUITEM_OPEN_IN_TERMINAL2, ACTION_EDIT_OPEN_SELECTED_IN_TERMINAL2);
+                    _app.addMenuItem(pMenu, MENUITEM_OPEN_IN_NEMO, ACTION_EDIT_OPEN_SELECTED_IN_NEMO);
                 }
                 else
                 {
@@ -763,7 +766,8 @@ ElissoApplicationWindow::onMouseButton3Pressed(GdkEventButton *pEvent,
         break;
 
         case MouseButton3ClickType::WHITESPACE:
-            _app.addMenuItem(pMenu, "Open in terminal", ACTION_FILE_OPEN_IN_TERMINAL);
+            _app.addMenuItem(pMenu, MENUITEM_OPEN_IN_TERMINAL2, ACTION_FILE_OPEN_IN_TERMINAL2);
+            _app.addMenuItem(pMenu, MENUITEM_OPEN_IN_NEMO, ACTION_FILE_OPEN_IN_NEMO);
             auto pSubSection = _app.addMenuSection(pMenu);
             _app.addMenuItem(pSubSection, "Create new folder", ACTION_FILE_CREATE_FOLDER);
             _app.addMenuItem(pSubSection, "Create empty document", ACTION_FILE_CREATE_DOCUMENT);
@@ -898,14 +902,27 @@ ElissoApplicationWindow::openFile(PFsObject pFS,        //!< in: file or folder 
 }
 
 void
-ElissoApplicationWindow::openFolderInTerminal(PFsObject pFS)
+ElissoApplicationWindow::openFolderExternally(PFsObject pFS,
+                                              OpenFolder o)
 {
     auto strPath = pFS->getPath();
     if (startsWith(strPath, "file:///"))
         strPath = strPath.substr(7);
-    g_subprocess_new(G_SUBPROCESS_FLAGS_NONE,
-                     NULL,
-                     "open", "--screen", "auto", strPath.c_str(), nullptr);
+
+    switch (o)
+    {
+        case OpenFolder::TERMINAL:
+            g_subprocess_new(G_SUBPROCESS_FLAGS_NONE,
+                             NULL,
+                             "open", "--screen", "auto", strPath.c_str(), nullptr);
+        break;
+
+        case OpenFolder::NEMO:
+            g_subprocess_new(G_SUBPROCESS_FLAGS_NONE,
+                             NULL,
+                             "nemo", strPath.c_str(), nullptr);
+        break;
+    }
 }
 
 void
@@ -943,7 +960,8 @@ ElissoApplicationWindow::initActionHandlers()
 
     this->addActiveViewActionHandler(ACTION_FILE_NEW_TAB);
     this->addActiveViewActionHandler(ACTION_FILE_NEW_WINDOW);
-    this->addActiveViewActionHandler(ACTION_FILE_OPEN_IN_TERMINAL);
+    this->addActiveViewActionHandler(ACTION_FILE_OPEN_IN_TERMINAL2);
+    this->addActiveViewActionHandler(ACTION_FILE_OPEN_IN_NEMO);
     this->addActiveViewActionHandler(ACTION_FILE_CREATE_FOLDER);
     this->addActiveViewActionHandler(ACTION_FILE_CREATE_DOCUMENT);
 
@@ -961,7 +979,8 @@ ElissoApplicationWindow::initActionHandlers()
 
     _pImpl->pActionEditOpenSelected = this->addActiveViewActionHandler(ACTION_EDIT_OPEN_SELECTED);
     _pImpl->pActionEditOpenSelectedInTab = this->addActiveViewActionHandler(ACTION_EDIT_OPEN_SELECTED_IN_TAB);
-    _pImpl->pActionEditOpenSelectedInTerminal = this->addActiveViewActionHandler(ACTION_EDIT_OPEN_SELECTED_IN_TERMINAL);
+    _pImpl->pActionEditOpenSelectedInTerminal = this->addActiveViewActionHandler(ACTION_EDIT_OPEN_SELECTED_IN_TERMINAL2);
+    _pImpl->pActionEditOpenSelectedInNemo = this->addActiveViewActionHandler(ACTION_EDIT_OPEN_SELECTED_IN_NEMO);
     _pImpl->pActionEditCopy = this->addActiveViewActionHandler(ACTION_EDIT_COPY);
     _pImpl->pActionEditCut = this->addActiveViewActionHandler(ACTION_EDIT_CUT);
     _pImpl->pActionEditPaste = this->addActiveViewActionHandler(ACTION_EDIT_PASTE);
@@ -984,7 +1003,8 @@ ElissoApplicationWindow::initActionHandlers()
      */
     this->addTreeActionHandler(ACTION_TREE_OPEN_SELECTED);
     this->addTreeActionHandler(ACTION_TREE_OPEN_SELECTED_IN_TAB);
-    this->addTreeActionHandler(ACTION_TREE_OPEN_SELECTED_IN_TERMINAL);
+    this->addTreeActionHandler(ACTION_TREE_OPEN_SELECTED_IN_TERMINAL2);
+    this->addTreeActionHandler(ACTION_TREE_OPEN_SELECTED_IN_NEMO);
     this->addTreeActionHandler(ACTION_TREE_TRASH_SELECTED);
 
 
@@ -1148,6 +1168,9 @@ ElissoApplicationWindow::handleActiveViewAction(const std::string &strAction)
     auto pView = this->getActiveFolderView();
     if (pView)
     {
+        bool fInTab = false;
+        bool fInTerminal = false;
+
         if (strAction == ACTION_FILE_NEW_TAB)
         {
             PFsObject pDir;
@@ -1160,21 +1183,27 @@ ElissoApplicationWindow::handleActiveViewAction(const std::string &strAction)
             p->addFolderTab(pView->getDirectory());
             p->present();
         }
-        else if (strAction == ACTION_FILE_OPEN_IN_TERMINAL)
-            this->openFolderInTerminal(pView->getDirectory());
+        else if (strAction == ACTION_FILE_OPEN_IN_TERMINAL2)
+            this->openFolderExternally(pView->getDirectory(), OpenFolder::TERMINAL);
+        else if (strAction == ACTION_FILE_OPEN_IN_NEMO)
+            this->openFolderExternally(pView->getDirectory(), OpenFolder::NEMO);
         else if (strAction == ACTION_FILE_CLOSE_TAB)
             this->closeFolderTab(*pView);
-        else if (strAction == ACTION_EDIT_OPEN_SELECTED_IN_TAB)
+        else if (    (fInTab = (strAction == ACTION_EDIT_OPEN_SELECTED_IN_TAB))
+                  || (fInTerminal = (strAction == ACTION_EDIT_OPEN_SELECTED_IN_TERMINAL2))
+                  || (strAction == ACTION_EDIT_OPEN_SELECTED_IN_NEMO)
+                )
         {
             auto pFS = pView->getSelectedFolder();
             if (pFS)
-                this->addFolderTab(pFS);
-        }
-        else if (strAction == ACTION_EDIT_OPEN_SELECTED_IN_TERMINAL)
-        {
-            auto pFS = pView->getSelectedFolder();
-            if (pFS)
-                this->openFolderInTerminal(pFS);
+            {
+                if (fInTab)
+                    this->addFolderTab(pFS);
+                else if (fInTerminal)
+                    this->openFolderExternally(pFS, OpenFolder::TERMINAL);
+                else
+                    this->openFolderExternally(pFS, OpenFolder::NEMO);
+            }
         }
         else
         {

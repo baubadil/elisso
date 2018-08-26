@@ -292,6 +292,21 @@ enum class FSFlag : uint16_t
 
 typedef FlagSet<FSFlag> FSFlagSet;
 
+struct FsCoreInfo
+{
+    uint64_t _cbSize;
+    string _strOwnerUser;
+    string _strOwnerGroup;
+
+    FsCoreInfo(uint64_t cbSize,
+               const string &strOwnerUser,
+               const string &strOwnerGroup)
+        : _cbSize(cbSize),
+          _strOwnerUser(strOwnerUser),
+          _strOwnerGroup(strOwnerGroup)
+    { }
+};
+
 /**
  *  Base class for all file-system objects (files, directories, symlinks, specials).
  *
@@ -335,7 +350,7 @@ protected:
      */
     FsObject(FSType type,
              const string &strBasename,
-             uint64_t cbSize);
+             const FsCoreInfo &info);
     virtual ~FsObject() { };
 
 
@@ -404,6 +419,11 @@ public:
      *  Overridden for symlinks!
      */
     bool isHidden();
+
+    /**
+     *  Returns a user:owner string for this filesystem object.
+     */
+    string makeOwnerString();
 
     /**
      *  Expands the path without resorting to realpath(), which would hit the disk. This
@@ -556,8 +576,10 @@ protected:
     uint64_t                    _uID = 0;
     FSType                      _type = FSType::UNINITIALIZED;
     FSFlagSet                   _fl;
-    std::string                 _strBasename;
+    string                      _strBasename;
     uint64_t                    _cbSize;
+    string                      _strOwnerUser;
+    string                      _strOwnerGroup;
     PFsObject                   _pParent;
 };
 
@@ -589,10 +611,10 @@ class FSFile : public FsObject
 
 protected:
     FSFile(const string &strBasename,
-           uint64_t cbSize)
+           const FsCoreInfo &info)
         : FsObject(FSType::FILE,
                    strBasename,
-                   cbSize)
+                   info)
     { }
 
     virtual ~FSFile()
@@ -872,8 +894,10 @@ class FsDirectory : public FsObject, public FsContainer
      *************************************/
 
 protected:
-    FsDirectory(const string &strBasename)
-        : FsObject(FSType::DIRECTORY, strBasename, 0),
+    FsDirectory(FSType type,
+                const string &strBasename,
+                const FsCoreInfo &info)
+        : FsObject(type, strBasename, info),
           FsContainer((FsObject&)*this)
     { }
 
@@ -947,7 +971,7 @@ protected:
     static PFsSymlink Create(const string &strBasename);
 
     FsSymlink(const string &strBasename)
-        : FsObject(FSType::SYMLINK, strBasename, 0),
+        : FsObject(FSType::SYMLINK, strBasename, { 0, "", "" }),
           FsContainer((FsObject&)*this),
           _state(State::NOT_FOLLOWED_YET)
     { }

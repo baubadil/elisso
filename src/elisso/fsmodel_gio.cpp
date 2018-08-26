@@ -164,21 +164,27 @@ FsGioImpl::makeAwake(const string &strParentPath,
 
     try
     {
-        static string s_attrs = string(G_FILE_ATTRIBUTE_STANDARD_TYPE) + string(",") + string(G_FILE_ATTRIBUTE_STANDARD_SIZE);
-        // The following can throw Gio::Error.
-        auto pInfo = pGioFile->query_info(s_attrs,
-                                          Gio::FileQueryInfoFlags::FILE_QUERY_INFO_NOFOLLOW_SYMLINKS);
-//         auto type = pGioFile->query_file_type(Gio::FileQueryInfoFlags::FILE_QUERY_INFO_NOFOLLOW_SYMLINKS);
+        auto pInfo = this->getFileInfo(pGioFile);
 
         switch (pInfo->get_file_type())
         {
             case Gio::FileType::FILE_TYPE_REGULAR:         // File handle represents a regular file.
-                pReturn = FsGioFile::Create(strBasename, pInfo->get_size());
+            {
+                FsCoreInfo info(pInfo->get_size(),
+                                pInfo->get_attribute_string(G_FILE_ATTRIBUTE_OWNER_USER),
+                                pInfo->get_attribute_string(G_FILE_ATTRIBUTE_OWNER_GROUP));
+                pReturn = FsGioFile::Create(strBasename, info);
+            }
             break;
 
             case Gio::FileType::FILE_TYPE_DIRECTORY:       // File handle represents a directory.
+            {
+                FsCoreInfo info(0,
+                                pInfo->get_attribute_string(G_FILE_ATTRIBUTE_OWNER_USER),
+                                pInfo->get_attribute_string(G_FILE_ATTRIBUTE_OWNER_GROUP));
                 Debug::Log(FILE_LOW, "  creating FsGioDirectory for " + quote(strBasename));
-                pReturn = FsGioDirectory::Create(strBasename);
+                pReturn = FsGioDirectory::Create(strBasename, info);
+            }
             break;
 
             case Gio::FileType::FILE_TYPE_SYMBOLIC_LINK:   // File handle represents a symbolic link (Unix systems).
@@ -192,7 +198,7 @@ FsGioImpl::makeAwake(const string &strParentPath,
 
             case Gio::FileType::FILE_TYPE_MOUNTABLE:       // File is a mountable location.
                 Debug::Log(MOUNTS, "  creating FsGioMountable");
-                pReturn = FsGioMountable::Create(strBasename);
+//                 pReturn = FsGioMountable::Create(strBasename);
             break;
 
             case Gio::FileType::FILE_TYPE_NOT_KNOWN:       // File's type is unknown. This is what we get if the file does not exist.
@@ -386,7 +392,11 @@ FsGioImpl::createSubdirectory(const string &strParentPath,
         // But the following can throw.
         pGioFileNew->make_directory();
         // If we got here, we have a directory.
-        pReturn = FsGioDirectory::Create(strBasename);
+        auto pGioInfo = this->getFileInfo(pGioFileNew);
+        FsCoreInfo info(0,
+                        pGioInfo->get_attribute_string(G_FILE_ATTRIBUTE_OWNER_USER),
+                        pGioInfo->get_attribute_string(G_FILE_ATTRIBUTE_OWNER_GROUP));
+        pReturn = FsGioDirectory::Create(strBasename, info);
     }
     catch (Gio::Error &e)
     {
@@ -416,7 +426,11 @@ FsGioImpl::createEmptyDocument(const string &strParentPath,
         pStream->close();
 
         // If we got here, we have a directory.
-        pReturn = FsGioFile::Create(strBasename, 0);
+        auto pGioInfo = this->getFileInfo(pGioFileNew);
+        FsCoreInfo info(0,
+                        pGioInfo->get_attribute_string(G_FILE_ATTRIBUTE_OWNER_USER),
+                        pGioInfo->get_attribute_string(G_FILE_ATTRIBUTE_OWNER_GROUP));
+        pReturn = FsGioFile::Create(strBasename, info);
     }
     catch (Gio::Error &e)
     {
@@ -450,6 +464,20 @@ FsGioImpl::getFile(PFsObject pFS, FSTypeResolved t)
     }
 
     return nullptr;
+}
+
+Glib::RefPtr<Gio::FileInfo>
+FsGioImpl::getFileInfo(PGioFile pGioFile)
+{
+    static string s_comma = string(",");
+    static string s_attrs = string(G_FILE_ATTRIBUTE_STANDARD_TYPE)
+                          + s_comma + string(G_FILE_ATTRIBUTE_STANDARD_SIZE)
+                          + s_comma + string(G_FILE_ATTRIBUTE_OWNER_USER)
+                          + s_comma + string(G_FILE_ATTRIBUTE_OWNER_GROUP);
+    // The following can throw Gio::Error.
+    auto pInfo = pGioFile->query_info(s_attrs,
+                                      Gio::FileQueryInfoFlags::FILE_QUERY_INFO_NOFOLLOW_SYMLINKS);
+    return pInfo;
 }
 
 /* static */
@@ -503,16 +531,16 @@ struct FsGioFile::ThumbData
 
 /* static */
 PFsGioFile
-FsGioFile::Create(const string &strBasename, uint64_t cbSize)
+FsGioFile::Create(const string &strBasename, const FsCoreInfo &info)
 {
     /* This nasty trickery is necessary to make make_shared work with a protected constructor. */
     class Derived : public FsGioFile
     {
     public:
-        Derived(const string &strBasename, uint64_t cbSize) : FsGioFile(strBasename, cbSize) { }
+        Derived(const string &strBasename, const FsCoreInfo &info) : FsGioFile(strBasename, info) { }
     };
 
-    return make_shared<Derived>(strBasename, cbSize);
+    return make_shared<Derived>(strBasename, info);
 }
 
 /* virtual */
@@ -580,16 +608,16 @@ FsGioFile::GetThumbnailCacheSize()
 
 /* static */
 PFsGioDirectory
-FsGioDirectory::Create(const string &strBasename)
+FsGioDirectory::Create(const string &strBasename, const FsCoreInfo &info)
 {
     /* This nasty trickery is necessary to make make_shared work with a protected constructor. */
     class Derived : public FsGioDirectory
     {
     public:
-        Derived(const string &strBasename) : FsGioDirectory(strBasename) { }
+        Derived(const string &strBasename, const FsCoreInfo &info) : FsGioDirectory(strBasename, info) { }
     };
 
-    return make_shared<Derived>(strBasename);
+    return make_shared<Derived>(strBasename, info);
 }
 
 
@@ -599,8 +627,10 @@ FsGioDirectory::Create(const string &strBasename)
  *
  **************************************************************************/
 
-RootDirectory::RootDirectory(const string &strScheme)
-    : FsDirectory(strScheme + "://"),
+RootDirectory::RootDirectory(const string &strScheme, const FsCoreInfo &info)
+    : FsDirectory(FSType::DIRECTORY,
+                  strScheme + "://",
+                  info),
       _strScheme(strScheme)
 {
     _fl = FSFlag::IS_ROOT_DIRECTORY;
@@ -634,10 +664,11 @@ RootDirectory::Get(const string &strScheme)        //<! in: URI scheme (e.g. "fi
         class Derived : public RootDirectory
         {
         public:
-            Derived(const string &strScheme) : RootDirectory(strScheme) { }
+            Derived(const string &strScheme, const FsCoreInfo &info) : RootDirectory(strScheme, info) { }
         };
 
-        pReturn = make_shared<Derived>(strScheme);
+        FsCoreInfo info(0, "", "");
+        pReturn = make_shared<Derived>(strScheme, info);
         s_mapRootDirectories[strScheme] = pReturn;
 
         // This will get propagated to all children.
@@ -739,11 +770,14 @@ FsGioMountable::GetMountables(FsGioMountablesVector &llMountables)
                 if (pGioFile)
                 {
                     strMountedAt = pGioFile->get_path();
-
-                    llMountables.push_back(Create(strMountedAt));
+                    auto pDir = FsObject::FindDirectory(strMountedAt);
+                    if (pDir)
+                    {
+                        llMountables.push_back(Create(pMount->get_name(),
+                                                      static_pointer_cast<FsGioDirectory>(pDir)));
+                        Debug::Log(MOUNTS, "  Mount: " + quote(pMount->get_name()) + " mounted at: " + quote(strMountedAt));
+                    }
                 }
-
-                Debug::Log(MOUNTS, "  Mount: " + quote(pMount->get_name()) + " mounted at: " + quote(strMountedAt));
             }
         }
     }
@@ -751,17 +785,19 @@ FsGioMountable::GetMountables(FsGioMountablesVector &llMountables)
 
 /* static */
 PFsGioMountable
-FsGioMountable::Create(const string &strBasename)
+FsGioMountable::Create(const string &strName,
+                       PFsGioDirectory pRootDir)
 {
     /* This nasty trickery is necessary to make make_shared work with a protected constructor. */
     class Derived : public FsGioMountable
     {
     public:
-        Derived(const string &strBasename) : FsGioMountable(strBasename) { }
+        Derived(const string &strName, PFsGioDirectory pRootDir) : FsGioMountable(strName, pRootDir) { }
     };
 
-    return make_shared<Derived>(strBasename);
+    return make_shared<Derived>(strName, pRootDir);
 }
+
 
 /***************************************************************************
  *

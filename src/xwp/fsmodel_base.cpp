@@ -193,11 +193,13 @@ FsMonitorBase::stopWatching(FsContainer &cnr)
 
 FsObject::FsObject(FSType type,
                    const string &strBasename,
-                   uint64_t cbSize)
+                   const FsCoreInfo &info)
     : _uID(g_uFSID++),      // atomic
       _type(type),
       _strBasename(strBasename),
-      _cbSize(cbSize)
+      _cbSize(info._cbSize),
+      _strOwnerUser(info._strOwnerUser),
+      _strOwnerGroup(info._strOwnerGroup)
 {
 }
 
@@ -224,6 +226,12 @@ FsObject::isHidden()
 //     auto pInfo = _pGioFile->query_info(G_FILE_ATTRIBUTE_STANDARD_IS_HIDDEN,
 //                                        Gio::FileQueryInfoFlags::FILE_QUERY_INFO_NOFOLLOW_SYMLINKS);
 //     return pInfo->is_hidden();
+}
+
+string
+FsObject::makeOwnerString()
+{
+    return _strOwnerUser + ":" + _strOwnerGroup;
 }
 
 string

@@ -200,7 +200,7 @@ ElissoPreviewPane::on_key_press_event(GdkEventKey *pEvent) /* override */
 {
     if (pEvent->type == GDK_KEY_PRESS)
     {
-        Debug::Message("key press down: " + to_string(pEvent->keyval));
+//         Debug::Message("key press down: " + to_string(pEvent->keyval));
         if (    (pEvent->keyval == GDK_KEY_space)
              && (((int)pEvent->state & ((int)GDK_SHIFT_MASK | (int)GDK_CONTROL_MASK | (int)GDK_MOD1_MASK)) == 0)
            )
