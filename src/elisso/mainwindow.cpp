@@ -992,7 +992,7 @@ ElissoApplicationWindow::initActionHandlers()
     _pImpl->pActionEditTrash = this->addActiveViewActionHandler(ACTION_EDIT_TRASH);
 
 #ifdef USE_TESTFILEOPS
-    _pActionEditTestFileops = this->addOneActionHandler(ACTION_EDIT_TEST_FILEOPS);
+    _pImpl->pActionEditTestFileops = this->addActiveViewActionHandler(ACTION_EDIT_TEST_FILEOPS);
 #endif
 
     _pImpl->pActionEditProperties = this->addActiveViewActionHandler(ACTION_EDIT_PROPERTIES);

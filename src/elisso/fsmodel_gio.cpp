@@ -513,7 +513,7 @@ public:
         g_cbTotalPixbufs -= _pPixbuf->get_byte_length();
     }
 
-    PPixbuf get()
+    PPixbuf getPixbuf()
     {
         return _pPixbuf;
     }
@@ -585,7 +585,7 @@ FsGioFile::getThumbnail(uint32_t thumbsize) const
     {
         auto it = _pThumbData->mapThumbnails.find(thumbsize);
         if (it != _pThumbData->mapThumbnails.end())
-            ppb = it->second->get();
+            ppb = it->second->getPixbuf();
     }
 
     return ppb;

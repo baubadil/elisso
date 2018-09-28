@@ -1,4 +1,4 @@
-    /*
+/*
  * elisso -- fast and friendly gtkmm file manager. (C) 2016--2017 Baubadil GmbH.
  *
  * elisso is free software; you can redistribute it and/or modify it under the terms of the GNU

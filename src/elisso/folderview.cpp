@@ -1659,12 +1659,9 @@ ElissoFolderView::testFileopsSelected()
 {
     FileSelection sel;
     if (getSelection(sel))
-        FileOperation::Create(FileOperation::Type::TEST,
-                              sel.vAll,
-                              nullptr,      // pTargetContainer
-                              _pImpl->llFileOperations,
-                              &_pImpl->pProgressDialog,
-                              &_mainWindow);
+        _mainWindow.addFileOperation(FileOperationType::TEST,
+                                     sel.vAll,
+                                     nullptr);
 }
 #endif
 

@@ -177,6 +177,22 @@ FileOperation::~FileOperation()
 void FileOperation::cancel()
 {
     _stopFlag.set();
+
+    if (!_strError.empty())
+    {
+        // This is from the "close" button after an error was reported.
+        _strError.clear();
+        onProcessingNextItem(nullptr);
+    }
+}
+
+void FileOperation::done(PFileOperation pThis)
+{
+    size_t c = _refQueue.size();
+    Debug::Log(FILE_HIGH, "ref queue size: " + to_string(c));
+    _refQueue.remove(pThis);
+    if (_refQueue.size() != c - 1)
+        throw FSException("failed to remove fileops from list");
 }
 
 void
@@ -288,33 +304,37 @@ FileOperation::onProcessingNextItem(PFsObject pFS)
     else
     {
         // Finished:
-        Debug::Log(FILE_HIGH, "File ops item processed: NULL");
+        Debug::Log(PROGRESSDIALOG, "File ops item processed: NULL");
 
         // nullptr means everything done: then we need to destroy
         // all shared_ptr instances pointing to this, which will
         // invoke the destructor.
 
-        auto pThis = shared_from_this();
-
         // 1) Remove us from the progress dialog, if one exists.
         if (_pImpl->_ppProgressDialog)
         {
+            Debug::Log(PROGRESSDIALOG, "_pImpl->_ppProgressDialog is not NULL");
+            auto pThis = shared_from_this();
+
             if (_strError.empty())
             {
+                Debug::Log(PROGRESSDIALOG, "_strError is empty");
+                double dProgress = (_stopFlag) ? -1 : 100;
                 (*_pImpl->_ppProgressDialog)->updateOperation(pThis,
                                                               nullptr,
-                                                              100);
+                                                              dProgress);
+
                 // 2) We are stored in the parent's queue of file operations; remove us there.
-                size_t c = _refQueue.size();
-                _refQueue.remove(pThis);
-                if (_refQueue.size() != c - 1)
-                    throw FSException("failed to remove fileops from list");
+                done(pThis);
             }
             else
+            {
+                Debug::Log(PROGRESSDIALOG, "_strError is NOT empty");
                 (*_pImpl->_ppProgressDialog)->setError(pThis, _strError);
+            }
         }
 
-        // 1) The Glib timer and dispatcher each have a lambda with a shared_ptr to
+        // 2) The Glib timer and dispatcher each have a lambda with a shared_ptr to
         //    this, which is really a functor with a copy of the shared_ptr.
         //    Disconnecting these two will free the functor and release the shared_ptr
         //    instances.

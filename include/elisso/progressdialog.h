@@ -70,7 +70,7 @@ public:
 
 private:
     friend class OperationRow;
-    void removeOperationDone(POperationRow pRow);
+    void removeOperationDone(POperationRow pRow, bool fManualClose);
 
     struct      Impl;
     Impl        *_pImpl;

@@ -108,6 +108,8 @@ public:
         return _strError;
     }
 
+    void done(PFileOperation pThis);
+
 protected:
     /**
      *  Protected constructor, only to be used by Create().

@@ -77,12 +77,8 @@ public:
         _cancelButton.signal_clicked().connect([this]()
         {
             if (_pOp)
-            {
-                if (!_pOp->getError().empty())
-                    _parentDlg.removeOperationDone(shared_from_this());
-                else
-                    _pOp->cancel();
-            }
+                // This also applies to the "close" button after an error; the op is still not null then
+                _pOp->cancel();
         });
         _boxProgressAndCancel.pack_start(_progressBar, true, true);
         _boxProgressAndCancel.pack_start(_cancelButton, false, false);
@@ -249,13 +245,18 @@ ProgressDialog::updateOperation(PFileOperation pOp,
     {
         // Operation done:
         // Remove the item from the map.
-        pOpBox->update(nullptr, 100);
+
+        uint delay = 1000;
+        if (dProgress == -1)        // kill immediately
+            delay = 1;
+        else
+            pOpBox->update(nullptr, 100);
 
         Glib::signal_timeout().connect([this, pOpBox]() -> bool
         {
-            this->removeOperationDone(pOpBox);
+            this->removeOperationDone(pOpBox, false);
             return false;       // disconnect
-        }, 1000);
+        }, delay);
     }
 }
 
@@ -271,7 +272,8 @@ ProgressDialog::setError(PFileOperation pOp, const Glib::ustring &strError)
 }
 
 void
-ProgressDialog::removeOperationDone(POperationRow pRow)
+ProgressDialog::removeOperationDone(POperationRow pRow,
+                                    bool fManualClose)
 {
     Debug d(DEBUG_ALWAYS, __func__);
 
@@ -291,5 +293,9 @@ ProgressDialog::removeOperationDone(POperationRow pRow)
         // This releases the last reference, destroys the row and removes it from this VBox automatically.
 
     if (_pImpl->llOpRows.empty())
+    {
         hide();
+        if (fManualClose)
+            pRow->_pOp->done(pRow->_pOp);
+    }
 }
