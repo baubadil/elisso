@@ -62,7 +62,7 @@ void ForEachSubstring(const string &str,
         int len = p2 - p1;
         if (len > 0)
             fnParticle(str.substr(p1, len));
-        p1 = p2 + 1;
+        p1 = p2 + strDelimiter.length();
     }
 
     fnParticle(str.substr(p1));

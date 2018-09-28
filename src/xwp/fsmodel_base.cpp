@@ -440,7 +440,7 @@ FsObject::copyOrMoveImpl(PFsObject pTarget,
 void
 FsObject::testFileOps()
 {
-    XWP::Thread::Sleep(50);
+    throw FSException("Test error");
 }
 
 /* static */

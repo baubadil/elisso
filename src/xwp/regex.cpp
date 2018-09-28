@@ -17,17 +17,18 @@
 
 #include <fstream>
 
-const string& RegexMatches::get(uint u)
+const string&
+RegexMatches::get(uint u)
 {
     string strExcept;
     if (v.empty())
-        strExcept = "Invalid index " + to_string(u) + " into EMPTY regex matches";
+        strExcept = "invalid index " + to_string(u) + " into EMPTY regex matches";
     else
     {
         if (u < v.size())
             return v[u];
 
-        strExcept = "Invalid index " + to_string(u) + " into regex matches (0: \"" + v[0] + "\")";
+        strExcept = "invalid index " + to_string(u) + " into regex matches (0: \"" + v[0] + "\")";
     }
 
     if (pRE)

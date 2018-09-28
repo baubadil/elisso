@@ -100,18 +100,23 @@ void Debug::Log(DebugFlag fl,
          || (g_flDebugSet & (uint)fl)
        )
     {
+        bool fContinue = !!(flMessage & CONTINUE_FROM_PREVIOUS);
+
         if (g_fNeedsNewline2)
         {
-            if (0 == (flMessage & CONTINUE_FROM_PREVIOUS))
+            if (!fContinue)
                 cout << "\n";
             g_fNeedsNewline2 = false;
         }
 
+        // Do not print the program name if we're continuing from the previous line.
+        const string &strProgName = (fContinue) ? "" : g_strDebugProgramName;
+
         string strIndent;
         if (fAlways && (g_iIndent2 > 0))
-            cout << g_strDebugProgramName << MakeColor(AnsiColor::BRIGHT_WHITE, ">") << string(g_iIndent2 * 2 - 1, ' ');
+            cout << strProgName << MakeColor(AnsiColor::BRIGHT_WHITE, ">") << string(g_iIndent2 * 2 - 1, ' ');
         else
-            cout << g_strDebugProgramName << string(g_iIndent2 * 2, ' ');
+            cout << strProgName << string(g_iIndent2 * 2, ' ');
         cout << str;
         if ( (!fAlways) || (0 == (flMessage & NO_ECHO_NEWLINE)) )
             cout << "\n";
@@ -119,7 +124,7 @@ void Debug::Log(DebugFlag fl,
         {
             g_fNeedsNewline2 = true;     // for next message
         }
-            cout.flush();
+        cout.flush();
     }
 }
 
@@ -199,7 +204,7 @@ Debug::SetProgramName(const char *pcsz)
 void
 Debug::Warning(const string& str)
 {
-    Log(DEBUG_ALWAYS, MakeColor(AnsiColor::YELLOW, str));
+    Log(DEBUG_ALWAYS, MakeColor(AnsiColor::YELLOW, "WARNING: " + str));
 }
 
 } // namespace
