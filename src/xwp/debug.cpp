@@ -141,6 +141,7 @@ void Debug::Message(const string &str,
 #define ANSI_COLOR_RED                  "\x1b[31m"
 #define ANSI_COLOR_RED_BRIGHT           "\x1b[31;1m"
 #define ANSI_COLOR_GREEN                "\x1b[32m"
+#define ANSI_COLOR_GREEN_BRIGHT         "\x1b[32;1m"
 #define ANSI_COLOR_YELLOW               "\x1b[33m"
 #define ANSI_COLOR_BLUE                 "\x1b[34m"
 #define ANSI_COLOR_BLUE_BRIGHT_BOLD     "\x1b[34;1m"
@@ -168,6 +169,10 @@ Debug::MakeColor(AnsiColor c, string str)
 
         case AnsiColor::GREEN:
             return ANSI_COLOR_GREEN + str + ANSI_COLOR_RESET;
+        break;
+
+        case AnsiColor::BRIGHT_GREEN:
+            return ANSI_COLOR_GREEN_BRIGHT + str + ANSI_COLOR_RESET;
         break;
 
         case AnsiColor::YELLOW:

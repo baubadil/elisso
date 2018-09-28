@@ -24,18 +24,13 @@ enum class AnsiColor
     RED,
     BRIGHT_RED,
     GREEN,          // directory name, path
+    BRIGHT_GREEN,   // execute command
     YELLOW,         // warning
     BLUE,
     BRIGHT_BLUE,
     MAGENTA,
     CYAN
 };
-
-#define ANSICOLOR_PATH AnsiColor::GREEN
-#define ANSICOLOR_WARNING AnsiColor::YELLOW
-#define ANSICOLOR_LOCK AnsiColor::MAGENTA
-#define ANSICOLOR_ACTION AnsiColor::MAGENTA
-
 
 /***************************************************************************
  *
