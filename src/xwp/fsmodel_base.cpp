@@ -198,6 +198,7 @@ FsObject::FsObject(FSType type,
       _type(type),
       _strBasename(strBasename),
       _cbSize(info._cbSize),
+      _uLastModified(info._uLastModified),
       _strOwnerUser(info._strOwnerUser),
       _strOwnerGroup(info._strOwnerGroup)
 {
@@ -330,6 +331,18 @@ FsObject::describe(bool fLong /* = false */ ) const
     return  describeType() + " \"" + (fLong ? getPath() : getBasename()) + "\" (#" + to_string(_uID) + ")";
 }
 
+bool
+FsObject::operator==(const FsObject &o) const
+{
+//     Debug::Log(DEBUG_ALWAYS, quote(_strBasename) + ": comparing " + to_string(this->_uLastModified) + " and " + to_string(this->_uLastModified));
+    return     (this->_type == o._type)
+            && (this->_cbSize == o._cbSize)
+            && (this->_uLastModified == o._uLastModified)
+            && (this->_strOwnerUser == o._strOwnerUser)
+            && (this->_strOwnerGroup == o._strOwnerGroup)
+            ;
+}
+
 void
 FsObject::rename(const string &strNewName)
 {
@@ -370,23 +383,28 @@ void
 FsObject::moveTo(PFsObject pTarget)
 {
     copyOrMoveImpl(pTarget,
-                   false);      // fIsCopy
+                   CopyOrMove::MOVE);      // fIsCopy
 }
 
 PFsObject
 FsObject::copyTo(PFsObject pTarget)
 {
     return copyOrMoveImpl(pTarget,
-                          true);      // fIsCopy
+                          CopyOrMove::COPY);      // fIsCopy
 }
 
 PFsObject
 FsObject::copyOrMoveImpl(PFsObject pTarget,
-                         bool fIsCopy)
+                         CopyOrMove copyOrMove)
 {
     PFsObject pReturn;
 
-    Debug d(FILE_HIGH, __func__, "(" + quote(getBasename()) + "), target=" + quote(pTarget->getBasename()));
+    const string &strBasename = getBasename();
+    if (strBasename.empty())
+        throw FSException("cannot copy or move: basename is empty");
+
+    Debug d(FILE_HIGH, string(__func__) + "(" + quote(strBasename) + ", target=" + quote(pTarget->getBasename()) + ")");
+
     auto pParent = getParent();
     if (!pParent)
         throw FSException("cannot get parent for moving");
@@ -407,10 +425,9 @@ FsObject::copyOrMoveImpl(PFsObject pTarget,
     string strTargetPath = pTarget->getPath();
     strTargetPath += "/" + this->getBasename();
 
-    if (fIsCopy)
+    if (copyOrMove == CopyOrMove::COPY)
     {
         // This is a copy:
-
         g_pFsImpl->copy(d, *this, strTargetPath);
 
         if (!(pReturn = pTargetCnr->find(this->getBasename())))
@@ -614,10 +631,10 @@ FsContainer::unsetPopulated()
 condition_variable_any g_condFolderPopulated;
 
 size_t
-FsContainer::getContents(FSVector &vFiles,
+FsContainer::getContents(FsVector &vFiles,
                          Get getContents,
-                         FSVector *pvFilesAdded,
-                         FSVector *pvFilesRemoved,        //!< out: list of file-system object that have been removed, or nullptr (optional)
+                         FsVector *pvFilesAdded,
+                         FsVector *pvFilesRemoved,        //!< out: list of file-system object that have been removed, or nullptr (optional)
                          StopFlag *pStopFlag,
                          bool fFollowSymlinks /* = false */)
 {
@@ -694,7 +711,8 @@ FsContainer::getContents(FSVector &vFiles,
                                                        fIsLocal);
 
                 if (    (pAwake)
-                     && (pAwake->getType() == pTemp->getType())
+                    // Use our operator== to compare, which which check timestamps and size.
+                     && (*pAwake == *pTemp)
                    )
                 {
                     // Cached item valid: clear the dirty flag.
@@ -883,10 +901,10 @@ FsContainer::createSubdirectory(const string &strName)
     return pDirReturn;
 }
 
-PFSFile
+PFsFile
 FsContainer::createEmptyDocument(const string &strName)
 {
-    PFSFile pFileReturn;
+    PFsFile pFileReturn;
 
     // If this is a symlink, then create the directory in the symlink's target instead.
     PFsDirectory pDirParent = resolveDirectory();
@@ -984,16 +1002,17 @@ FsSymlink::getResolvedType() /* override */
 
 /* static */
 PFsSymlink
-FsSymlink::Create(const string &strBasename)
+FsSymlink::Create(const string &strBasename,
+                  uint64_t uLastModified)
 {
     /* This nasty trickery is necessary to make make_shared work with a protected constructor. */
     class Derived : public FsSymlink
     {
     public:
-        Derived(const string &strBasename) : FsSymlink(strBasename) { }
+        Derived(const string &strBasename, uint64_t uLastModified) : FsSymlink(strBasename, uLastModified) { }
     };
 
-    return make_shared<Derived>(strBasename);
+    return make_shared<Derived>(strBasename, uLastModified);
 }
 
 PFsObject

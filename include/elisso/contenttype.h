@@ -14,8 +14,8 @@
 #include <gtkmm.h>
 #include <memory>
 
-class FSFile;
-typedef std::shared_ptr<FSFile> PFSFile;
+class FsGioFile;
+typedef std::shared_ptr<FsGioFile> PFsGioFile;
 
 typedef Glib::RefPtr<Gio::AppInfo> PAppInfo;
 typedef std::list<PAppInfo> AppInfoList;
@@ -41,16 +41,23 @@ public:
      *  Returns the cached ContentType for the given file from the internal list.
      *  The list is initialized on the first call.
      *
-     *  The type is determined exclusively based on the file name extension. If the
-     *  extension is unknown, or if there is no extension, then nullptr is returned.
+     *  The type is first determined based on the file name extension and, if that
+     *  failes, on the first 1024 bytes of the file contents. If nothing is found,
+     *  then nullptr is returned.
+     *
+     *  If fPlainTextForUnknown is true, we return the cached ContentType for "text/plain"
+     *  instead of the "application/octet-stream" that the system returns for unknown
+     *  files. This allows for using a different ContentType for the applications vs.
+     *  the "type" column display.
      */
-    static const ContentType* Guess(PFSFile pFile);
+    static const ContentType* Guess(PFsGioFile pFile,
+                                    bool fPlainTextForUnknown);
 
     /**
      *  Returns the Gdk::PixbufFormat for the given file, or nullptr if it is
      *  not an image file.
      */
-    static const Gdk::PixbufFormat* IsImageFile(PFSFile);
+    static const Gdk::PixbufFormat* IsImageFile(PFsGioFile);
 
     /**
      *  Returns the description for this content type, which is what is displayed

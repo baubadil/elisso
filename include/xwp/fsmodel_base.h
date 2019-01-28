@@ -44,8 +44,8 @@ enum class FSTypeResolved
 class FsObject;
 typedef std::shared_ptr<FsObject> PFsObject;
 
-class FSFile;
-typedef std::shared_ptr<FSFile> PFSFile;
+class FsFile;
+typedef std::shared_ptr<FsFile> PFsFile;
 
 class FsDirectory;
 typedef std::shared_ptr<FsDirectory> PFsDirectory;
@@ -53,8 +53,8 @@ typedef std::shared_ptr<FsDirectory> PFsDirectory;
 class FsSymlink;
 typedef std::shared_ptr<FsSymlink> PFsSymlink;
 
-typedef std::vector<PFsObject> FSVector;
-typedef std::shared_ptr<FSVector> PFSVector;
+typedef std::vector<PFsObject> FsVector;
+typedef std::shared_ptr<FsVector> PFSVector;
 
 class FsContainer;
 class ContentsLock;
@@ -117,7 +117,7 @@ typedef std::shared_ptr<FsDirEnumeratorBase> PFsDirEnumeratorBase;
  *
  *  Client code must implement all the methods herein.
  */
-class FsImplBase
+class FsImplBase : ProhibitCopy
 {
 protected:
     FsImplBase();
@@ -188,7 +188,7 @@ public:
     /**
      *  This creates an empty file in the given directory. Throws an FSException on errors.
      */
-    virtual PFSFile createEmptyDocument(const string &strParentPath,
+    virtual PFsFile createEmptyDocument(const string &strParentPath,
                                         const string &strBasename) = 0;
 };
 
@@ -222,7 +222,7 @@ public:
  *  can watch at most one container, but a folder (container) can have
  *  multiple monitors.
  */
-class FsMonitorBase : public ProhibitCopy, public enable_shared_from_this<FsMonitorBase>
+class FsMonitorBase : ProhibitCopy, public enable_shared_from_this<FsMonitorBase>
 {
     friend class FsContainer;
 
@@ -292,16 +292,25 @@ enum class FSFlag : uint16_t
 
 typedef FlagSet<FSFlag> FSFlagSet;
 
+enum class CopyOrMove
+{
+    COPY,
+    MOVE
+};
+
 struct FsCoreInfo
 {
     uint64_t _cbSize;
+    uint64_t _uLastModified;
     string _strOwnerUser;
     string _strOwnerGroup;
 
     FsCoreInfo(uint64_t cbSize,
+               uint64_t uLastModified,
                const string &strOwnerUser,
                const string &strOwnerGroup)
         : _cbSize(cbSize),
+          _uLastModified(uLastModified),
           _strOwnerUser(strOwnerUser),
           _strOwnerGroup(strOwnerGroup)
     { }
@@ -322,7 +331,7 @@ struct FsCoreInfo
  *  This code also handles symlinks and can treat symlinks to directories like
  *  directories; see FsSymlink for details.
  */
-class FsObject : public std::enable_shared_from_this<FsObject>
+class FsObject : ProhibitCopy, public std::enable_shared_from_this<FsObject>
 {
     friend class FsContainer;
     friend class FsSymlink;
@@ -468,6 +477,13 @@ public:
     const std::string& describeType() const;
     std::string describe(bool fLong = false) const;
 
+    /**
+     *  Compares this object to another. Returns true if they are of the same subclass,
+     *  have the same file size and timestamp.
+     */
+    bool operator==(const FsObject &o) const;
+
+
     /*
      *  Public operation methods
      */
@@ -557,7 +573,7 @@ protected:
         return shared_from_this();
     }
 
-    PFsObject copyOrMoveImpl(PFsObject pTarget, bool fIsCopy);
+    PFsObject copyOrMoveImpl(PFsObject pTarget, CopyOrMove copyOrMove);
 
     /**
      *  Implementation for getPath(), which only gets called if *this is not a root directory. This
@@ -578,6 +594,7 @@ protected:
     FSFlagSet                   _fl;
     string                      _strBasename;
     uint64_t                    _cbSize;
+    uint64_t                    _uLastModified;
     string                      _strOwnerUser;
     string                      _strOwnerGroup;
     PFsObject                   _pParent;
@@ -597,7 +614,7 @@ protected:
  *  Note that instances of this are only created by the implementation and
  *  may actually be of a derivate class always.
  */
-class FSFile : public FsObject
+class FsFile : public FsObject
 {
     friend class FsObject;
     friend class FsContainer;
@@ -610,14 +627,14 @@ class FSFile : public FsObject
      *************************************/
 
 protected:
-    FSFile(const string &strBasename,
+    FsFile(const string &strBasename,
            const FsCoreInfo &info)
         : FsObject(FSType::FILE,
                    strBasename,
                    info)
     { }
 
-    virtual ~FSFile()
+    virtual ~FsFile()
     { }
 
 
@@ -772,10 +789,10 @@ public:
      *  before calling this. For that case, you can pass in two FSVectors with pvFilesAdded
      *  and pvFilesRemoved so you can call notifiers after the refresh.
      */
-    size_t getContents(FSVector &vFiles,
+    size_t getContents(FsVector &vFiles,
                        Get getContents,
-                       FSVector *pvFilesAdded,
-                       FSVector *pvFilesRemoved,
+                       FsVector *pvFilesAdded,
+                       FsVector *pvFilesRemoved,
                        StopFlag *pStopFlag,
                        bool fFollowSymlinks = false);       //!< in: whether to call follow() on each symlink
 
@@ -799,7 +816,7 @@ public:
      *  This does not automatically call file-system monitors since this may not run on
      *  the GUI thread. Call notifyFileAdded() with the returned instance afterwards.
      */
-    PFSFile createEmptyDocument(const std::string &strName);
+    PFsFile createEmptyDocument(const std::string &strName);
 
     /**
      *  Notifies all monitors attached to *this that a file has been added.
@@ -968,10 +985,12 @@ protected:
      *  does not add the new object to a container; you must call setParent()
      *  on the result.
      */
-    static PFsSymlink Create(const string &strBasename);
+    static PFsSymlink Create(const string &strBasename,
+                             uint64_t uLastModified);
 
-    FsSymlink(const string &strBasename)
-        : FsObject(FSType::SYMLINK, strBasename, { 0, "", "" }),
+    FsSymlink(const string &strBasename,
+              uint64_t uLastModified)
+        : FsObject(FSType::SYMLINK, strBasename, { 0, uLastModified, "", "" }),
           FsContainer((FsObject&)*this),
           _state(State::NOT_FOLLOWED_YET)
     { }

@@ -13,6 +13,7 @@
 #include "elisso/elisso.h"
 #include "elisso/fileops.h"
 #include "elisso/contenttype.h"
+#include "elisso/previewwindow.h"
 #include "xwp/except.h"
 
 
@@ -23,43 +24,7 @@
  **************************************************************************/
 
 /**
- *  Window hierarchy:
- *
- *  ElissoApplicationWindow
- *   |
- *   +- GtkMenuBar
- *   |
- *   +- GtkBox
- *       |
- *       +- GtkToolbar
- *       |
- *       +- GtkPaned: to split between tree (left) and notebook (right)
- *           |
- *           +- ElissoFolderTreeMgr (derived from GtkScrolledWindow)
- *           |   |
- *           |   +- TreeViewPlus (our TreeView subclass)
- *           |
- *           +- GtkBox (as parent of notebook and status bar)
- *               |
- *               +- GtkNotebook
- *               |   |
- *               |   +- Tab: ElissoFolderView (derived from GtkOverlay)
- *               |   |   |
- *               |   |   +- GtkPaned: to split between the icon/list (left) and image preview (right)
- *               |   |       |
- *               |   |       +- GtkScrolledWindow (icon/list view parent)
- *               |   |       |   |
- *               |   |       |   +- GtkTreeView, GtkIconView
- *               |   |       |
- *               |   |       +- GtkScrolledWindow
- *               |   |           |
- *               |   |           +- ElissoFilePreview
- *               |   |
- *               |   +- maybe another Tab: ElissoFolderView (subclass of GtkOverlay)
- *               |     .....
- *               |
- *               +- GtkStatusBar
- *
+ *  Implementation.
  */
 struct ElissoApplicationWindow::Impl
 {
@@ -123,6 +88,9 @@ struct ElissoApplicationWindow::Impl
 
     FileOperationsList              llFileOperations;
     PProgressDialog                 pProgressDialog;
+
+    // The preview window, shared between all folder tabs.
+    ElissoPreviewWindow             previewWindow;
 
     Impl(ElissoApplicationWindow &win)
       : mainWindow(win),
@@ -717,7 +685,7 @@ ElissoApplicationWindow::onMouseButton3Pressed(GdkEventButton *pEvent,
                     PFsGioFile pFile = sel.getTheOneSelectedFile();
                     if (pFile)
                     {
-                        auto pContentType = ContentType::Guess(pFile);
+                        auto pContentType = ContentType::Guess(pFile, true /* fPlainTextForUnknown */);
                         if (pContentType)
                         {
                             auto pDefaultAppInfo = pContentType->getDefaultAppInfo();
@@ -736,7 +704,7 @@ ElissoApplicationWindow::onMouseButton3Pressed(GdkEventButton *pEvent,
                                         {
                                             std::string strLabel("Open with " + pInfo->get_name());
                                             auto pMenuItem = Gio::MenuItem::create(strLabel,
-                                                                                   EMPTY_STRING);   // empty action
+                                                                                   EMPTY_STRING);   // overwritten below
                                             // Remember the application info for the signal handlers below.
                                             mapAppInfosForTempMenuItems[strLabel] = pInfo;
                                             pMenu->append_item(pMenuItem);
@@ -850,7 +818,7 @@ ElissoApplicationWindow::openFile(PFsObject pFS,        //!< in: file or folder 
                 PAppInfo pAppInfo2(pAppInfo);
                 if (!pAppInfo2)
                 {
-                    const ContentType *pType = ContentType::Guess(pFile);
+                    const ContentType *pType = ContentType::Guess(pFile, true /* fPlainTextForUnknown */);
                     if (pType)
                         pAppInfo2 = pType->getDefaultAppInfo();
                 }
@@ -927,7 +895,7 @@ ElissoApplicationWindow::openFolderExternally(PFsObject pFS,
 
 void
 ElissoApplicationWindow::addFileOperation(FileOperationType type,
-                                          const FSVector &vFiles,
+                                          const FsVector &vFiles,
                                           PFsObject pTarget)
 {
     FileOperation::Create(type,
@@ -942,6 +910,31 @@ bool
 ElissoApplicationWindow::areFileOperationsRunning() const
 {
     return !!_pImpl->llFileOperations.size();
+}
+
+void
+ElissoApplicationWindow::showPreviewWindow(PFsGioFile pFile,
+                                           ElissoFolderView &currentFolderView)
+{
+    _pImpl->previewWindow.setFile(pFile, currentFolderView);
+
+//     if (fShow != _pImpl->fShowingPreview)
+//     {
+// //         if (fShow)
+// //         {
+// //             _pImpl->panedForPreview.set_position(ICON_SIZE_BIG * 1.45 * 2);
+// //             _pImpl->panedForPreview.set_wide_handle(true);
+// //             _pImpl->panedForPreview.pack2(_pImpl->previewPane);
+// //             _pImpl->previewPane.show();
+// //         }
+// //         else
+// //         {
+// //             _pImpl->panedForPreview.remove(_pImpl->previewPane);
+// //         }
+//
+//         _pImpl->fShowingPreview = fShow;
+//         _mainWindow.setShowingPreview(fShow);
+//     }
 }
 
 

@@ -28,9 +28,9 @@
  */
 struct FileSelection
 {
-    FSVector vFolders;       // directories or symlinks to directories
-    FSVector vOthers;        // other files
-    FSVector vAll;           // both lists combined, in order
+    FsVector vFolders;       // directories or symlinks to directories
+    FsVector vOthers;        // other files
+    FsVector vAll;           // both lists combined, in order
 
     /**
      *  Useful helper that returns a file if exactly one file is selected,
@@ -81,7 +81,7 @@ public:
      *  that operates on it.
      */
     static PFileOperation Create(FileOperationType t,
-                                 const FSVector &vFiles,
+                                 const FsVector &vFiles,
                                  PFsObject pTarget,
                                  FileOperationsList &refQueue,
                                  PProgressDialog *ppProgressDialog,
@@ -151,7 +151,7 @@ protected:
     StopFlag            _stopFlag;
     std::string         _strError;
     FileOperationsList  &_refQueue;
-    FSVector            _vFiles;
+    FsVector            _vFiles;
     PFsObject           _pTarget;
     struct Impl;
     Impl                *_pImpl;

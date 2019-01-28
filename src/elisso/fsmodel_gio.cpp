@@ -171,6 +171,7 @@ FsGioImpl::makeAwake(const string &strParentPath,
             case Gio::FileType::FILE_TYPE_REGULAR:         // File handle represents a regular file.
             {
                 FsCoreInfo info(pInfo->get_size(),
+                                pInfo->get_attribute_uint64(G_FILE_ATTRIBUTE_TIME_MODIFIED),
                                 pInfo->get_attribute_string(G_FILE_ATTRIBUTE_OWNER_USER),
                                 pInfo->get_attribute_string(G_FILE_ATTRIBUTE_OWNER_GROUP));
                 pReturn = FsGioFile::Create(strBasename, info);
@@ -180,6 +181,7 @@ FsGioImpl::makeAwake(const string &strParentPath,
             case Gio::FileType::FILE_TYPE_DIRECTORY:       // File handle represents a directory.
             {
                 FsCoreInfo info(0,
+                                0, // time modified
                                 pInfo->get_attribute_string(G_FILE_ATTRIBUTE_OWNER_USER),
                                 pInfo->get_attribute_string(G_FILE_ATTRIBUTE_OWNER_GROUP));
                 Debug::Log(FILE_LOW, "  creating FsGioDirectory for " + quote(strBasename));
@@ -189,7 +191,8 @@ FsGioImpl::makeAwake(const string &strParentPath,
 
             case Gio::FileType::FILE_TYPE_SYMBOLIC_LINK:   // File handle represents a symbolic link (Unix systems).
             case Gio::FileType::FILE_TYPE_SHORTCUT:        // File is a shortcut (Windows systems).
-                pReturn = FsSymlink::Create(strBasename);
+                pReturn = FsSymlink::Create(strBasename,
+                                            pInfo->get_attribute_uint64(G_FILE_ATTRIBUTE_TIME_MODIFIED));
             break;
 
             case Gio::FileType::FILE_TYPE_SPECIAL:         // File is a "special" file, such as a socket, fifo, block device, or character device.
@@ -394,6 +397,7 @@ FsGioImpl::createSubdirectory(const string &strParentPath,
         // If we got here, we have a directory.
         auto pGioInfo = this->getFileInfo(pGioFileNew);
         FsCoreInfo info(0,
+                        0,
                         pGioInfo->get_attribute_string(G_FILE_ATTRIBUTE_OWNER_USER),
                         pGioInfo->get_attribute_string(G_FILE_ATTRIBUTE_OWNER_GROUP));
         pReturn = FsGioDirectory::Create(strBasename, info);
@@ -407,11 +411,11 @@ FsGioImpl::createSubdirectory(const string &strParentPath,
 }
 
 /* virtual */
-PFSFile
+PFsFile
 FsGioImpl::createEmptyDocument(const string &strParentPath,
                                const string &strBasename) /* override */
 {
-    PFSFile pReturn;
+    PFsFile pReturn;
     try
     {
         // To create a new subdirectory via Gio::File, create an empty Gio::File first
@@ -428,6 +432,7 @@ FsGioImpl::createEmptyDocument(const string &strParentPath,
         // If we got here, we have a directory.
         auto pGioInfo = this->getFileInfo(pGioFileNew);
         FsCoreInfo info(0,
+                        pGioInfo->get_attribute_uint64(G_FILE_ATTRIBUTE_TIME_MODIFIED),
                         pGioInfo->get_attribute_string(G_FILE_ATTRIBUTE_OWNER_USER),
                         pGioInfo->get_attribute_string(G_FILE_ATTRIBUTE_OWNER_GROUP));
         pReturn = FsGioFile::Create(strBasename, info);
@@ -445,6 +450,8 @@ PGioFile
 FsGioImpl::getGioFile(FsObject &fs)
 {
     auto strPath = fs.getPath();
+
+    Debug::Log(FILE_MID, "getting GioFile for path " + quote(strPath));
 
     if (fs.hasFlag(FSFlag::IS_LOCAL))
         return Gio::File::create_for_path(strPath.substr(7));
@@ -473,7 +480,8 @@ FsGioImpl::getFileInfo(PGioFile pGioFile)
     static string s_attrs = string(G_FILE_ATTRIBUTE_STANDARD_TYPE)
                           + s_comma + string(G_FILE_ATTRIBUTE_STANDARD_SIZE)
                           + s_comma + string(G_FILE_ATTRIBUTE_OWNER_USER)
-                          + s_comma + string(G_FILE_ATTRIBUTE_OWNER_GROUP);
+                          + s_comma + string(G_FILE_ATTRIBUTE_OWNER_GROUP)
+                          + s_comma + string(G_FILE_ATTRIBUTE_TIME_MODIFIED);
     // The following can throw Gio::Error.
     auto pInfo = pGioFile->query_info(s_attrs,
                                       Gio::FileQueryInfoFlags::FILE_QUERY_INFO_NOFOLLOW_SYMLINKS);
@@ -667,7 +675,7 @@ RootDirectory::Get(const string &strScheme)        //<! in: URI scheme (e.g. "fi
             Derived(const string &strScheme, const FsCoreInfo &info) : RootDirectory(strScheme, info) { }
         };
 
-        FsCoreInfo info(0, "", "");
+        FsCoreInfo info(0, 0, "", "");
         pReturn = make_shared<Derived>(strScheme, info);
         s_mapRootDirectories[strScheme] = pReturn;
 
@@ -805,7 +813,8 @@ FsGioMountable::Create(const string &strName,
  *
  **************************************************************************/
 
-FileContents::FileContents(FsGioFile &file)
+FileContents::FileContents(FsGioFile &file,
+                           size_t cbMax /* = 0 */)
     : _pData(nullptr), _size(0)
 {
     try
@@ -813,7 +822,8 @@ FileContents::FileContents(FsGioFile &file)
         auto pGioFile = g_pFsGioImpl->getGioFile(file);
         auto pStream = pGioFile->read();
         Glib::RefPtr<Gio::FileInfo> pInfo = pStream->query_info(G_FILE_ATTRIBUTE_STANDARD_SIZE);
-        _size = pInfo->get_attribute_uint64(G_FILE_ATTRIBUTE_STANDARD_SIZE);
+        if (!(_size = cbMax))
+            _size = pInfo->get_attribute_uint64(G_FILE_ATTRIBUTE_STANDARD_SIZE);
 
         if (!(_pData = (char*)malloc(_size)))
             throw FSException("Not enough memory");

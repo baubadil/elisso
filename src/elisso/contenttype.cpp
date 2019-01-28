@@ -54,29 +54,51 @@ public:
 
 /* static */
 const ContentType*
-ContentType::Guess(PFSFile pFile)
+ContentType::Guess(PFsGioFile pFile,
+                   bool fPlainTextForUnknown)
 {
     ContentType *pTypeReturn = nullptr;
 
     if (pFile)
     {
-        gboolean fResultUncertain = false;
-        gchar *pGuess = g_content_type_guess(pFile->getPath().c_str(),
-                                             nullptr,
-                                             0,
-                                             &fResultUncertain);
+        string strFilename = pFile->getPath();
+
+        Debug d(FILE_HIGH, "ContentType::Guess(" + quote(strFilename) + ")");
+        gchar *pGuess;
+
+        // First try based on filename, that's quicker.
+        if (!(pGuess = g_content_type_guess(strFilename.c_str(),
+                                            nullptr,
+                                            0,
+                                            nullptr)))
+        {
+            // Not found: then try based on the first few bytes of the file contents.
+            d.Log(FILE_HIGH, "filename failed, trying contents");
+
+            FileContents fc(*pFile, 1024);
+            pGuess = g_content_type_guess(nullptr,
+                                          (const guchar*)fc._pData,
+                                          fc._size,
+                                          nullptr);
+        }
+
+        d.Log(FILE_HIGH, "guessed content type: " + string(pGuess));
+
         if (pGuess)
         {
-            if (!fResultUncertain)
-            {
-                // Initialize the system.
-                ContentTypeLock lock;
-                GetAll(lock);
+            const char *pUse = pGuess;
+            if (    fPlainTextForUnknown
+                 && (!strcmp(pGuess, "application/octet-stream"))
+               )
+                pUse = "text/plain";
 
-                auto it = g_mapTypesByName.find(pGuess);
-                if (it != g_mapTypesByName.end())
-                    pTypeReturn = it->second;
-            }
+            // Initialize the system.
+            ContentTypeLock lock;
+            GetAll(lock);
+
+            auto it = g_mapTypesByName.find(pUse);
+            if (it != g_mapTypesByName.end())
+                pTypeReturn = it->second;
 
             g_free(pGuess);
         }
@@ -87,7 +109,7 @@ ContentType::Guess(PFSFile pFile)
 
 /* static */
 const Gdk::PixbufFormat*
-ContentType::IsImageFile(PFSFile pFile)
+ContentType::IsImageFile(PFsGioFile pFile)
 {
     const string &strBasename = pFile->getBasename();
     string strExtension = strToUpper(getExtensionString(strBasename));

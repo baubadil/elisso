@@ -25,15 +25,15 @@ struct ViewPopulatedResult
 {
     // Three lists for getContents:
     PFSVector       pvContents;         // Complete folder contents.
-    FSVector        vAdded;             // Files that were added. Useful for refresh.
-    FSVector        vRemoved;           // Files that were removed. Useful for refresh.
+    FsVector        vAdded;             // Files that were added. Useful for refresh.
+    FsVector        vRemoved;           // Files that were removed. Useful for refresh.
     uint            idPopulateThread;
     bool            fClickFromTree;     // true if SetDirectoryFlag::CLICK_FROM_TREE was set.
     PFsObject       pDirSelectPrevious; // Item to select among populate results, or nullptr.
     Glib::ustring   strError;
 
     ViewPopulatedResult(uint idPopulateThread_, bool fClickFromTree_, PFsObject pDirSelectPrevious_)
-        : pvContents(make_shared<FSVector>()),
+        : pvContents(make_shared<FsVector>()),
           idPopulateThread(idPopulateThread_),
           fClickFromTree(fClickFromTree_),
           pDirSelectPrevious(pDirSelectPrevious_)

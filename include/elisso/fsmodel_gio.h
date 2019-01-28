@@ -76,7 +76,7 @@ public:
     virtual PFsDirectory createSubdirectory(const string &strParentPath,
                                             const string &strBasename) override;
 
-    virtual PFSFile createEmptyDocument(const string &strParentPath,
+    virtual PFsFile createEmptyDocument(const string &strParentPath,
                                         const string &strBasename) override;
 
     PGioFile getGioFile(FsObject &fs);
@@ -101,7 +101,7 @@ extern FsGioImpl *g_pFsGioImpl;
  *  Subclass of the base implementation's FsFile. All file instances are actually
  *  instantiated as instances of this subclass, adding Gio::File support to them.
  */
-class FsGioFile : public FSFile
+class FsGioFile : public FsFile
 {
     friend class FsGioImpl;
 
@@ -122,7 +122,7 @@ protected:
 
     FsGioFile(const string &strBasename,
               const FsCoreInfo &info)
-        : FSFile(strBasename, info)
+        : FsFile(strBasename, info)
     { }
 
     virtual ~FsGioFile();
@@ -272,7 +272,7 @@ protected:
     static PFsGioSpecial Create(const string &strBasename);
 
     FsGioSpecial(const string &strBasename)
-        : FsObject(FSType::SPECIAL, strBasename, { 0, "", ""})
+        : FsObject(FSType::SPECIAL, strBasename, { 0, 0, "", ""})
     { }
 
 
@@ -317,7 +317,7 @@ protected:
 
     FsGioMountable(const string &strName,
                    PFsGioDirectory pRootDir)
-        : FsObject(FSType::MOUNTABLE, strName, { 0, "", ""}),
+        : FsObject(FSType::MOUNTABLE, strName, { 0, 0, "", ""}),
           _pRootDir(pRootDir)
     { }
 
@@ -359,16 +359,21 @@ private:
  **************************************************************************/
 
 /**
- *  Simple structure to temporarily hold the complete binary contents
+ *  Simple structure to temporarily hold the complete or partial binary contents
  *  of a file. The constructor reads them from disk via fopen().
  */
 struct FileContents
 {
-    FileContents(FsGioFile &file);
+    /**
+     *  Constructor. This reads the file. If cbMax is not zero, then at most that many
+     *  bytes will be read.
+     */
+    FileContents(FsGioFile &file, size_t cbMax = 0);
+
     ~FileContents();
 
     char *_pData;
-    size_t _size;
+    size_t _size;       // Actual size of the data read; this is cbMax from the constructor if it was not zero.
 };
 typedef std::shared_ptr<FileContents> PFileContents;
 

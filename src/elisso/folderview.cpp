@@ -17,7 +17,6 @@
 #include "elisso/thumbnailer.h"
 #include "elisso/contenttype.h"
 #include "elisso/populate.h"
-#include "elisso/previewpane.h"
 #include "xwp/except.h"
 #include <iostream>
 #include <iomanip>
@@ -92,14 +91,13 @@ struct ElissoFolderView::Impl : public ProhibitCopy
     Glib::ustring                   strError;          // only with ViewState::ERROR, use setError() to set
     FolderViewMode                  mode = FolderViewMode::UNDEFINED;
     FolderViewMode                  modeBeforeError = FolderViewMode::UNDEFINED;
-    bool                            fShowingPreview = false;
 
     Gtk::Label                      labelNotebookPage;
     Gtk::Label                      labelNotebookMenu;
 
-    Gtk::Paned                      panedForPreview;
+//     Gtk::Paned                      panedForPreview;
     Gtk::ScrolledWindow                 scrolledWindow;        // Left half of view, parent of both icon and tree view.
-    ElissoPreviewPane                   previewPane;           // Right half of view.
+//     ElissoPreviewPane                   previewPane;           // Right half of view.
 
 #ifdef USE_XICONVIEW
     Gtk::XIconView                  iconView;
@@ -142,6 +140,8 @@ struct ElissoFolderView::Impl : public ProhibitCopy
 
     sigc::connection                connSelectionChanged;       // needs to be disconnected in destructor
 
+    bool                            fInSelectNextOrPrevious = false;        // Temporarily true while "next" or "previous" image is being selected.
+
     Gtk::TreePath                   pathPreviewing;             // Temporary storage while preview pane is loading.
 
     // This is a map which allows us to look up rows quickly for efficient removal of items by name.
@@ -151,7 +151,7 @@ struct ElissoFolderView::Impl : public ProhibitCopy
     vector<Glib::ustring>           vURIs;
 
     Impl(ElissoFolderView &folderView)
-        : previewPane(folderView),
+        : // scrolledWindow(folderView),
           pWorkerPopulated(make_shared<ViewPopulatedWorker>()),
           pMonitor(make_shared<FolderViewMonitor>(folderView)),
           thumbnailer(folderView.getApplication())
@@ -286,11 +286,11 @@ ElissoFolderView::ElissoFolderView(ElissoApplicationWindow &mainWindow, int &iPa
 
     // Add the Gtk::Paned to *this, and the scrolled window as the left child.
     // We only call pack2() when the preview gets activated.
-    _pImpl->panedForPreview.pack1(_pImpl->scrolledWindow);
+//     _pImpl->panedForPreview.pack1(_pImpl->scrolledWindow);
     _pImpl->scrolledWindow.show();
-    _pImpl->panedForPreview.show();
+//     _pImpl->panedForPreview.show();
 
-    this->add(_pImpl->panedForPreview);
+    this->add(_pImpl->scrolledWindow);
 }
 
 /* virtual */
@@ -458,7 +458,7 @@ ElissoFolderView::onPopulateDone(PViewPopulatedResult pResult)
         _pImpl->cThumbnailed = 0;
 
         // If we're refreshing, we only insert newly added files to avoid duplicates.
-        FSVector &vFiles = (fRefreshing) ? pResult->vAdded : *_pImpl->pllFolderContents;
+        FsVector &vFiles = (fRefreshing) ? pResult->vAdded : *_pImpl->pllFolderContents;
 
         {
             // auto pModel = _pImpl->treeView.get_model();
@@ -657,7 +657,7 @@ ElissoFolderView::insertFile(PFsObject pFS)
                 const ContentType *pContentType = nullptr;
                 PFsGioFile pFile = g_pFsGioImpl->getFile(pFS, tr);
                 if (pFile)
-                    pContentType = ContentType::Guess(pFile);
+                    pContentType = ContentType::Guess(pFile, false /* fPlainTextForUnknown */);
 
                 if (pContentType)
                 {
@@ -1020,28 +1020,6 @@ ElissoFolderView::setViewMode(FolderViewMode m)
 }
 
 void
-ElissoFolderView::showPreviewPane(bool fShow)
-{
-    if (fShow != _pImpl->fShowingPreview)
-    {
-        if (fShow)
-        {
-            _pImpl->panedForPreview.set_position(ICON_SIZE_BIG * 1.45 * 2);
-            _pImpl->panedForPreview.set_wide_handle(true);
-            _pImpl->panedForPreview.pack2(_pImpl->previewPane);
-            _pImpl->previewPane.show();
-        }
-        else
-        {
-            _pImpl->panedForPreview.remove(_pImpl->previewPane);
-        }
-
-        _pImpl->fShowingPreview = fShow;
-        _mainWindow.setShowingPreview(fShow);
-    }
-}
-
-void
 ElissoFolderView::setError(Glib::ustring strError)
 {
 //     Debug::Log(DEBUG_ALWAYS, std::string(__FUNCTION__) + "(): " + strError);
@@ -1060,7 +1038,7 @@ ElissoFolderView::updateStatusbar(FileSelection *pSel)
         {
             str = formatNumber(_pImpl->cTotal) + " items in folder";
             uint64_t z = 0;
-            FSVector *pllSelected = nullptr;
+            FsVector *pllSelected = nullptr;
 
             if (pSel && pSel->vAll.size())
             {
@@ -1077,7 +1055,7 @@ ElissoFolderView::updateStatusbar(FileSelection *pSel)
 
             if (pllSelected)
             {
-                PFSFile pFile;
+                PFsFile pFile;
                 for (auto &pFS : *pllSelected)
                 {
                     auto t = pFS->getResolvedType();
@@ -1182,12 +1160,16 @@ ElissoFolderView::selectPreviewable(bool fNext)
             switch (_pImpl->mode)
             {
                 case FolderViewMode::LIST:
+                    // Prevent flicker.
+                    _pImpl->fInSelectNextOrPrevious = true;
                     pSelection->unselect(pathOld);
                     pSelection->select(_pImpl->pathPreviewing);
                 break;
 
                 case FolderViewMode::ICONS:
                 case FolderViewMode::COMPACT:
+                    // Prevent flicker.
+                    _pImpl->fInSelectNextOrPrevious = true;
                     _pImpl->iconView.unselect_path(pathOld);
                     _pImpl->iconView.select_path(_pImpl->pathPreviewing);
                 break;
@@ -1263,7 +1245,7 @@ ElissoFolderView::getSelection(FileSelection &sel)
 }
 
 MouseButton3ClickType
-ElissoFolderView::handleClick(GdkEventButton *pEvent,
+ElissoFolderView::handleClick(const GdkEventButton *pEvent,
                               Gtk::TreeModel::Path &path)
 {
     MouseButton3ClickType clickType = MouseButton3ClickType::WHITESPACE;
@@ -1391,7 +1373,7 @@ ElissoFolderView::handleAction(FolderAction action)
             break;
 
             case FolderAction::VIEW_SHOW_PREVIEW:
-                showPreviewPane(!_pImpl->fShowingPreview);
+//                 showPreviewPane(!_pImpl->fShowingPreview);
             break;
 
             case FolderAction::VIEW_REFRESH:
@@ -1517,7 +1499,7 @@ void ElissoFolderView::handleClipboardPaste()
 
             Glib::ustring data = selectionData.get_data_as_string();
             StringVector lines = explodeVector(data, "\n");
-            FSVector vFiles;
+            FsVector vFiles;
             if (lines.size())
             {
                 auto it = lines.begin();
@@ -1538,11 +1520,13 @@ void ElissoFolderView::handleClipboardPaste()
                         throw FSException("Invalid file name in clipboard");
                     string strUnescaped(pszUnescaped);
                     g_free(pszUnescaped);
-                    Debug::Log(CLIPBOARD, "getting file for " + quote(strUnescaped));
+                    Debug::Log(CLIPBOARD, "trying to get FsObject for " + quote(strUnescaped));
                     // This will throw if the path is invalid:
                     auto pFS = g_pFsGioImpl->findPath(strUnescaped);
                     vFiles.push_back(pFS);
                     ++it;
+
+                    Debug::Log(CLIPBOARD, "OK, got " + quote(pFS->getPath()));
                 }
             }
 
@@ -1551,6 +1535,7 @@ void ElissoFolderView::handleClipboardPaste()
             if (fopType == FileOperationType::TEST)
                 throw FSException("Invalid file operation in clipboard");
 
+            Debug::Log(CLIPBOARD, "calling _mainWindow.addFileOperation() with " + to_string(vFiles.size()) + " file(s)");
             _mainWindow.addFileOperation(fopType,
                                          vFiles,
                                          _pDir);
@@ -1587,10 +1572,10 @@ ElissoFolderView::handleCreateSubfolder()
     return pNew;
 }
 
-PFSFile
+PFsFile
 ElissoFolderView::handleCreateEmptyFile()
 {
-    PFSFile pNew;
+    PFsFile pNew;
 
     FsContainer *pContainer = this->_pDir->getContainer();
     if (pContainer)
@@ -2111,13 +2096,14 @@ ElissoFolderView::onSelectionChanged()
 
         updateStatusbar(&sel);
 
-        bool fShowPreviewPane = false;
-
-        PFsGioFile pFile;
-        if ((pFile = sel.getTheOneSelectedFile()))
-            fShowPreviewPane = _pImpl->previewPane.setFile(pFile);
-
-        this->showPreviewPane(fShowPreviewPane);
+        PFsGioFile pFile = sel.getTheOneSelectedFile();
+        if (    (pFile)
+             || (!_pImpl->fInSelectNextOrPrevious)
+           )
+        {
+            this->_mainWindow.showPreviewWindow(pFile, *this);
+            _pImpl->fInSelectNextOrPrevious = false;
+        }
     }
 }
 

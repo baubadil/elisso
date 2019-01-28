@@ -146,6 +146,7 @@ void Debug::Message(const string &str,
 #define ANSI_COLOR_BLUE                 "\x1b[34m"
 #define ANSI_COLOR_BLUE_BRIGHT_BOLD     "\x1b[34;1m"
 #define ANSI_COLOR_MAGENTA              "\x1b[35m"
+#define ANSI_COLOR_MAGENTA_BRIGHT       "\x1b[35;1m"
 #define ANSI_COLOR_CYAN                 "\x1b[36m"
 #define ANSI_COLOR_RESET                "\x1b[0m"
 #define ANSI_COLOR_WHITE_BRIGHT         "\x1b[37;1m"
@@ -157,43 +158,36 @@ Debug::MakeColor(AnsiColor c, string str)
     {
         case AnsiColor::BRIGHT_WHITE:
             return ANSI_COLOR_WHITE_BRIGHT + str + ANSI_COLOR_RESET;
-        break;
 
         case AnsiColor::RED:
             return ANSI_COLOR_RED + str + ANSI_COLOR_RESET;
-        break;
 
         case AnsiColor::BRIGHT_RED:
             return ANSI_COLOR_RED_BRIGHT + str + ANSI_COLOR_RESET;
-        break;
 
         case AnsiColor::GREEN:
             return ANSI_COLOR_GREEN + str + ANSI_COLOR_RESET;
-        break;
 
         case AnsiColor::BRIGHT_GREEN:
             return ANSI_COLOR_GREEN_BRIGHT + str + ANSI_COLOR_RESET;
-        break;
 
         case AnsiColor::YELLOW:
             return ANSI_COLOR_YELLOW + str + ANSI_COLOR_RESET;
-        break;
 
         case AnsiColor::BLUE:
             return ANSI_COLOR_BLUE + str + ANSI_COLOR_RESET;
-        break;
 
         case AnsiColor::BRIGHT_BLUE:
             return ANSI_COLOR_BLUE_BRIGHT_BOLD + str + ANSI_COLOR_RESET;
-        break;
 
         case AnsiColor::MAGENTA:
             return ANSI_COLOR_MAGENTA + str + ANSI_COLOR_RESET;
-        break;
+
+        case AnsiColor::BRIGHT_MAGENTA:
+            return ANSI_COLOR_MAGENTA_BRIGHT + str + ANSI_COLOR_RESET;
 
         case AnsiColor::CYAN:
             return ANSI_COLOR_CYAN + str + ANSI_COLOR_RESET;
-        break;
     }
 
     return str;

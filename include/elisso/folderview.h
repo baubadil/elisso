@@ -244,11 +244,6 @@ public:
     void setViewMode(FolderViewMode m);
 
     /**
-     *  Shows or hides the preview pane.
-     */
-    void showPreviewPane(bool fShow);
-
-    /**
      *  Replaces the entire view with an error message. This sets both the state and the view to
      *  special error modes, which the user can get out of by selecting a different folder again.
      */
@@ -297,7 +292,7 @@ public:
      *  Called from our mouse button handler override to handle mouse button 1 and 3 clicks
      *  with advanced selections.
      */
-    MouseButton3ClickType handleClick(GdkEventButton *pEvent,       //!< in: mouse button event
+    MouseButton3ClickType handleClick(const GdkEventButton *pEvent,       //!< in: mouse button event
                                       Gtk::TreeModel::Path &path);  //!< out: path of selected item
 
     /**
@@ -339,7 +334,7 @@ public:
      *
      *  This may throw FSException.
      */
-    PFSFile handleCreateEmptyFile();
+    PFsFile handleCreateEmptyFile();
 
     /**
      *  Called from handleAction() to prompt for a new name for the selected file or folder and
@@ -360,7 +355,7 @@ public:
 private:
     friend class FolderViewMonitor;
     friend class TreeViewPlus;
-    friend class ElissoPreviewPane;
+    friend class ElissoPreviewWindow;
 
     void setWaitCursor(Cursor cursor);
     void dumpStack();

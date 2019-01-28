@@ -12,6 +12,7 @@ elisso_SOURCES += \
 	src/elisso/fsmodel_gio.cpp \
 	src/elisso/populate.cpp \
 	src/elisso/previewpane.cpp \
+	src/elisso/previewwindow.cpp \
 	src/elisso/progressdialog.cpp \
 	src/elisso/textentrydialog.cpp \
 	src/elisso/thumbnailer.cpp \

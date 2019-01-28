@@ -38,6 +38,44 @@ enum class ShowHideOrNothing : uint8_t
  *  There is only a constructor, no "create" method with a refptr, since
  *  the constructor adds the new instance to the GtkApplication behind
  *  ElissoApplication.
+ *
+ *  Window hierarchy:
+ *
+ *  ElissoApplicationWindow
+ *   |
+ *   +- GtkMenuBar
+ *   |
+ *   +- GtkBox (parent for toolbar)
+ *       |
+ *       +- GtkToolbar
+ *       |
+ *       +- GtkPaned: parent to split between tree (left) and notebook (right)
+ *           |
+ *           +- ElissoFolderTreeMgr (derived from GtkScrolledWindow)
+ *           |   |
+ *           |   +- TreeViewPlus (our TreeView subclass)
+ *           |
+ *           +- GtkBox (parent for notebook and status bar)
+ *               |
+ *               +- GtkNotebook
+ *               |   |
+ *               |   +- Tab: ElissoFolderView (derived from GtkOverlay)
+ *               |   |   |
+ *               |   |   +- GtkPaned: to split between the icon/list (left) and image preview (right)
+ *               |   |       |
+ *               |   |       +- GtkScrolledWindow (icon/list view parent)
+ *               |   |       |   |
+ *               |   |       |   +- GtkTreeView, GtkIconView
+ *               |   |       |
+ *               |   |       +- GtkScrolledWindow
+ *               |   |           |
+ *               |   |           +- ElissoFilePreview
+ *               |   |
+ *               |   +- maybe another Tab: ElissoFolderView (subclass of GtkOverlay)
+ *               |     .....
+ *               |
+ *               +- GtkStatusBar
+ *
  */
 class ElissoApplicationWindow : public Gtk::ApplicationWindow
 {
@@ -192,9 +230,19 @@ public:
     void openFolderExternally(PFsObject pFS, OpenFolder o);
 
     void addFileOperation(FileOperationType type,
-                          const FSVector &vFiles,
+                          const FsVector &vFiles,
                           PFsObject pTarget);
     bool areFileOperationsRunning() const;
+
+    /**
+     *  Shows and positions the preview hidden with the given image file. The window is shown immediately,
+     *  and loading the image file is offloaded to a separate thread. If the window is already visible,
+     *  the existing file is replaced.
+     *
+     *  If pFile is nullptr, the preview window is hidden.
+     */
+    void showPreviewWindow(PFsGioFile pFile,
+                           ElissoFolderView &currentFolderView);
 
 protected:
     void initActionHandlers();

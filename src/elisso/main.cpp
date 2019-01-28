@@ -8,6 +8,24 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the LICENSE file for more details.
  */
 
+/*
+ *  TODO:
+ *
+ *   -- fix picture viewer, use separate window
+ *
+ *   -- fix copy/paste, GioFile errors
+ *
+ *   -- implement drag&drop
+ *
+ *   -- implement copying / moving subfolders
+ *
+ *   -- on refresh folder, check file dates, file sizes, update thumbnails
+ *
+ *   -- on refresh folder, re-follow all symlinks, check targets
+ *
+ *   -- fix insertion of new folders into open tree on the left (sorted), monitors
+ */
+
 #define DEF_STRING_IMPLEMENTATION
 
 #include "elisso/application.h"
@@ -387,7 +405,7 @@ main(int argc, char *argv[])
 {
     g_flDebugSet =  0
                   | CMD_TOP
-                  | FOLDER_POPULATE_HIGH
+//                   | FOLDER_POPULATE_HIGH
 //                   | FOLDER_POPULATE_LOW
 //                   | FSEXCEPTION
 //                   | FOLDER_INSERT
@@ -399,10 +417,10 @@ main(int argc, char *argv[])
 //                   | WINDOWHIERARCHY
 //                   | FILEMONITORS
 //                   | FOLDER_STACK
-                  | CLIPBOARD
-                  | PROGRESSDIALOG
+//                   | CLIPBOARD
+//                   | PROGRESSDIALOG
 //                   | TREEMODEL
-                  | MOUNTS
+//                   | MOUNTS
                   ;
 
     mallopt(M_ARENA_MAX, 2);

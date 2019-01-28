@@ -12,4 +12,5 @@ xwp_SOURCES += \
 	src/xwp/fsmodel_base.cpp \
 	src/xwp/regex.cpp \
 	src/xwp/stringhelp.cpp \
-	src/xwp/thread.cpp
+	src/xwp/thread.cpp \
+	src/xwp/timestamp.cpp

@@ -85,12 +85,14 @@ struct FileOperation::Impl
 /* static */
 PFileOperation
 FileOperation::Create(FileOperationType t,
-                      const FSVector &vFiles,
+                      const FsVector &vFiles,
                       PFsObject pTarget,                 //!< in: target directory or symlink to directory (required for copy or move, otherwise nullptr)
                       FileOperationsList &refQueue,         //!< in: list to append new FileOperation instance to
                       PProgressDialog *ppProgressDialog,    //!< in: progress dialog to append file operation to
                       Gtk::Window *pParentWindow)           //!< in: parent window for (modal) progress dialog
 {
+    Debug d(FILE_HIGH, "adding " + to_string(vFiles.size()) + " file(s)");
+
     /* This nasty trickery is necessary to make std::make_shared work with a protected constructor. */
     class Derived : public FileOperation
     {
@@ -132,15 +134,21 @@ FileOperation::Create(FileOperationType t,
     // Deep-copy the list of files to operate on.
     for (auto &pFS : vFiles)
     {
+        d.Log(FILE_HIGH, "adding file " + quote(pFS->getBasename()));
         pOp->_vFiles.push_back(pFS);
+
+        // Determine the container
         auto pParent = pFS->getParent();
         if (!pParent)
-            throw FSException("File has no parent");
+            throw FSException("internal error: input file has no parent");
+
         FsContainer *pContainerThis = pParent->getContainer();
         if (!pOp->_pImpl->pSourceContainer)
+            // Container not yet set (first call):
             pOp->_pImpl->pSourceContainer = pContainerThis;
-        else if (pContainerThis != pOp->_pImpl->pSourceContainer)
-            throw FSException("Files in given list have more than one parent container");
+        else // Check it hasn't changed.
+            if (pContainerThis != pOp->_pImpl->pSourceContainer)
+                throw FSException("Files in given list have more than one parent container");
     }
 
     if ((pOp->_pTarget = pTarget))
@@ -202,7 +210,7 @@ FileOperation::threadFunc()
     {
         size_t cFiles = _vFiles.size();
         size_t cCurrent = 0;
-        for (auto &pFS : _vFiles)
+        for (auto pFS : _vFiles)
         {
             {
                 // Temporarily request the lock.

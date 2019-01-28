@@ -29,6 +29,7 @@ enum class AnsiColor
     BLUE,
     BRIGHT_BLUE,
     MAGENTA,
+    BRIGHT_MAGENTA,
     CYAN
 };
 

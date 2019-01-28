@@ -14,20 +14,12 @@
 #include "elisso/elisso.h"
 #include "elisso/fsmodel_gio.h"
 
-class ElissoFolderView;
+class ElissoPreviewWindow;
 
 class ElissoPreviewPane : virtual public Gtk::EventBox
 {
 public:
-    ElissoPreviewPane(ElissoFolderView &folderView);
-    virtual ~ElissoPreviewPane();
-
-    /**
-     *  Causes the preview pane to attempt to display the file. Returns true if
-     *  the file type was determined to be previewable and the loader thread was
-     *  started, but this does not mean yet that the file was displayed correctly.
-     */
-    bool setFile(PFsGioFile pFile);
+    ElissoPreviewPane(ElissoPreviewWindow &parent_);
 
     /**
      *  We return true to stop other handlers from being invoked for the event, or
@@ -40,13 +32,8 @@ public:
     virtual bool on_key_press_event(GdkEventKey *pEvent) override;
 
 private:
-    void fireNext();
-    void firePrevious();
+    ElissoPreviewWindow &parent;
 
-    ElissoFolderView  &_folderView;
-
-    struct Impl;
-    Impl *_pImpl;
 };
 
 #endif

@@ -58,7 +58,7 @@ public:
 
 struct SubtreePopulated : ResultBase
 {
-    FSVector                  _vContents;
+    FsVector                  _vContents;
 
     SubtreePopulated(const PFolderTreeModelRow &pRow)
       : ResultBase(pRow)
@@ -626,7 +626,7 @@ ElissoFolderTreeMgr::spawnAddFirstSubfolders(PAddOneFirstsList pllToAddFirst)
                 FsContainer *pCnr = pAddOneFirst->_pRow->pDir->getContainer();
                 if (pCnr)
                 {
-                    FSVector vFiles;
+                    FsVector vFiles;
                     pCnr->getContents(vFiles,
                                       FsDirectory::Get::FIRST_FOLDER_ONLY,
                                       nullptr,
